@@ -89,7 +89,10 @@ module top #(
     end
 
     // Active-low LEDs expose the same state that is useful in the analyzer.
-    assign led_n = ~{heartbeat_counter[23], error_flag, protocol_state[1:0], pwm_out, timing_result[0]};
+    // Fold every registered timing-result bit into the final lesson LED. This
+    // keeps the complete optimization path observable in synthesis and avoids
+    // tool-version-dependent pruning of bits 15:1.
+    assign led_n = ~{heartbeat_counter[23], error_flag, protocol_state[1:0], pwm_out, ^timing_result};
 endmodule
 
 module demo_uart_rx #(

@@ -54,9 +54,9 @@ All notable user-facing changes are recorded here.
 - Passed the three-round concurrency stress suite and parallel full bitstream
   builds for five distinct Tang device families at laptop-safe parallelism two.
 - The Hardware Intelligence demo produced a fresh 4,620,140-byte Primer 20K
-  bitstream with 253 LUT4, 113 DFF, and 267.67 MHz routed Fmax against 27 MHz.
-  Its generated analyzer image produced a 7,263,596-byte bitstream with 1,454
-  LUT4, 391 DFF, 2 BSRAM, and 209.91 MHz routed Fmax.
+  bitstream with 315 LUT4, 138 DFF, and 193.12 MHz routed Fmax against 27 MHz.
+  The maintained command-console analyzer image produced a 7,263,596-byte
+  bitstream with 1,454 LUT4, 391 DFF, 2 BSRAM, and 209.91 MHz routed Fmax.
 - The optimized Windows executable, one-file NSIS installer, and packaged
   headless smoke test pass.
 

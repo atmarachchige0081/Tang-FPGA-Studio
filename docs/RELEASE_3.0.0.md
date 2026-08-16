@@ -46,11 +46,11 @@ maintained-project artifact tests, 34 Python compatibility tests, four HDL
 lint/simulation flows, five parallel board-family builds, three repeated
 concurrency rounds, strict formatting and warning-free Clippy, and a full npm
 audit with zero reported vulnerabilities. The normal Hardware Intelligence
-demo used 253 LUT4 and 113 DFF and reached 267.67 MHz; the separate instrumented
-image used 1,454 LUT4, 391 DFF, and 2 BSRAM and reached 209.91 MHz. Both passed
-the 27 MHz constraint and produced structurally validated uncompressed Gowin
-bitstreams. The optimized Windows application, packaged smoke test, and
-one-file NSIS installer also pass.
+demo used 315 LUT4 and 138 DFF and reached 193.12 MHz. The separate instrumented
+command-console image used 1,454 LUT4, 391 DFF, and 2 BSRAM and reached
+209.91 MHz. Both passed the 27 MHz constraint and produced structurally
+validated uncompressed Gowin bitstreams. The optimized Windows application,
+packaged smoke test, and one-file NSIS installer also pass.
 
 The connected release host exposed the expected WinUSB JTAG Interface 0 and
 preserved UART COM15, but its debugger endpoint returned
