@@ -35,6 +35,17 @@
       "tags": ["uart", "commands", "terminal"]
     },
     {
+      "id": "hardware_intelligence",
+      "name": "Hardware Intelligence laboratory",
+      "description": "A verified UART design with observable protocol state for traceability, on-chip capture, snapshots, and experiments.",
+      "level": "Beginner +",
+      "category": "Debugging",
+      "base": "projects/06_hardware_intelligence",
+      "hardwareReady": true,
+      "supportedBoards": ["tang_primer_20k"],
+      "tags": ["analyzer", "traceability", "timing", "uart"]
+    },
+    {
       "id": "spi_controller",
       "name": "SPI controller",
       "description": "Mode-0 byte transfers with start/busy/done handshake and a self-checking peripheral model.",

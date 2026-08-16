@@ -5,7 +5,7 @@ import { useWorkbench } from "../store/workbench";
 import { AnalysisView } from "./AnalysisView";
 import { VerificationView } from "./VerificationView";
 
-describe("2.1 design intelligence views", () => {
+describe("design intelligence views", () => {
   beforeEach(() => {
     useWorkbench.setState({
       root: "Browser preview",

@@ -50,6 +50,8 @@ export function TitleBar({ onRun, onSave }: Props): React.JSX.Element {
       { label: "Project explorer", run: () => { store.setActivity("explorer"); store.setView("editor"); } },
       { label: "RTL analysis & architecture", run: () => store.setView("analysis") },
       { label: "Verification center", run: () => store.setView("verification") },
+      { label: "Design Health", run: () => store.setView("health") },
+      { label: "Traceability explorer", run: () => store.setView("traceability") },
       { label: "HDL pattern library", run: () => store.setActivity("ip") },
       { label: "Source control", run: () => store.setActivity("source") },
       { label: "Installed providers", run: () => store.setActivity("extensions") },
@@ -61,6 +63,7 @@ export function TitleBar({ onRun, onSave }: Props): React.JSX.Element {
     ],
     hardware: [
       { label: "Hardware manager", run: () => store.setView("hardware") },
+      { label: "On-chip logic analyzer", run: () => store.setView("analyzer") },
       { label: "UART terminal", run: () => store.setView("uart") },
       { label: "Detect JTAG chain", disabled: Boolean(store.runningJob), run: () => onRun("detect") },
     ],
@@ -77,7 +80,7 @@ export function TitleBar({ onRun, onSave }: Props): React.JSX.Element {
 
   return (
     <header className="titlebar" ref={menuRoot}>
-      <div className="brand-mark" aria-label="FPGA Studio"><Cpu size={18} /><span>FPGA Studio</span><span className="version-chip">v2.1</span></div>
+      <div className="brand-mark" aria-label="FPGA Studio"><Cpu size={18} /><span>FPGA Studio</span><span className="version-chip">v3.0</span></div>
       <nav className="menu-strip" aria-label="Application menu">
         {renderMenu("file", "File")}{renderMenu("edit", "Edit")}{renderMenu("project", "Project")}{renderMenu("build", "Build")}{renderMenu("hardware", "Hardware")}{renderMenu("help", "Help")}
       </nav>

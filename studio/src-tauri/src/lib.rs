@@ -1,10 +1,13 @@
+mod analyzer;
 mod boards;
+mod design_graph;
 mod git;
 mod hardware;
 mod hdl;
 mod ip;
 mod models;
 mod netlist;
+mod optimizer;
 mod plugins;
 mod project;
 mod reports;
@@ -15,8 +18,10 @@ mod waveform;
 
 use hardware::SerialRegistry;
 use models::{
-    BoardProfile, BuildAction, BuildHistoryEntry, BuildSummary, CommandResult, GitStatus, HdlIndex,
-    HdlPattern, NetlistGraph, PluginInfo, ProjectTemplate, SerialDevice, VerificationSummary,
+    AnalyzerCapture, AnalyzerConfig, AnalyzerWorkspace, BoardProfile, BuildAction,
+    BuildHistoryEntry, BuildSummary, CommandResult, DesignIntelligenceGraph, DesignSnapshot,
+    GitStatus, HdlIndex, HdlPattern, NetlistGraph, OptimizationExperiment, OptimizationSummary,
+    PluginInfo, ProjectTemplate, SerialDevice, SnapshotComparison, VerificationSummary,
     WaveformData, WorkspaceSnapshot,
 };
 use runner::JobRegistry;
@@ -83,6 +88,131 @@ async fn list_plugins(root: String) -> Result<Vec<PluginInfo>, String> {
 #[tauri::command]
 async fn read_hdl_index(root: String, project: String) -> Result<HdlIndex, String> {
     blocking("HDL index", move || hdl::index(&root, &project)).await
+}
+
+#[tauri::command]
+async fn read_design_graph(
+    root: String,
+    project: String,
+) -> Result<DesignIntelligenceGraph, String> {
+    blocking("Design intelligence graph", move || {
+        design_graph::read(&root, &project)
+    })
+    .await
+}
+
+#[tauri::command]
+async fn read_analyzer_workspace(
+    root: String,
+    project: String,
+) -> Result<AnalyzerWorkspace, String> {
+    blocking("Logic analyzer workspace", move || {
+        analyzer::workspace(&root, &project)
+    })
+    .await
+}
+
+#[tauri::command]
+async fn save_analyzer_config(
+    root: String,
+    project: String,
+    config: AnalyzerConfig,
+) -> Result<AnalyzerWorkspace, String> {
+    blocking("Logic analyzer configuration", move || {
+        analyzer::save(&root, &project, config)
+    })
+    .await
+}
+
+#[tauri::command]
+async fn prepare_analyzer(root: String, project: String) -> Result<AnalyzerWorkspace, String> {
+    blocking("Logic analyzer generation", move || {
+        analyzer::prepare(&root, &project)
+    })
+    .await
+}
+
+#[tauri::command]
+async fn capture_analyzer(
+    root: String,
+    project: String,
+    port_name: String,
+    timeout_ms: u64,
+) -> Result<AnalyzerCapture, String> {
+    blocking("Logic analyzer capture", move || {
+        analyzer::capture(&root, &project, &port_name, timeout_ms)
+    })
+    .await
+}
+
+#[tauri::command]
+async fn read_analyzer_capture(
+    root: String,
+    project: String,
+) -> Result<Option<AnalyzerCapture>, String> {
+    blocking("Logic analyzer capture read", move || {
+        analyzer::latest_capture(&root, &project)
+    })
+    .await
+}
+
+#[tauri::command]
+async fn read_optimization_summary(
+    root: String,
+    project: String,
+) -> Result<OptimizationSummary, String> {
+    blocking("Design health", move || optimizer::summary(&root, &project)).await
+}
+
+#[tauri::command]
+async fn record_design_snapshot(
+    root: String,
+    project: String,
+    kind: String,
+    experiment_id: Option<String>,
+) -> Result<DesignSnapshot, String> {
+    blocking("Design snapshot", move || {
+        optimizer::record_snapshot(&root, &project, &kind, experiment_id)
+    })
+    .await
+}
+
+#[tauri::command]
+async fn compare_design_snapshots(
+    root: String,
+    project: String,
+    baseline_id: u64,
+    candidate_id: u64,
+) -> Result<SnapshotComparison, String> {
+    blocking("Snapshot comparison", move || {
+        optimizer::compare(&root, &project, baseline_id, candidate_id)
+    })
+    .await
+}
+
+#[tauri::command]
+async fn prepare_optimization_experiment(
+    root: String,
+    project: String,
+    recommendation_id: String,
+) -> Result<OptimizationExperiment, String> {
+    blocking("Optimization experiment", move || {
+        optimizer::prepare_experiment(&root, &project, &recommendation_id)
+    })
+    .await
+}
+
+#[tauri::command]
+async fn finish_optimization_experiment(
+    root: String,
+    project: String,
+    experiment_id: String,
+    success: bool,
+) -> Result<OptimizationExperiment, String> {
+    blocking("Optimization experiment result", move || {
+        optimizer::finish_experiment(&root, &project, &experiment_id, success)
+    })
+    .await
 }
 
 #[tauri::command]
@@ -238,6 +368,17 @@ pub fn run() -> Result<(), String> {
             read_git_status,
             list_plugins,
             read_hdl_index,
+            read_design_graph,
+            read_analyzer_workspace,
+            save_analyzer_config,
+            prepare_analyzer,
+            capture_analyzer,
+            read_analyzer_capture,
+            read_optimization_summary,
+            record_design_snapshot,
+            compare_design_snapshots,
+            prepare_optimization_experiment,
+            finish_optimization_experiment,
             create_project,
             run_fpga_command,
             cancel_job,

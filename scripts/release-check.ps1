@@ -21,14 +21,10 @@ Push-Location $workspace
 try {
     $requiredFiles = @(
         'LICENSE', 'SECURITY.md', 'CONTRIBUTING.md', 'CHANGELOG.md', 'INSTALL.md',
-        'docs\DEPLOYMENT.md', 'docs\RELEASE_2.1.0.md', 'docs\images\studio-main.png',
-        'docs\images\studio-insights.png', 'docs\images\studio-command-palette.png',
-        'docs\images\studio-analysis.png', 'docs\images\studio-analysis-light.png',
-        'docs\images\studio-verification-center.png',
-        'docs\images\studio-waveform.png', 'docs\images\studio-hardware-setup.png',
-        'docs\images\studio-uart-terminal.png',
-        'docs\images\studio-netlist-viewer.png', 'docs\images\studio-release-notes.png',
-        'docs\images\studio-main-light.png'
+        'docs\DEPLOYMENT.md', 'docs\RELEASE_3.0.0.md', 'docs\HARDWARE_ANALYZER.md',
+        'docs\images\studio-main-light.png', 'docs\images\studio-release-notes.png',
+        'docs\images\studio-traceability.png', 'docs\images\studio-traceability-light.png',
+        'docs\images\studio-hardware-analyzer.png', 'docs\images\studio-hardware-analyzer-light.png'
     )
     $missing = @($requiredFiles | Where-Object { -not (Test-Path -LiteralPath $_ -PathType Leaf) })
     if ($missing.Count) {
@@ -52,6 +48,7 @@ try {
     Invoke-Checked python @('ide\fpga_ide.py', '--check', 'projects\01_button_led_pwm')
     Invoke-Checked python @('ide\fpga_ide.py', '--check', 'projects\03_uart_terminal')
     Invoke-Checked python @('ide\fpga_ide.py', '--check', 'projects\05_serial_command_console')
+    Invoke-Checked python @('ide\fpga_ide.py', '--check', 'projects\06_hardware_intelligence')
 
     $parseFailures = @()
     foreach ($script in Get-ChildItem -Path $workspace -Recurse -Filter '*.ps1' -File) {
@@ -81,6 +78,10 @@ try {
             'lint', '-Project', 'projects/05_serial_command_console')
         Invoke-Checked powershell @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', '.\fpga.ps1',
             'sim', '-Project', 'projects/05_serial_command_console', '-Testbench', 'sim/tb_top.sv', '-TestbenchTop', 'tb_top')
+        Invoke-Checked powershell @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', '.\fpga.ps1',
+            'lint', '-Project', 'projects/06_hardware_intelligence')
+        Invoke-Checked powershell @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', '.\fpga.ps1',
+            'sim', '-Project', 'projects/06_hardware_intelligence', '-Testbench', 'sim/tb_top.sv', '-TestbenchTop', 'tb_top')
     }
 
     if (-not $SkipNative) {

@@ -1,10 +1,10 @@
-use crate::hdl;
 use crate::models::{
-    BuildAction, BuildHistoryEntry, DiagnosticSeverity, HardwareVerificationRecord,
-    VerificationStage, VerificationStageStatus, VerificationSummary,
+    AnalyzerCapture, BuildAction, BuildHistoryEntry, DiagnosticSeverity, EvidenceClass,
+    HardwareVerificationRecord, VerificationStage, VerificationStageStatus, VerificationSummary,
 };
 use crate::reports;
 use crate::security::{canonical_workspace, safe_existing_path};
+use crate::{design_graph, hdl};
 use chrono::{DateTime, Utc};
 use std::fs;
 use std::path::Path;
@@ -236,6 +236,7 @@ pub fn summary(root: &str, project: &str) -> Result<VerificationSummary, String>
         existing_artifacts(&project_path, &["build/top.fs"]),
         "Use SRAM for a reversible hardware test, or Flash after confirming the design.",
     ));
+    stages.push(analyzer_capture_stage(&project_path));
     stages.push(hardware_stage(&project_path, newest_source));
 
     let passed = count(&stages, VerificationStageStatus::Pass);
@@ -253,6 +254,61 @@ pub fn summary(root: &str, project: &str) -> Result<VerificationSummary, String>
         not_run,
         next_action,
     })
+}
+
+fn analyzer_capture_stage(project: &Path) -> VerificationStage {
+    let relative = ".fpga-studio/analyzer-capture.json";
+    let path = project.join(relative);
+    if !path.is_file() {
+        return not_run(
+            "hardwareCapture",
+            "Logic Analyzer capture",
+            "No measured on-chip capture exists. Build and SRAM-upload an analyzer image, then arm a hardware trigger.",
+        );
+    }
+    let capture = fs::read(&path)
+        .map_err(|error| error.to_string())
+        .and_then(|bytes| {
+            serde_json::from_slice::<AnalyzerCapture>(&bytes).map_err(|error| error.to_string())
+        });
+    let Ok(capture) = capture else {
+        return VerificationStage {
+            id: "hardwareCapture".into(),
+            label: "Logic Analyzer capture".into(),
+            status: VerificationStageStatus::Warning,
+            detail: "Analyzer capture metadata is unreadable; capture the hardware event again."
+                .into(),
+            duration_ms: None,
+            completed_at: modified_at(&path),
+            artifacts: vec![relative.into()],
+        };
+    };
+    let current_hash = design_graph::rtl_hash(project).ok();
+    let stale = current_hash.as_deref() != Some(capture.rtl_hash.as_str());
+    let measured = capture.source.class == EvidenceClass::Measured;
+    VerificationStage {
+        id: "hardwareCapture".into(),
+        label: "Logic Analyzer capture".into(),
+        status: if stale || !measured {
+            VerificationStageStatus::Warning
+        } else {
+            VerificationStageStatus::Pass
+        },
+        detail: if stale {
+            "The previous physical capture is stale because the RTL changed afterward.".into()
+        } else if !measured {
+            "Capture metadata exists, but it is not labelled as measured hardware evidence.".into()
+        } else {
+            format!(
+                "Measured {} channel(s) around trigger sample {}.",
+                capture.waveform.signals.len(),
+                capture.trigger_index
+            )
+        },
+        duration_ms: None,
+        completed_at: Some(capture.captured_at),
+        artifacts: vec![relative.into()],
+    }
 }
 
 pub fn record_hardware(
@@ -543,7 +599,7 @@ fn collect_newest(path: &Path, newest: &mut Option<SystemTime>) {
 
 #[cfg(test)]
 mod tests {
-    use super::{history_stage, latest, next_action, record_hardware};
+    use super::{analyzer_capture_stage, history_stage, latest, next_action, record_hardware};
     use crate::models::{
         BuildAction, BuildHistoryEntry, VerificationStage, VerificationStageStatus,
     };
@@ -638,6 +694,45 @@ mod tests {
         assert!(updated.stages.iter().any(|stage| {
             stage.id == "hardware" && stage.status == VerificationStageStatus::Fail
         }));
+        std::fs::remove_dir_all(root).expect("cleanup");
+    }
+
+    #[test]
+    fn analyzer_capture_becomes_stale_after_rtl_changes() {
+        let root = std::env::temp_dir().join(format!(
+            "fpga-studio-analyzer-evidence-{}",
+            uuid::Uuid::new_v4()
+        ));
+        std::fs::create_dir_all(root.join("rtl")).expect("rtl");
+        std::fs::create_dir_all(root.join(".fpga-studio")).expect("state");
+        std::fs::write(root.join("rtl/top.sv"), "module top; endmodule\n").expect("source");
+        let hash = crate::design_graph::rtl_hash(&root).expect("hash");
+        let payload = serde_json::json!({
+            "schemaVersion": 1,
+            "capturedAt": chrono::Utc::now().to_rfc3339(),
+            "rtlHash": hash,
+            "triggerIndex": 1,
+            "waveform": { "path": "capture", "timescale": "1 sample", "endTime": 2, "truncated": false, "signals": [] },
+            "source": { "class": "measured", "source": "UART analyzer capture", "detail": "fixture" }
+        });
+        std::fs::write(
+            root.join(".fpga-studio/analyzer-capture.json"),
+            serde_json::to_vec(&payload).expect("json"),
+        )
+        .expect("capture");
+        assert_eq!(
+            analyzer_capture_stage(&root).status,
+            VerificationStageStatus::Pass
+        );
+        std::fs::write(
+            root.join("rtl/top.sv"),
+            "module top; wire changed; endmodule\n",
+        )
+        .expect("changed source");
+        assert_eq!(
+            analyzer_capture_stage(&root).status,
+            VerificationStageStatus::Warning
+        );
         std::fs::remove_dir_all(root).expect("cleanup");
     }
 }

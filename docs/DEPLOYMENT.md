@@ -32,6 +32,11 @@ Run this before distributing a checkout or publishing a tag:
 git diff --check
 ```
 
+For a source sandbox that intentionally denies execution or temporary writes
+outside the checkout, `stress-test.ps1 -SkipHdlChecks -SkipBoardBuilds` runs the
+repeat native/UI/concurrency subset. This is diagnostic only and never replaces
+the full default gate used for a release runner.
+
 The release check preserves regression coverage for the legacy companion UI,
 parses all PowerShell scripts, validates JSON, runs HDL lint/simulation, builds
 the native frontend, and runs the Rust security, parser, and project tests.
@@ -41,13 +46,13 @@ job lock. Parallelism is capped at four and defaults to two for laptop safety.
 GitHub Actions repeats platform-independent gates for every push and pull
 request.
 
-The screenshot script launches the current React Studio 2 frontend in browser
+The screenshot script launches the current React Studio 3 frontend in browser
 preview mode and captures its real dark/light views with Microsoft Edge. It
 must not be replaced with captures from the retired Python companion UI.
 
 ## Automatic one-file installer release
 
-Studio 2 releases use the NSIS `.exe` bundle as the maintained one-file
+Studio 3 releases use the NSIS `.exe` bundle as the maintained one-file
 beginner installation path. WiX/MSI is not part of the supported release gate;
 adding it would require a separate clean-runner packaging and upgrade test.
 
@@ -79,6 +84,12 @@ The application stores project-local state under `.fpga-studio/`:
 - each project's `.fpga-studio/hardware-verification.json` stores an explicit
   user observation and the exact bitstream timestamp it applies to; later
   source or bitstream changes make that evidence stale.
+- each project's `.fpga-studio/design-graph.json` caches bounded cross-domain
+  traceability and is invalidated by source or build fingerprint changes.
+- each project's `.fpga-studio/snapshots.json` and `experiments.json` retain
+  bounded evidence history and isolated optimization results.
+- generated analyzer configuration, HDL, reports, image, and capture files live
+  under the project's ignored `build/analyzer/` directory.
 
 Theme and release-note preferences use the WebView profile's local storage.
 Native startup failures and panics are appended to

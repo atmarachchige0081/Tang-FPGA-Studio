@@ -8,7 +8,7 @@ import type { HdlIndex, HdlSymbol } from "../types";
 type MonacoModel = import("monaco-editor").editor.ITextModel;
 type MonacoPosition = import("monaco-editor").Position;
 
-let liveIndex: HdlIndex = { top: "top", files: [], symbols: [], diagnostics: [], modules: [], instances: [], clockDomains: [] };
+let liveIndex: HdlIndex = { top: "top", files: [], symbols: [], diagnostics: [], modules: [], instances: [], clockDomains: [], signals: [] };
 let monacoApi: Monaco | null = null;
 let languageServicesConfigured = false;
 

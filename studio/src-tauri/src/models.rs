@@ -164,6 +164,7 @@ pub struct HdlIndex {
     pub modules: Vec<HdlModule>,
     pub instances: Vec<HdlInstance>,
     pub clock_domains: Vec<ClockDomain>,
+    pub signals: Vec<HdlSignal>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -208,6 +209,23 @@ pub struct ClockDomain {
     pub line: u32,
 }
 
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct HdlSignal {
+    pub id: String,
+    pub name: String,
+    pub module_name: String,
+    pub hierarchy: String,
+    pub width: u32,
+    pub kind: String,
+    pub file: String,
+    pub line: u32,
+    pub column: u32,
+    pub observable: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub unavailable_reason: Option<String>,
+}
+
 #[derive(Debug, Clone, Copy, Deserialize, Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum BuildAction {
@@ -218,6 +236,11 @@ pub enum BuildAction {
     Upload,
     Flash,
     Detect,
+    #[serde(rename = "analyzer-build")]
+    AnalyzerBuild,
+    #[serde(rename = "analyzer-upload")]
+    AnalyzerUpload,
+    Experiment,
 }
 
 impl BuildAction {
@@ -230,6 +253,9 @@ impl BuildAction {
             Self::Upload => "upload",
             Self::Flash => "flash",
             Self::Detect => "detect",
+            Self::AnalyzerBuild => "analyzer-build",
+            Self::AnalyzerUpload => "analyzer-upload",
+            Self::Experiment => "experiment",
         }
     }
 }
@@ -301,7 +327,7 @@ pub struct BuildSummary {
     pub critical_paths: Vec<CriticalPath>,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ResourceUsage {
     pub name: String,
@@ -423,7 +449,7 @@ pub struct SerialEvent {
     pub timestamp: String,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct WaveformData {
     pub path: String,
@@ -433,7 +459,7 @@ pub struct WaveformData {
     pub signals: Vec<WaveSignal>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct WaveSignal {
     pub id: String,
@@ -443,7 +469,7 @@ pub struct WaveSignal {
     pub samples: Vec<WaveSample>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct WaveSample {
     pub time: u64,
@@ -482,4 +508,325 @@ pub struct NetlistEdge {
     pub source: String,
     pub target: String,
     pub nets: Vec<String>,
+}
+
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub enum EvidenceClass {
+    Measured,
+    Estimated,
+    Inferred,
+    Unavailable,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DesignEvidence {
+    pub class: EvidenceClass,
+    pub source: String,
+    pub detail: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub build_number: Option<u64>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PhysicalLocation {
+    pub x: i64,
+    pub y: i64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub bel: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DesignGraphNode {
+    pub id: String,
+    pub kind: String,
+    pub label: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub hierarchy: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub width: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source_file: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source_line: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub netlist_name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cell_type: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub physical: Option<PhysicalLocation>,
+    pub evidence: DesignEvidence,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DesignGraphEdge {
+    pub id: String,
+    pub source: String,
+    pub target: String,
+    pub relation: String,
+    pub evidence: DesignEvidence,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TimingTraceSegment {
+    pub index: usize,
+    pub kind: String,
+    pub delay_ns: f64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub net: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub from_cell: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub to_cell: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source_file: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source_line: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub physical: Option<PhysicalLocation>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TimingTrace {
+    pub id: String,
+    pub clock: String,
+    pub start: String,
+    pub end: String,
+    pub delay_ns: f64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub target_ns: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub slack_ns: Option<f64>,
+    pub logic_levels: usize,
+    pub segments: Vec<TimingTraceSegment>,
+    pub rtl_sources: Vec<String>,
+    pub analyzer_channels: Vec<usize>,
+    pub evidence: DesignEvidence,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DesignIntelligenceGraph {
+    pub schema_version: u32,
+    pub generated_at: String,
+    pub rtl_hash: String,
+    pub status: String,
+    pub nodes: Vec<DesignGraphNode>,
+    pub edges: Vec<DesignGraphEdge>,
+    pub timing_paths: Vec<TimingTrace>,
+    pub resources: Vec<ResourceUsage>,
+    pub unavailable: Vec<String>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AnalyzerChannelConfig {
+    pub id: usize,
+    pub signal: String,
+    pub width: u32,
+    #[serde(default = "default_radix")]
+    pub radix: String,
+}
+
+fn default_radix() -> String {
+    "hex".into()
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AnalyzerTriggerClause {
+    pub channel_id: usize,
+    pub operation: String,
+    pub value: String,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AnalyzerTrigger {
+    pub combinator: String,
+    pub clauses: Vec<AnalyzerTriggerClause>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AnalyzerConfig {
+    pub schema_version: u32,
+    pub clock_signal: String,
+    pub clock_hz: u64,
+    pub transport_rx: String,
+    pub transport_tx: String,
+    pub baud_rate: u32,
+    pub sample_depth: usize,
+    pub pre_trigger_samples: usize,
+    pub channels: Vec<AnalyzerChannelConfig>,
+    pub trigger: AnalyzerTrigger,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AnalyzerSignal {
+    pub id: String,
+    pub name: String,
+    pub hierarchy: String,
+    pub width: u32,
+    pub kind: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source_file: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source_line: Option<u32>,
+    pub observable: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub unavailable_reason: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AnalyzerCost {
+    pub source: EvidenceClass,
+    pub lut: i64,
+    pub ff: i64,
+    pub bram: i64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub baseline_fmax_m_hz: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub instrumented_fmax_m_hz: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub fmax_impact_percent: Option<f64>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AnalyzerWorkspace {
+    pub config: AnalyzerConfig,
+    pub signals: Vec<AnalyzerSignal>,
+    pub cost: AnalyzerCost,
+    pub generated: bool,
+    pub artifacts: Vec<String>,
+    pub warnings: Vec<String>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AnalyzerCapture {
+    pub schema_version: u32,
+    pub captured_at: String,
+    pub rtl_hash: String,
+    pub trigger_index: usize,
+    pub waveform: WaveformData,
+    pub source: DesignEvidence,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DesignSnapshot {
+    pub id: u64,
+    pub created_at: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub git_commit: Option<String>,
+    pub rtl_hash: String,
+    pub board: String,
+    pub toolchain_version: String,
+    pub kind: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub experiment_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub fmax_m_hz: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub worst_slack_ns: Option<f64>,
+    pub resources: Vec<ResourceUsage>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub critical_path: Option<TimingTrace>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub analyzer_config_hash: Option<String>,
+    pub verification_status: String,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SnapshotMetricDelta {
+    pub metric: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub baseline: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub candidate: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub delta: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub percent: Option<f64>,
+    pub unit: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PerformanceRegression {
+    pub id: String,
+    pub severity: String,
+    pub title: String,
+    pub detail: String,
+    pub evidence: Vec<DesignEvidence>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SnapshotComparison {
+    pub baseline_id: u64,
+    pub candidate_id: u64,
+    pub metrics: Vec<SnapshotMetricDelta>,
+    pub regressions: Vec<PerformanceRegression>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DesignHealthDimension {
+    pub id: String,
+    pub label: String,
+    pub status: String,
+    pub detail: String,
+    pub evidence: Vec<DesignEvidence>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OptimizationRecommendation {
+    pub id: String,
+    pub category: String,
+    pub title: String,
+    pub summary: String,
+    pub applicable: bool,
+    pub expected_impact: String,
+    pub experiment_kind: String,
+    pub evidence: Vec<DesignEvidence>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OptimizationExperiment {
+    pub id: String,
+    pub kind: String,
+    pub title: String,
+    pub status: String,
+    pub created_at: String,
+    pub options: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub baseline_snapshot_id: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub result_snapshot_id: Option<u64>,
+    pub accepted: bool,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OptimizationSummary {
+    pub generated_at: String,
+    pub health: Vec<DesignHealthDimension>,
+    pub recommendations: Vec<OptimizationRecommendation>,
+    pub experiments: Vec<OptimizationExperiment>,
+    pub snapshots: Vec<DesignSnapshot>,
+    pub regressions: Vec<PerformanceRegression>,
 }

@@ -338,6 +338,13 @@ fn parse_diagnostics(lines: &[String]) -> Vec<Diagnostic> {
 
 fn friendly_failure(action: BuildAction, lines: &[String]) -> String {
     let combined = lines.join("\n").to_ascii_lowercase();
+    if combined.contains("ftdi_usb_reset failed")
+        || combined.contains("ftdi reset failed")
+        || combined.contains("unable to configure bitbang mode")
+        || combined.contains("unable to config pins")
+    {
+        return "JTAG Interface 0 already uses WinUSB, but the FTDI controller did not respond to reset. Unplug the board's JTAG USB cable, wait 3 seconds, reconnect it, then run Detect JTAG. Do not replace either interface driver.".into();
+    }
     if combined.contains("usb_open() failed") || combined.contains("unable to open ftdi device") {
         return "The FPGA programmer is connected but Windows cannot open JTAG Interface 0. Install WinUSB on Interface 0 only, leave Interface 1 unchanged, then run Detect JTAG again.".into();
     }
@@ -396,6 +403,16 @@ mod tests {
         assert_eq!(values.len(), 1);
         assert!(matches!(values[0].severity, DiagnosticSeverity::Warning));
         assert_eq!(values[0].line, Some(18));
+    }
+
+    #[test]
+    fn explains_ftdi_reset_without_suggesting_driver_replacement() {
+        let message = friendly_failure(
+            BuildAction::Detect,
+            &["unable to open ftdi device: -6 (ftdi_usb_reset failed)".into()],
+        );
+        assert!(message.contains("Unplug"));
+        assert!(message.contains("Do not replace"));
     }
 
     #[test]

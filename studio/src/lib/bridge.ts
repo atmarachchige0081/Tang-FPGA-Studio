@@ -1,21 +1,29 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import type {
+  AnalyzerCapture,
+  AnalyzerConfig,
+  AnalyzerWorkspace,
   BuildAction,
   BoardProfile,
   BuildEvent,
   BuildHistoryEntry,
   BuildSummary,
   CommandResult,
+  DesignIntelligenceGraph,
+  DesignSnapshot,
   HdlIndex,
   HdlPattern,
   GitStatus,
   NetlistGraph,
+  OptimizationExperiment,
+  OptimizationSummary,
   ProjectNode,
   ProjectTemplate,
   PluginInfo,
   SerialDevice,
   SerialEvent,
+  SnapshotComparison,
   WaveformData,
   VerificationSummary,
   WorkspaceSnapshot,
@@ -55,6 +63,7 @@ const demoTemplates: ProjectTemplate[] = [
   { id: "led_button", name: "LED and button starter", description: "Board I/O, counter, simulation, and waveform.", level: "Beginner", category: "Fundamentals", base: "projects/_template", hardwareReady: true, tags: ["led", "button"] },
   { id: "uart_terminal", name: "UART terminal", description: "Verified greeting and echo at 115200 baud.", level: "Beginner +", category: "Interfaces", base: "projects/03_uart_terminal", hardwareReady: true, tags: ["uart", "serial"] },
   { id: "serial_commands", name: "Friendly serial command console", description: "Verified command parsing and friendly FPGA replies.", level: "Beginner +", category: "Interfaces", base: "projects/05_serial_command_console", hardwareReady: true, tags: ["uart", "commands"] },
+  { id: "hardware_intelligence", name: "Hardware Intelligence laboratory", description: "Trace real paths, probe internal state, and compare evidence-backed builds.", level: "Beginner +", category: "Debugging", base: "projects/06_hardware_intelligence", hardwareReady: true, tags: ["analyzer", "traceability", "timing"] },
   { id: "spi_controller", name: "SPI controller", description: "Mode-0 byte transfers and loopback verification.", level: "Intermediate", category: "Interfaces", base: "projects/_template", hardwareReady: true, tags: ["spi", "fsm"] },
   { id: "pwm_controller", name: "Button-controlled PWM", description: "Debouncing and multi-channel LED PWM.", level: "Beginner +", category: "Control", base: "projects/01_button_led_pwm", hardwareReady: true, tags: ["pwm", "cdc"] },
   { id: "vga_timing", name: "VGA timing laboratory", description: "Raster coordinates and sync timing.", level: "Intermediate", category: "Video", base: "projects/_template", hardwareReady: true, tags: ["vga", "timing"] },
@@ -128,7 +137,91 @@ export const bridge = {
       { name: "clk", kind: "input", file: "rtl/top.sv", line: 2, column: 16, detail: "input declaration" },
       { name: "led", kind: "output", file: "rtl/top.sv", line: 4, column: 16, detail: "output declaration" },
       { name: "counter", kind: "logic", file: "rtl/top.sv", line: 6, column: 16, detail: "logic declaration" },
-    ], diagnostics: [], modules: [{ name: "top", file: "rtl/top.sv", line: 1, ports: ["clk", "reset_n", "led"] }], instances: [], clockDomains: [{ moduleName: "top", clock: "clk", edge: "posedge", reset: "reset_n", file: "rtl/top.sv", line: 8 }] };
+    ], diagnostics: [], modules: [{ name: "top", file: "rtl/top.sv", line: 1, ports: ["clk", "reset_n", "led"] }], instances: [], clockDomains: [{ moduleName: "top", clock: "clk", edge: "posedge", reset: "reset_n", file: "rtl/top.sv", line: 8 }], signals: [
+      { id: "top:counter", name: "counter", moduleName: "top", hierarchy: "counter", width: 24, kind: "logic", file: "rtl/top.sv", line: 6, column: 16, observable: true },
+      { id: "top:led", name: "led", moduleName: "top", hierarchy: "led", width: 1, kind: "output", file: "rtl/top.sv", line: 4, column: 16, observable: true },
+    ] };
+  },
+
+  async designGraph(root: string, project: string): Promise<DesignIntelligenceGraph> {
+    if (isDesktop()) return invoke<DesignIntelligenceGraph>("read_design_graph", { root, project });
+    const evidence = { class: "measured" as const, source: "Browser preview report", detail: "Preview implementation evidence." };
+    return {
+      schemaVersion: 1, generatedAt: new Date().toISOString(), rtlHash: "preview", status: "complete",
+      nodes: [
+        { id: "rtl:counter", kind: "rtl-signal", label: "counter", hierarchy: "counter", width: 24, sourceFile: "rtl/top.sv", sourceLine: 6, evidence },
+        { id: "cell:counter", kind: "cell", label: "counter DFF", netlistName: "counter_DFF_Q", cellType: "DFF", physical: { x: 12, y: 7, bel: "R12C7_SLICE0" }, evidence },
+      ],
+      edges: [{ id: "maps", source: "rtl:counter", target: "cell:counter", relation: "synthesizes-to", evidence }],
+      timingPaths: [{ id: "path:0", clock: "top.clk", start: "counter.Q", end: "counter.D", delayNs: 13.81, targetNs: 37.04, slackNs: 23.22, logicLevels: 3, rtlSources: ["rtl/top.sv:8"], analyzerChannels: [0], evidence, segments: [
+        { index: 0, kind: "logic", delayNs: 0.23, fromCell: "counter.Q", sourceFile: "rtl/top.sv", sourceLine: 8, physical: { x: 12, y: 7, bel: "R12C7_SLICE0" } },
+        { index: 1, kind: "routing", delayNs: 0.71, net: "counter[4]", fromCell: "counter.Q", toCell: "add.I0", physical: { x: 14, y: 8 } },
+        { index: 2, kind: "logic", delayNs: 0.57, fromCell: "add", toCell: "counter.D", sourceFile: "rtl/top.sv", sourceLine: 15, physical: { x: 14, y: 8, bel: "R14C8_SLICE1" } },
+      ] }],
+      resources: [{ name: "LUT4", label: "Logic LUTs", used: 1842, total: 20736 }], unavailable: [],
+    };
+  },
+
+  async analyzerWorkspace(root: string, project: string): Promise<AnalyzerWorkspace> {
+    if (isDesktop()) return invoke<AnalyzerWorkspace>("read_analyzer_workspace", { root, project });
+    return {
+      config: { schemaVersion: 1, clockSignal: "clk", clockHz: 27_000_000, transportRx: "uart_rx", transportTx: "uart_tx", baudRate: 115_200, sampleDepth: 1024, preTriggerSamples: 512, channels: [{ id: 0, signal: "counter", width: 24, radix: "hex" }], trigger: { combinator: "and", clauses: [{ channelId: 0, operation: "compare", value: "0x40" }] } },
+      signals: [{ id: "net:counter", name: "counter", hierarchy: "counter", width: 24, kind: "register", sourceFile: "rtl/top.sv", sourceLine: 6, observable: true }],
+      cost: { source: "estimated", lut: 210, ff: 82, bram: 2, baselineFmaxMHz: 72.4 }, generated: false, artifacts: [], warnings: [],
+    };
+  },
+
+  async saveAnalyzerConfig(root: string, project: string, config: AnalyzerConfig): Promise<AnalyzerWorkspace> {
+    if (isDesktop()) return invoke<AnalyzerWorkspace>("save_analyzer_config", { root, project, config });
+    return { ...(await this.analyzerWorkspace(root, project)), config, generated: true };
+  },
+
+  async prepareAnalyzer(root: string, project: string): Promise<AnalyzerWorkspace> {
+    if (isDesktop()) return invoke<AnalyzerWorkspace>("prepare_analyzer", { root, project });
+    return this.analyzerWorkspace(root, project);
+  },
+
+  async captureAnalyzer(root: string, project: string, portName: string, timeoutMs: number): Promise<AnalyzerCapture> {
+    if (isDesktop()) return invoke<AnalyzerCapture>("capture_analyzer", { root, project, portName, timeoutMs });
+    const waveform = await this.readWaveform(root, project);
+    return { schemaVersion: 1, capturedAt: new Date().toISOString(), rtlHash: "preview", triggerIndex: 50, waveform, source: { class: "measured", source: portName || "preview UART", detail: "Preview capture." } };
+  },
+
+  async analyzerCapture(root: string, project: string): Promise<AnalyzerCapture | null> {
+    return isDesktop() ? invoke<AnalyzerCapture | null>("read_analyzer_capture", { root, project }) : null;
+  },
+
+  async optimizationSummary(root: string, project: string): Promise<OptimizationSummary> {
+    if (isDesktop()) return invoke<OptimizationSummary>("read_optimization_summary", { root, project });
+    const evidence = [{ class: "measured" as const, source: "build/timing.json", detail: "Complete preview implementation." }];
+    return { generatedAt: new Date().toISOString(), health: [
+      { id: "correctness", label: "Correctness", status: "healthy", detail: "Verification checks are current.", evidence },
+      { id: "timing", label: "Timing", status: "healthy", detail: "Worst slack is +23.22 ns.", evidence },
+      { id: "area", label: "Area", status: "healthy", detail: "Highest utilization is 8.9%.", evidence },
+      { id: "cdc-reset", label: "CDC & reset", status: "healthy", detail: "One reset-aware clock domain.", evidence: [{ class: "inferred", source: "RTL structural scan", detail: "Conservative inference." }] },
+      { id: "observability", label: "Observability", status: "attention", detail: "Analyzer configured; no capture yet.", evidence },
+      { id: "hardware", label: "Hardware verification", status: "unavailable", detail: "No board observation recorded.", evidence: [{ class: "unavailable", source: "Hardware evidence", detail: "Not recorded." }] },
+    ], recommendations: [{ id: "retime-critical-path", category: "timing", title: "Measure a retiming experiment", summary: "Critical path contains several logic levels.", applicable: true, expectedImpact: "Potential Fmax improvement, verified with a separate build.", experimentKind: "retime", evidence }], experiments: [], snapshots: [], regressions: [] };
+  },
+
+  async recordSnapshot(root: string, project: string, kind: string, experimentId?: string): Promise<DesignSnapshot> {
+    if (isDesktop()) return invoke<DesignSnapshot>("record_design_snapshot", { root, project, kind, experimentId });
+    return { id: Date.now(), createdAt: new Date().toISOString(), rtlHash: "preview", board: demoBoard.device, toolchainVersion: "preview", kind, experimentId, fmaxMHz: 72.4, worstSlackNs: 23.22, resources: [], verificationStatus: "partial" };
+  },
+
+  async compareSnapshots(root: string, project: string, baselineId: number, candidateId: number): Promise<SnapshotComparison> {
+    if (isDesktop()) return invoke<SnapshotComparison>("compare_design_snapshots", { root, project, baselineId, candidateId });
+    return { baselineId, candidateId, metrics: [], regressions: [] };
+  },
+
+  async prepareExperiment(root: string, project: string, recommendationId: string): Promise<OptimizationExperiment> {
+    if (isDesktop()) return invoke<OptimizationExperiment>("prepare_optimization_experiment", { root, project, recommendationId });
+    return { id: crypto.randomUUID(), kind: "retime", title: "Preview experiment", status: "prepared", createdAt: new Date().toISOString(), options: ["synth_gowin -retime"], accepted: false };
+  },
+
+  async finishExperiment(root: string, project: string, experimentId: string, success: boolean): Promise<OptimizationExperiment> {
+    if (isDesktop()) return invoke<OptimizationExperiment>("finish_optimization_experiment", { root, project, experimentId, success });
+    return { id: experimentId, kind: "retime", title: "Preview experiment", status: success ? "complete" : "failed", createdAt: new Date().toISOString(), options: [], accepted: false };
   },
 
   async createProject(root: string, name: string, templateId: string, displayName: string, boardId: string): Promise<WorkspaceSnapshot> {

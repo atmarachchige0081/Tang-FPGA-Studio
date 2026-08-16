@@ -809,13 +809,14 @@ dependencies = [
 
 [[package]]
 name = "fpga-studio"
-version = "2.1.0"
+version = "3.0.0"
 dependencies = [
  "chrono",
  "regex",
  "serde",
  "serde_json",
  "serialport",
+ "sha2",
  "tauri",
  "tauri-build",
  "uuid",

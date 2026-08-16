@@ -12,7 +12,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  studio-v2:
+  studio-v3:
     name: React, Tauri, Rust, and dependency safety
     runs-on: windows-latest
     steps:
@@ -68,6 +68,8 @@ jobs:
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
           python ide\fpga_ide.py --check projects\03_uart_terminal
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          python ide\fpga_ide.py --check projects\06_hardware_intelligence
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
       - name: Parse PowerShell and JSON
         shell: pwsh
         run: .\scripts\release-check.ps1 -SkipHdl -SkipNative
@@ -115,3 +117,10 @@ jobs:
             vvp build/tb_top.vvp
             popd >/dev/null
           done
+      - name: Hardware Intelligence demo lint and simulation
+        working-directory: projects/06_hardware_intelligence
+        run: |
+          mkdir -p build
+          verilator --lint-only --timing -Wall -Wno-DECLFILENAME --top-module top rtl/top.sv
+          iverilog -g2012 -Wall -s tb_top -o build/tb_top.vvp rtl/top.sv sim/tb_top.sv
+          vvp build/tb_top.vvp

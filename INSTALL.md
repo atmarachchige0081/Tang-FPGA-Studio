@@ -9,7 +9,7 @@ terminal experience is required.
 > an external programmer and a different pin file, so it is not the beginner
 > path described here.
 
-> **Other supported Tang boards:** Studio 2 also includes build/programmer
+> **Other supported Tang boards:** Studio 3 also includes build/programmer
 > packages for Tang Nano 1K, 4K, 9K, and 20K plus Primer Core and Lite. Their
 > USB/debugger behavior and I/O differ, so complete this Dock walkthrough only
 > when you own the Dock. In the New Project Wizard, choose your actual board;

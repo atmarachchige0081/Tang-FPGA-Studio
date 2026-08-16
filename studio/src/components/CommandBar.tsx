@@ -21,6 +21,9 @@ export function CommandBar({ onRun, onSave, onStop }: Props): React.JSX.Element 
       <div className="command-group view-tools">
         {nav("analysis", "Analyze", ScanSearch)}
         {nav("verification", "Verify", ListChecks)}
+        {nav("health", "Health", BarChart3)}
+        {nav("traceability", "Trace", Network)}
+        {nav("analyzer", "Analyzer", Waves)}
         {nav("dashboard", "Insights", BarChart3)}
         {nav("waveform", "Waveform", Waves)}
         {nav("netlist", "Netlist", Network)}

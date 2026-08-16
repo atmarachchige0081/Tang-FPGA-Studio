@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "name": "Hardware Intelligence laboratory",
+  "folder": "06_hardware_intelligence",
+  "board": "tang_primer_20k",
+  "top": "top",
+  "template": "hardware_intelligence",
+  "languages": ["systemverilog"],
+  "sourceRoots": ["rtl"],
+  "testRoots": ["sim"]
+}

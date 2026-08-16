@@ -2,7 +2,7 @@
 
 This folder contains the maintained compatibility UI from FPGA Studio 1.2. It
 uses Python's built-in Tk interface and remains available for lightweight or
-older systems. The supported Studio 2.1 desktop product, RTL Analysis,
+older systems. The supported Studio 3.0 desktop product, RTL Analysis,
 Verification Center, multi-board packages, and one-file Windows installer are
 documented in the repository [README](../README.md) and implemented under
 [`studio/`](../studio/).

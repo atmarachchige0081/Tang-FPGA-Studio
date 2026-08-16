@@ -3,13 +3,13 @@
 [![Quality gates](https://github.com/atmarachchige0081/Tang-FPGA-Studio/actions/workflows/quality-gates.yml/badge.svg)](https://github.com/atmarachchige0081/Tang-FPGA-Studio/actions/workflows/quality-gates.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-6c63ff.svg)](LICENSE)
 [![Desktop: Tauri + Rust](https://img.shields.io/badge/desktop-Tauri%20%2B%20Rust-4f9cff.svg)](studio/)
-[![Release: v2.1.0](https://img.shields.io/badge/release-v2.1.0-42d392.svg)](CHANGELOG.md)
+[![Release: v3.0.0](https://img.shields.io/badge/release-v3.0.0-42d392.svg)](CHANGELOG.md)
 
 An open-source, beginner-friendly FPGA IDE and development environment for
 Sipeed Tang Nano and Tang Primer boards. Simulate, inspect waveforms, lint,
-debug, build, upload to SRAM, and flash persistent designs through a polished
-desktop interface or single commands. Existing Primer 20K Dock projects remain
-the default and are fully backward compatible.
+build, trace implemented paths, capture internal FPGA signals, compare builds,
+upload to SRAM, and flash persistent designs through a polished desktop
+interface or single commands. Existing projects remain backward compatible.
 
 **Installing for the first time?** Follow [INSTALL.md](INSTALL.md) from a clean
 Windows computer through dependencies, simulation, JTAG setup, build, and your
@@ -27,7 +27,7 @@ first LED program on real hardware.
 
 The pinned [OSS CAD Suite](https://github.com/YosysHQ/oss-cad-suite-build) provides Yosys synthesis, nextpnr-himbaechel placement/routing, Project Apicula bitstream packing, openFPGALoader programming, Verilator linting, Icarus simulation, GTKWave, and formal tools. It is installed at `C:\fpga-tools\2026-07-26\oss-cad-suite` so the tool path contains no spaces, as recommended by YosysHQ. The project path may contain spaces because all build commands run with relative paths.
 
-## Supported Tang boards in Studio 2
+## Supported Tang boards in Studio 3
 
 | Board package | FPGA | Programmer alias | Release verification |
 |---|---|---|---|
@@ -59,35 +59,39 @@ npm run desktop
 
 Run `npm run desktop:doctor` if Cargo is not yet visible in a new terminal.
 
-| Accessible dark mode | New accessible light mode |
+![Tang FPGA Studio 3 light workspace](docs/images/studio-main-light.png)
+
+## Studio 3.0: Hardware Intelligence
+
+| RTL-to-physical traceability | The same evidence in accessible light mode |
 |---|---|
-| ![Tang FPGA Studio 2 dark workspace](docs/images/studio-main.png) | ![Tang FPGA Studio 2 light workspace](docs/images/studio-main-light.png) |
+| ![Studio 3 RTL-to-physical traceability](docs/images/studio-traceability.png) | ![Studio 3 traceability light theme](docs/images/studio-traceability-light.png) |
 
-## Studio 2.1: Design Intelligence
-
-| Conservative RTL analysis in dark mode | The same analysis in accessible light mode |
+| Integrated on-chip analyzer | Accessible analyzer light mode |
 |---|---|
-| ![Studio 2.1 RTL analysis and architecture](docs/images/studio-analysis.png) | ![Studio 2.1 RTL analysis light theme](docs/images/studio-analysis-light.png) |
+| ![Studio 3 on-chip logic analyzer](docs/images/studio-hardware-analyzer.png) | ![Studio 3 on-chip analyzer light theme](docs/images/studio-hardware-analyzer-light.png) |
 
-![Studio 2.1 evidence-driven verification center](docs/images/studio-verification-center.png)
+Studio 3 connects source understanding, actual implementation, and physical
+hardware evidence. **Trace** follows a source signal through Yosys cells and
+nets, nextpnr placement, critical-path segments, and analyzer probes. Every
+connection is labelled measured, inferred, or unavailable; the UI does not
+invent mappings for optimized-away or ambiguous logic.
 
-Studio 2.1 connects source understanding to implementation and hardware
-evidence. **Analyze** shows stable diagnostic codes, an explanation and a
-suggested fix for findings the live scanner can prove, plus module hierarchy,
-instances, and clock/reset domains. It deliberately does not claim to prove
-arbitrary clock-domain crossings, FSM reachability, or procedural behavior;
-Verilator, simulation, synthesis, and timing remain the authoritative deeper
-checks.
+**Analyzer** selects real post-synthesis internal probes, configures circular
+pre/post-trigger capture and AND conditions, builds a separate instrumented
+image, uploads it only to volatile SRAM, and receives measured samples over
+UART. **Design Health** separates verification, timing, logic depth, fanout,
+area, memory, I/O, clock/reset, observability, and hardware evidence, with safe
+isolated experiments, snapshots, comparisons, and regression thresholds. See the
+[Hardware Analyzer guide](docs/HARDWARE_ANALYZER.md) and the verified
+[`06_hardware_intelligence`](projects/06_hardware_intelligence/) demo.
 
-**Verify** presents every workflow stage as `PASS`, `FAIL`, `WARNING`, or
-`NOT RUN`. Results become warnings when source changes make earlier lint,
-simulation, timing, bitstream, or hardware evidence stale. JTAG detection proves
-the programming link, SRAM upload proves programming, and hardware behavior
-passes only after the user records what was actually observed. Build Insights
-now exposes every nextpnr clock and resource class along with the longest real
-place-and-route critical paths.
+**Verify** continues to present each stage as `PASS`, `FAIL`, `WARNING`, or
+`NOT RUN`. JTAG detection proves the programming link, SRAM upload proves
+programming, and hardware behavior or a capture passes only after that distinct
+evidence exists.
 
-The Studio 2 workspace uses calmer, more natural dark and light palettes, clearer
+The Studio 3 workspace uses calmer, more natural dark and light palettes, clearer
 human language, consistent spacing, and focused guided workflows. It includes
 custom iconography, searchable navigation, open-file tabs, symbol definitions
 and references, named-port instance generation, contextual HDL explanations,
@@ -99,7 +103,7 @@ simulation, GTKWave, lint, debug, build, SRAM upload, persistent flash, JTAG
 detection, hardware diagnosis, an integrated read/write UART terminal, tool
 setup, and driver setup.
 
-Studio 2 can switch the complete live workspace between dark and light modes
+Studio 3 can switch the complete live workspace between dark and light modes
 from the header, **View** menu, or `Ctrl+Shift+L`. The choice is remembered
 locally. Editors, dialogs, menus, selections, syntax colors, status states,
 tooltips, and all custom icons change together without closing files or losing
@@ -109,7 +113,7 @@ contrast and exercised by the release regression suite.
 
 ### A useful first launch
 
-![Studio 2 first-launch release notes](docs/images/studio-release-notes.png)
+![Studio 3 first-launch release notes](docs/images/studio-release-notes.png)
 
 The first launch of each Studio version opens a concise, visual **What's new**
 screen instead of dropping a beginner straight into source code. It appears
@@ -117,12 +121,6 @@ only once per version, stores that acknowledgement in local settings, and can
 always be reopened from **Help → Release notes** or the action center.
 
 ### Guided Studio workflows
-
-| Inspect real VCD signals in the integrated viewer | Auto-detected read/write UART terminal |
-|---|---|
-| ![Integrated Studio 2 waveform viewer](docs/images/studio-waveform.png) | ![Integrated Studio 2 UART terminal](docs/images/studio-uart-terminal.png) |
-
-![Studio 2 hardware manager and connection guidance](docs/images/studio-hardware-setup.png)
 
 The New Project Wizard creates a complete, immediately verifiable project from
 the board-I/O or UART starting point. The Verification Center combines the
@@ -134,14 +132,12 @@ hardware guide clearly separates JTAG Interface 0 from UART Interface 1, while
 the UART terminal auto-detects COM ports and supports ASCII/hex display,
 timestamps, transmit history, line endings, and log saving.
 
-Studio 2 also reads the real Git executable and repository status, validates
+Studio 3 also reads the real Git executable and repository status, validates
 declarative providers under `plugins/`, and loads the local HDL pattern catalog
 only after the workspace is ready. The serial terminal includes a one-click
 beginner command pad for the friendly command-console lesson.
 
 ### Synthesized netlist viewer
-
-![Searchable synthesized netlist viewer](docs/images/studio-netlist-viewer.png)
 
 Press **Netlist** after a successful Build to inspect the actual Yosys
 implementation in its dedicated workspace view. Search cells and categories,
@@ -151,11 +147,7 @@ of becoming an unreadable wall of wires.
 
 ### Intelligent workspace
 
-| Project health, hierarchy, timing and readiness | Searchable smart action center |
-|---|---|
-| ![Studio 2 Project Insights dashboard](docs/images/studio-insights.png) | ![Studio 2 searchable action center](docs/images/studio-command-palette.png) |
-
-These images are reproducibly captured from the current React/Tauri Studio 2
+These images are reproducibly captured from the current React/Tauri Studio 3
 frontend—not the retired Python v1 interface—using
 `./scripts/capture-screenshots.ps1`.
 
@@ -294,7 +286,10 @@ copy the wrapper unchanged.
 - `build/timing.json` contains utilization and timing information from nextpnr.
 - `serial` monitors on-device UART diagnostics.
 
-This setup does not provide an open-source on-chip logic analyzer. If you specifically need internal live signal capture over JTAG, install Gowin EDA Education and use Gowin Analyzer Oscilloscope (GAO); that proprietary package requires an interactive Gowin download/install and is not needed for this open-source build/upload flow.
+Studio 3 includes an open-source UART-transported on-chip analyzer for internal
+signals that survive synthesis. It creates a separate SRAM-only image and
+reports its measured resource/timing cost. Gowin Analyzer Oscilloscope (GAO)
+remains an optional proprietary alternative and is not required for this flow.
 
 ## Lite carrier or custom board pins
 

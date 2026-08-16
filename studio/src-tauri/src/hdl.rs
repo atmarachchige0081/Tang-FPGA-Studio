@@ -1,5 +1,6 @@
 use crate::models::{
-    ClockDomain, Diagnostic, DiagnosticSeverity, HdlIndex, HdlInstance, HdlModule, HdlSymbol,
+    ClockDomain, Diagnostic, DiagnosticSeverity, HdlIndex, HdlInstance, HdlModule, HdlSignal,
+    HdlSymbol,
 };
 use crate::security::{canonical_workspace, safe_existing_path};
 use regex::Regex;
@@ -30,6 +31,7 @@ pub fn index(root: &str, project: &str) -> Result<HdlIndex, String> {
     let mut modules = Vec::new();
     let mut instances = Vec::new();
     let mut clock_domains = Vec::new();
+    let mut signals = Vec::new();
     let mut module_declarations = HashMap::<String, HdlSymbol>::new();
 
     for path in source_paths {
@@ -60,6 +62,7 @@ pub fn index(root: &str, project: &str) -> Result<HdlIndex, String> {
         let file_modules = parse_modules(&clean, &relative);
         let file_instances = parse_instances(&clean, &relative, &file_modules);
         let file_domains = parse_clock_domains(&clean, &relative, &file_modules);
+        signals.extend(parse_hdl_signals(&clean, &relative, &file_modules));
 
         for module in &file_modules {
             let symbol = HdlSymbol {
@@ -163,6 +166,18 @@ pub fn index(root: &str, project: &str) -> Result<HdlIndex, String> {
             && left.reset == right.reset
             && left.file == right.file
     });
+    signals.sort_by(|left, right| {
+        left.hierarchy
+            .cmp(&right.hierarchy)
+            .then(left.name.cmp(&right.name))
+            .then(left.line.cmp(&right.line))
+    });
+    signals.dedup_by(|left, right| {
+        left.module_name == right.module_name
+            && left.name == right.name
+            && left.file == right.file
+            && left.line == right.line
+    });
 
     Ok(HdlIndex {
         top,
@@ -172,6 +187,7 @@ pub fn index(root: &str, project: &str) -> Result<HdlIndex, String> {
         modules,
         instances,
         clock_domains,
+        signals,
     })
 }
 
@@ -580,6 +596,69 @@ fn parse_declaration_symbols(content: &str, file: &str) -> Vec<HdlSymbol> {
         }
     }
     symbols
+}
+
+fn parse_hdl_signals(content: &str, file: &str, modules: &[HdlModule]) -> Vec<HdlSignal> {
+    let declaration = Regex::new(
+        r"(?m)^\s*(input|output|inout|logic|wire|reg)\b\s*(?:(?:logic|wire|reg|signed|unsigned)\b\s*)*(?:\[\s*(\d+)\s*:\s*(\d+)\s*\])?\s*([^;\n\)]+)(?:;|\)|$)",
+    )
+    .expect("signal declaration regex");
+    let identifier = Regex::new(r"^([A-Za-z_]\w*)").expect("signal identifier regex");
+    let mut result = Vec::new();
+    for captures in declaration.captures_iter(content) {
+        let Some(full) = captures.get(0) else {
+            continue;
+        };
+        let (line, _) = position(content, full.start());
+        let Some(module) = modules
+            .iter()
+            .filter(|module| module.line <= line)
+            .max_by_key(|module| module.line)
+        else {
+            continue;
+        };
+        let kind = captures.get(1).map_or("signal", |value| value.as_str());
+        let width = captures
+            .get(2)
+            .and_then(|msb| msb.as_str().parse::<i64>().ok())
+            .zip(
+                captures
+                    .get(3)
+                    .and_then(|lsb| lsb.as_str().parse::<i64>().ok()),
+            )
+            .map_or(1, |(msb, lsb)| (msb - lsb).unsigned_abs() as u32 + 1);
+        let Some(names) = captures.get(4) else {
+            continue;
+        };
+        for raw in names.as_str().split(',') {
+            let candidate = raw.trim().split('=').next().unwrap_or("").trim();
+            let Some(name) = identifier
+                .captures(candidate)
+                .and_then(|value| value.get(1))
+            else {
+                continue;
+            };
+            let offset = names.start() + raw.find(name.as_str()).unwrap_or(0);
+            let (signal_line, column) = position(content, offset);
+            result.push(HdlSignal {
+                id: format!("rtl:{}:{}", module.name, name.as_str()),
+                name: name.as_str().into(),
+                module_name: module.name.clone(),
+                hierarchy: module.name.clone(),
+                width,
+                kind: kind.into(),
+                file: file.into(),
+                line: signal_line,
+                column,
+                observable: false,
+                unavailable_reason: Some(
+                    "Run Build to prove that this signal survives synthesis and can be instrumented."
+                        .into(),
+                ),
+            });
+        }
+    }
+    result
 }
 
 fn sanitize(content: &str) -> String {

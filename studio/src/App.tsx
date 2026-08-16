@@ -13,13 +13,15 @@ import { QuickLauncher } from "./components/QuickLauncher";
 import { DashboardView, HardwareView, NetlistView, UartView, WaveformView, WelcomeView } from "./components/WorkbenchViews";
 import { AnalysisView } from "./components/AnalysisView";
 import { VerificationView } from "./components/VerificationView";
+import { DesignHealthView, LogicAnalyzerView, TraceabilityView } from "./components/HardwareIntelligence";
 import { bridge } from "./lib/bridge";
 import { useWorkbench } from "./store/workbench";
 import type { BuildAction, BuildEvent, WorkbenchView } from "./types";
 
-const viewComponents: Record<Exclude<WorkbenchView, "editor" | "verification">, React.ComponentType> = {
+const viewComponents: Record<Exclude<WorkbenchView, "editor" | "verification" | "analyzer" | "health">, React.ComponentType> = {
   dashboard: DashboardView,
   analysis: AnalysisView,
+  traceability: TraceabilityView,
   netlist: NetlistView,
   waveform: WaveformView,
   hardware: HardwareView,
@@ -98,6 +100,9 @@ function Workbench(): React.JSX.Element {
       hardware: "hardware",
       uart: "uart",
       analysis: "analysis",
+      traceability: "traceability",
+      analyzer: "analyzer",
+      health: "health",
       verification: "verification",
       launcher: "welcome",
       "release-notes": "welcome",
@@ -111,7 +116,7 @@ function Workbench(): React.JSX.Element {
   }, [store.ready]);
 
   const run = useCallback(async (action: BuildAction) => {
-    if (store.runningJob || runLock.current) return;
+    if (store.runningJob || runLock.current) return false;
     runLock.current = true;
     const optimisticId = `starting-${Date.now()}`;
     store.setRunningJob(optimisticId);
@@ -122,10 +127,18 @@ function Workbench(): React.JSX.Element {
       store.setDiagnostics(result.diagnostics);
       store.appendOutput({ jobId: result.jobId, phase: action, stream: result.success ? "system" : "stderr", message: result.success ? `Completed in ${(result.durationMs / 1000).toFixed(1)}s` : result.failureMessage ?? `${action} did not complete. Open Problems for details.`, timestamp: new Date().toISOString() });
       store.setBuild(await bridge.buildSummary(store.root, store.projectPath));
+      if (result.success && ["build", "upload", "flash"].includes(action)) {
+        await bridge.recordSnapshot(store.root, store.projectPath, "baseline").catch(() => undefined);
+      }
       window.dispatchEvent(new Event("fpga-studio:analysis-refresh"));
       window.dispatchEvent(new Event("fpga-studio:verification-refresh"));
+      window.dispatchEvent(new Event("fpga-studio:intelligence-refresh"));
+      window.dispatchEvent(new Event("fpga-studio:analyzer-refresh"));
+      window.dispatchEvent(new Event("fpga-studio:health-refresh"));
+      return result.success;
     } catch (error) {
       store.appendOutput({ jobId: optimisticId, phase: action, stream: "stderr", message: error instanceof Error ? error.message : String(error), timestamp: new Date().toISOString() });
+      return false;
     } finally {
       store.setRunningJob(null);
       runLock.current = false;
@@ -150,7 +163,11 @@ function Workbench(): React.JSX.Element {
     ? <EditorWorkspace />
     : store.view === "verification"
       ? <VerificationView onRun={(action) => void run(action)} />
-      : (() => { const View = viewComponents[store.view]; return <View />; })();
+      : store.view === "analyzer"
+        ? <LogicAnalyzerView onRun={run} />
+        : store.view === "health"
+          ? <DesignHealthView onRun={run} />
+          : (() => { const View = viewComponents[store.view]; return <View />; })();
   return <><div className="app-shell">
     <TitleBar onRun={(action) => void run(action)} onSave={() => void save()} />
     <div className="workbench-shell">

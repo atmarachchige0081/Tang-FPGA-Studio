@@ -2,6 +2,75 @@
 
 All notable user-facing changes are recorded here.
 
+## 3.0.0 — 2026-08-16
+
+### Added
+
+- Added a shared evidence-aware design graph connecting RTL declarations,
+  synthesized cells/nets, physical placement, timing segments, and analyzer
+  probes, with cached incremental refresh and explicit unavailable links.
+- Added a real generated on-chip analyzer: exact post-synthesis internal probe
+  discovery, 1–16 channels/128 bits, 64–4096 samples, circular pre-trigger
+  capture, edge/level/vector AND triggers, SRAM-only upload, and binary UART
+  waveform acquisition.
+- Added Design Health across verification, timing, logic depth, fanout, area,
+  memory, I/O, clock/reset, observability, and hardware, plus evidence-backed recommendations,
+  isolated retiming/placement experiments, build history, snapshots,
+  comparison, and regression thresholds.
+- Added the verified Hardware Intelligence UART laboratory and a dedicated New
+  Project template for learning the complete v3 flow.
+- Added responsive Trace, Analyzer, and Design Health workspaces, v3 command
+  navigation, first-launch release notes, documentation, and reproducible dark
+  and light screenshots.
+
+### Changed
+
+- Normal builds now retain an IO-pad-free synthesized artifact for exact probe
+  discovery while preserving the original bitstream pipeline and artifacts.
+- Build completion records reproducible local evidence including source and
+  configuration hashes, toolchain, board, timing, resources, verification, and
+  critical-path identity.
+- FPGA work remains serialized per project while expensive graph, report,
+  serial, analyzer, and experiment work stays off the UI thread.
+
+### Safety
+
+- Analyzer instrumentation and optimization experiments never modify source
+  RTL or replace the normal build. Analyzer upload cannot write persistent
+  flash.
+- Stale, ambiguous, optimized-away, unavailable, or estimated evidence is
+  labelled honestly; successful programming is not presented as successful
+  hardware behavior or capture.
+- Channel, width, memory depth, serial timeout, artifact size, experiment,
+  snapshot, and history bounds prevent unbounded work and corrupt state is
+  recovered or reported without crashing the editor.
+
+### Verified
+
+- Passed the production frontend build, 23 Vitest checks, 46 Rust tests
+  (including the two maintained-project artifact tests), strict Rust formatting
+  and Clippy, 34 Python compatibility checks, four maintained HDL lint and
+  simulation flows, and a zero-vulnerability production/development npm audit.
+- Passed the three-round concurrency stress suite and parallel full bitstream
+  builds for five distinct Tang device families at laptop-safe parallelism two.
+- The Hardware Intelligence demo produced a fresh 4,620,140-byte Primer 20K
+  bitstream with 253 LUT4, 113 DFF, and 267.67 MHz routed Fmax against 27 MHz.
+  Its generated analyzer image produced a 7,263,596-byte bitstream with 1,454
+  LUT4, 391 DFF, 2 BSRAM, and 209.91 MHz routed Fmax.
+- The optimized Windows executable, one-file NSIS installer, and packaged
+  headless smoke test pass.
+
+### Limitations
+
+- On-device analyzer capture requires both a working JTAG link and UART link.
+  The release host saw the correct WinUSB Interface 0 and preserved COM15, but
+  its attached debugger returned `ftdi_usb_reset failed`; no upload or capture
+  was claimed after that failure. Reconnect the board USB cable before the
+  hardware acceptance step if Windows leaves the endpoint in this state.
+- Optimization experiments apply only allowlisted build strategies in isolated
+  artifacts. Pipeline and fanout findings are evidence-linked guidance; Studio
+  does not silently rewrite user RTL.
+
 ## 2.1.0 — 2026-08-08
 
 ### Added

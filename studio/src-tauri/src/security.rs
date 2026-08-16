@@ -136,7 +136,14 @@ mod tests {
         .expect("test script");
         let canonical = std::fs::canonicalize(&script).expect("canonical script");
         let status = std::process::Command::new("powershell.exe")
-            .args(["-NoLogo", "-NoProfile", "-NonInteractive", "-File"])
+            .args([
+                "-NoLogo",
+                "-NoProfile",
+                "-NonInteractive",
+                "-ExecutionPolicy",
+                "Bypass",
+                "-File",
+            ])
             .arg(child_process_path(&canonical))
             .status()
             .expect("PowerShell should start");

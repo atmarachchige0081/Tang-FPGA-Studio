@@ -1,0 +1,19 @@
+// Tang Primer 20K Dock: 27 MHz clock, six LEDs, and Dock UART.
+IO_LOC  "clk_27mhz" H11;
+IO_PORT "clk_27mhz" IO_TYPE=LVCMOS33 PULL_MODE=UP;
+IO_LOC  "led_n[0]" L16;
+IO_LOC  "led_n[1]" L14;
+IO_LOC  "led_n[2]" N14;
+IO_LOC  "led_n[3]" N16;
+IO_LOC  "led_n[4]" A13;
+IO_LOC  "led_n[5]" C13;
+IO_PORT "led_n[0]" IO_TYPE=LVCMOS33 DRIVE=8;
+IO_PORT "led_n[1]" IO_TYPE=LVCMOS33 DRIVE=8;
+IO_PORT "led_n[2]" IO_TYPE=LVCMOS33 DRIVE=8;
+IO_PORT "led_n[3]" IO_TYPE=LVCMOS33 DRIVE=8;
+IO_PORT "led_n[4]" IO_TYPE=LVCMOS33 DRIVE=8;
+IO_PORT "led_n[5]" IO_TYPE=LVCMOS33 DRIVE=8;
+IO_LOC  "uart_tx" M11;
+IO_PORT "uart_tx" IO_TYPE=LVCMOS33 DRIVE=8;
+IO_LOC  "uart_rx" T13;
+IO_PORT "uart_rx" IO_TYPE=LVCMOS33 PULL_MODE=UP;
