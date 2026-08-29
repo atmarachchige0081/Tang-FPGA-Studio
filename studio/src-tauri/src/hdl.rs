@@ -1,15 +1,27 @@
 use crate::models::{
-    ClockDomain, Diagnostic, DiagnosticSeverity, HdlIndex, HdlInstance, HdlModule, HdlSignal,
-    HdlSymbol,
+    ClockDomain, Diagnostic, DiagnosticSeverity, HdlIndex, HdlInstance, HdlModule, HdlPort,
+    HdlReference, HdlSignal, HdlSymbol,
 };
 use crate::security::{canonical_workspace, safe_existing_path};
 use regex::Regex;
+use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 
 const MAX_HDL_FILES: usize = 500;
 const MAX_HDL_BYTES: u64 = 2 * 1024 * 1024;
+
+#[derive(Default)]
+struct PositionCache {
+    pointer: usize,
+    length: usize,
+    line_starts: Vec<usize>,
+}
+
+thread_local! {
+    static POSITION_CACHE: RefCell<PositionCache> = RefCell::new(PositionCache::default());
+}
 
 pub fn index(root: &str, project: &str) -> Result<HdlIndex, String> {
     let root = canonical_workspace(root)?;
@@ -27,12 +39,14 @@ pub fn index(root: &str, project: &str) -> Result<HdlIndex, String> {
     let top = configured_top(&project);
     let mut files = Vec::new();
     let mut symbols = Vec::new();
+    let mut references = Vec::new();
     let mut diagnostics = Vec::new();
     let mut modules = Vec::new();
     let mut instances = Vec::new();
     let mut clock_domains = Vec::new();
     let mut signals = Vec::new();
     let mut module_declarations = HashMap::<String, HdlSymbol>::new();
+    let mut source_contents = Vec::<(String, String)>::new();
 
     for path in source_paths {
         let relative = path
@@ -59,6 +73,8 @@ pub fn index(root: &str, project: &str) -> Result<HdlIndex, String> {
         let content = fs::read_to_string(&path)
             .map_err(|error| format!("Cannot read {}: {error}", path.display()))?;
         let clean = sanitize(&content);
+        prepare_positions(&clean);
+        source_contents.push((relative.clone(), clean.clone()));
         let file_modules = parse_modules(&clean, &relative);
         let file_instances = parse_instances(&clean, &relative, &file_modules);
         let file_domains = parse_clock_domains(&clean, &relative, &file_modules);
@@ -92,6 +108,7 @@ pub fn index(root: &str, project: &str) -> Result<HdlIndex, String> {
             symbols.push(symbol);
         }
         symbols.extend(parse_declaration_symbols(&clean, &relative));
+        symbols.extend(parse_named_symbols(&clean, &relative));
         symbols.extend(file_instances.iter().map(|instance| HdlSymbol {
             name: instance.instance_name.clone(),
             kind: "instance".into(),
@@ -104,6 +121,28 @@ pub fn index(root: &str, project: &str) -> Result<HdlIndex, String> {
         modules.extend(file_modules);
         instances.extend(file_instances);
         clock_domains.extend(file_domains);
+    }
+
+    for instance in &instances {
+        if !module_declarations.contains_key(&instance.module_name) {
+            diagnostics.push(diagnostic(
+                DiagnosticSeverity::Error,
+                "HDL005",
+                &format!(
+                    "Instance '{}' refers to missing module '{}'",
+                    instance.instance_name, instance.module_name
+                ),
+                "Add the module source under rtl/ or correct the instantiated module name.",
+                Some(instance.file.clone()),
+                Some(instance.line),
+                Some(1),
+            ));
+        }
+    }
+
+    let indexed_names: HashSet<String> = symbols.iter().map(|symbol| symbol.name.clone()).collect();
+    for (file, content) in &source_contents {
+        references.extend(parse_references(content, file, &indexed_names, &symbols));
     }
 
     if files.is_empty() {
@@ -141,6 +180,13 @@ pub fn index(root: &str, project: &str) -> Result<HdlIndex, String> {
             .cmp(&right.name.to_ascii_lowercase())
             .then_with(|| left.file.cmp(&right.file))
             .then_with(|| left.line.cmp(&right.line))
+    });
+    references.sort_by(|left, right| {
+        left.name
+            .cmp(&right.name)
+            .then(left.file.cmp(&right.file))
+            .then(left.line.cmp(&right.line))
+            .then(left.column.cmp(&right.column))
     });
     diagnostics.sort_by(|left, right| {
         left.file
@@ -183,6 +229,7 @@ pub fn index(root: &str, project: &str) -> Result<HdlIndex, String> {
         top,
         files,
         symbols,
+        references,
         diagnostics,
         modules,
         instances,
@@ -214,7 +261,32 @@ fn diagnostic(
 
 fn analyze_source(content: &str, file: &str) -> Vec<Diagnostic> {
     let mut result = Vec::new();
+    let module_count = Regex::new(r"\bmodule\b")
+        .expect("module count regex")
+        .find_iter(content)
+        .count();
+    let endmodule_count = Regex::new(r"\bendmodule\b")
+        .expect("endmodule count regex")
+        .find_iter(content)
+        .count();
+    if module_count != endmodule_count {
+        result.push(diagnostic(
+            DiagnosticSeverity::Error,
+            "HDL006",
+            &format!(
+                "Unbalanced module declarations: found {module_count} module and {endmodule_count} endmodule keyword(s)"
+            ),
+            "Close every module declaration with exactly one endmodule.",
+            Some(file.into()),
+            Some(1),
+            Some(1),
+        ));
+    }
     let word = Regex::new(r"[A-Za-z_]\w*").expect("identifier regex");
+    let mut use_counts = HashMap::<String, usize>::new();
+    for identifier in word.find_iter(content) {
+        *use_counts.entry(identifier.as_str().into()).or_default() += 1;
+    }
     let internal = Regex::new(
         r"(?m)^\s*(logic|wire|reg)\s+(?:signed\s+|unsigned\s+)?(?:\[\s*(\d+)\s*:\s*(\d+)\s*\]\s*)?([^;\n]+);",
     )
@@ -241,10 +313,7 @@ fn analyze_source(content: &str, file: &str) -> Vec<Diagnostic> {
             };
             let name = identifier.as_str();
             widths.insert(name.into(), width);
-            let uses = Regex::new(&format!(r"\b{}\b", regex::escape(name)))
-                .expect("escaped identifier")
-                .find_iter(content)
-                .count();
+            let uses = use_counts.get(name).copied().unwrap_or_default();
             if uses == 1 {
                 let offset = names.start() + part.find(name).unwrap_or(0);
                 let (line, column) = position(content, offset);
@@ -277,9 +346,10 @@ fn analyze_source(content: &str, file: &str) -> Vec<Diagnostic> {
             .entry(target.as_str().into())
             .or_default()
             .push(target.start());
-        let target_word =
-            Regex::new(&format!(r"\b{}\b", regex::escape(target.as_str()))).expect("target regex");
-        if target_word.is_match(expression.as_str()) {
+        if word
+            .find_iter(expression.as_str())
+            .any(|identifier| identifier.as_str() == target.as_str())
+        {
             let (line, column) = position(content, target.start());
             result.push(diagnostic(
                 DiagnosticSeverity::Error,
@@ -418,7 +488,7 @@ fn parse_modules(content: &str, file: &str) -> Vec<HdlModule> {
     let module = Regex::new(r"(?m)^\s*module\s+([A-Za-z_]\w*)").expect("module regex");
     let endmodule = Regex::new(r"(?m)^\s*endmodule\b").expect("endmodule regex");
     let port = Regex::new(
-        r"\b(?:input|output|inout)\b\s*(?:wire\s+|reg\s+|logic\s+)?(?:signed\s+|unsigned\s+)?(?:\[[^\]]+\]\s*)?([A-Za-z_]\w*)",
+        r"\b(input|output|inout)\b\s*((?:(?:wire|reg|logic|signed|unsigned|integer)\s+)*(?:\[[^\]]+\]\s*)?)([A-Za-z_]\w*)",
     )
     .expect("port regex");
     let starts: Vec<_> = module.captures_iter(content).collect();
@@ -439,16 +509,34 @@ fn parse_modules(content: &str, file: &str) -> Vec<HdlModule> {
         let header_end = content[name.end()..end]
             .find(';')
             .map_or(end, |offset| name.end() + offset);
-        let ports = port
+        let port_details: Vec<HdlPort> = port
             .captures_iter(&content[name.end()..header_end])
-            .filter_map(|capture| capture.get(1).map(|value| value.as_str().into()))
+            .filter_map(|capture| {
+                Some(HdlPort {
+                    name: capture.get(3)?.as_str().into(),
+                    direction: capture.get(1)?.as_str().into(),
+                    data_type: capture
+                        .get(2)
+                        .map(|value| {
+                            value
+                                .as_str()
+                                .split_whitespace()
+                                .collect::<Vec<_>>()
+                                .join(" ")
+                        })
+                        .filter(|value| !value.is_empty())
+                        .unwrap_or_else(|| "wire".into()),
+                })
+            })
             .collect();
+        let ports = port_details.iter().map(|item| item.name.clone()).collect();
         let (line, _) = position(content, name.start());
         result.push(HdlModule {
             name: name.as_str().into(),
             file: file.into(),
             line,
             ports,
+            port_details,
         });
         let _ = start;
     }
@@ -457,10 +545,12 @@ fn parse_modules(content: &str, file: &str) -> Vec<HdlModule> {
 
 fn parse_instances(content: &str, file: &str, modules: &[HdlModule]) -> Vec<HdlInstance> {
     let instance =
-        Regex::new(r"(?m)^\s*([A-Za-z_]\w*)\s*(?:#\s*\([^;]*?\)\s*)?([A-Za-z_]\w*)\s*\(")
+        Regex::new(r"(?m)^\s*([A-Za-z_]\w*)\s+(?:#\s*\([^;]*?\)\s*)?([A-Za-z_]\w*)\s*\(")
             .expect("instance regex");
     let keywords: HashSet<&str> = [
         "module",
+        "begin",
+        "end",
         "if",
         "else",
         "for",
@@ -596,6 +686,61 @@ fn parse_declaration_symbols(content: &str, file: &str) -> Vec<HdlSymbol> {
         }
     }
     symbols
+}
+
+fn parse_named_symbols(content: &str, file: &str) -> Vec<HdlSymbol> {
+    let declaration = Regex::new(
+        r"(?m)^\s*(function|task|package|typedef)\b(?:\s+(?:automatic|logic|integer|enum|struct|signed|unsigned))*\s+([A-Za-z_]\w*)|^\s*`define\s+([A-Za-z_]\w*)",
+    )
+    .expect("named HDL declaration regex");
+    declaration
+        .captures_iter(content)
+        .filter_map(|captures| {
+            let (kind, name) = if let Some(macro_name) = captures.get(3) {
+                ("macro", macro_name)
+            } else {
+                (captures.get(1)?.as_str(), captures.get(2)?)
+            };
+            let (line, column) = position(content, name.start());
+            Some(HdlSymbol {
+                name: name.as_str().into(),
+                kind: kind.into(),
+                file: file.into(),
+                line,
+                column,
+                detail: format!("{kind} declaration"),
+            })
+        })
+        .collect()
+}
+
+fn parse_references(
+    content: &str,
+    file: &str,
+    indexed_names: &HashSet<String>,
+    symbols: &[HdlSymbol],
+) -> Vec<HdlReference> {
+    let identifier = Regex::new(r"[A-Za-z_]\w*").expect("reference identifier regex");
+    let declarations: HashSet<(String, u32, u32)> = symbols
+        .iter()
+        .filter(|symbol| symbol.file == file)
+        .map(|symbol| (symbol.name.clone(), symbol.line, symbol.column))
+        .collect();
+    identifier
+        .find_iter(content)
+        .filter(|value| indexed_names.contains(value.as_str()))
+        .map(|value| {
+            let (line, column) = position(content, value.start());
+            let declaration = declarations.contains(&(value.as_str().into(), line, column));
+            HdlReference {
+                name: value.as_str().into(),
+                file: file.into(),
+                line,
+                column,
+                declaration,
+            }
+        })
+        .collect()
 }
 
 fn parse_hdl_signals(content: &str, file: &str, modules: &[HdlModule]) -> Vec<HdlSignal> {
@@ -748,6 +893,21 @@ fn configured_top(project: &Path) -> String {
 }
 
 fn position(content: &str, offset: usize) -> (u32, u32) {
+    if let Some(value) = POSITION_CACHE.with(|cache| {
+        let cache = cache.borrow();
+        if cache.pointer != content.as_ptr() as usize || cache.length != content.len() {
+            return None;
+        }
+        let line_index = cache.line_starts.partition_point(|start| *start <= offset);
+        let line_start = cache
+            .line_starts
+            .get(line_index.saturating_sub(1))
+            .copied()
+            .unwrap_or(0);
+        Some((line_index as u32, (offset - line_start) as u32 + 1))
+    }) {
+        return value;
+    }
     let prefix = &content[..offset];
     let line = prefix.bytes().filter(|value| *value == b'\n').count() as u32 + 1;
     let column = prefix
@@ -755,6 +915,22 @@ fn position(content: &str, offset: usize) -> (u32, u32) {
         .map_or(prefix.len(), |(_, tail)| tail.len()) as u32
         + 1;
     (line, column)
+}
+
+fn prepare_positions(content: &str) {
+    POSITION_CACHE.with(|cache| {
+        let mut cache = cache.borrow_mut();
+        cache.pointer = content.as_ptr() as usize;
+        cache.length = content.len();
+        cache.line_starts.clear();
+        cache.line_starts.push(0);
+        cache.line_starts.extend(
+            content
+                .bytes()
+                .enumerate()
+                .filter_map(|(index, value)| (value == b'\n').then_some(index + 1)),
+        );
+    });
 }
 
 #[cfg(test)]
@@ -781,6 +957,18 @@ mod tests {
             .instances
             .iter()
             .any(|item| item.instance_name == "u_child"));
+        assert!(result
+            .modules
+            .iter()
+            .find(|item| item.name == "top")
+            .is_some_and(|item| item
+                .port_details
+                .iter()
+                .any(|port| port.name == "clk" && port.direction == "input")));
+        assert!(result
+            .references
+            .iter()
+            .any(|item| item.name == "child" && !item.declaration));
         assert!(result
             .clock_domains
             .iter()
@@ -826,6 +1014,42 @@ mod tests {
             .diagnostics
             .iter()
             .any(|item| item.code.as_deref() == Some("HDL001")));
+        fs::remove_dir_all(root).expect("cleanup");
+    }
+
+    #[test]
+    fn reports_missing_modules_and_unclosed_module_syntax() {
+        let root = project("module top(input logic clk);\nmissing_block u_missing(.clk(clk));\n");
+        let result = index(&root.to_string_lossy(), ".").expect("index");
+        for code in ["HDL005", "HDL006"] {
+            assert!(
+                result
+                    .diagnostics
+                    .iter()
+                    .any(|item| item.code.as_deref() == Some(code)),
+                "missing {code}: {:?}",
+                result.diagnostics
+            );
+        }
+        fs::remove_dir_all(root).expect("cleanup");
+    }
+
+    #[test]
+    fn indexes_a_large_representative_source_without_interactive_delay() {
+        let declarations = (0..800)
+            .map(|index| format!("logic signal_{index};\nassign signal_{index} = clk;\n"))
+            .collect::<String>();
+        let root = project(&format!(
+            "module top(input logic clk);\n{declarations}endmodule\n"
+        ));
+        let started = std::time::Instant::now();
+        let result = index(&root.to_string_lossy(), ".").expect("large index");
+        assert!(result.symbols.len() >= 801);
+        assert!(
+            started.elapsed() < std::time::Duration::from_secs(3),
+            "indexing took {:?}",
+            started.elapsed()
+        );
         fs::remove_dir_all(root).expect("cleanup");
     }
 

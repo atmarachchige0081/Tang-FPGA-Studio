@@ -6,7 +6,7 @@ interface Props { onRun: (action: BuildAction) => void; onSave: () => void; onSt
 
 export function CommandBar({ onRun, onSave, onStop }: Props): React.JSX.Element {
   const { runningJob, setView, board } = useWorkbench();
-  const nav = (view: WorkbenchView, title: string, Icon: typeof BarChart3) => <button className="tool-button" onClick={() => setView(view)} title={title}><Icon size={16} /><span>{title}</span></button>;
+  const nav = (view: WorkbenchView, title: string, Icon: typeof BarChart3) => <button className="tool-button view-button" onClick={() => setView(view)} title={title} aria-label={`Open ${title}`}><Icon size={15} /><span>{title}</span></button>;
   return (
     <div className="commandbar">
       <div className="command-group">
@@ -18,7 +18,7 @@ export function CommandBar({ onRun, onSave, onStop }: Props): React.JSX.Element 
         <button className="tool-button" onClick={() => onRun("upload")} disabled={Boolean(runningJob)} title="Load volatile SRAM"><Upload size={16} /><span>SRAM</span></button>
         {runningJob && <button className="stop-tool" onClick={onStop}><Square size={14} /> Stop</button>}
       </div>
-      <div className="command-group view-tools">
+      <div className="command-group view-tools" aria-label="Workspace views">
         {nav("analysis", "Analyze", ScanSearch)}
         {nav("verification", "Verify", ListChecks)}
         {nav("health", "Health", BarChart3)}
@@ -30,7 +30,7 @@ export function CommandBar({ onRun, onSave, onStop }: Props): React.JSX.Element 
         {nav("hardware", "Hardware", CircuitBoard)}
         {nav("uart", "UART", Radio)}
       </div>
-      <div className="target-pill"><Cpu size={15} /><span>{board?.name.replace("Sipeed ", "") ?? "Loading board"}</span><span className="online-dot" /><span>{board?.clocks[0] ? `${board.clocks[0].frequencyHz / 1_000_000} MHz` : "--"}</span></div>
+      <div className="target-pill" title="Active target"><Cpu size={14} /><span>{board?.name.replace("Sipeed ", "") ?? "Loading board"}</span><span className="online-dot" /><span>{board?.clocks[0] ? `${board.clocks[0].frequencyHz / 1_000_000} MHz` : "--"}</span></div>
     </div>
   );
 }

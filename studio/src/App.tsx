@@ -64,7 +64,7 @@ function Workbench(): React.JSX.Element {
     void (async () => {
       const snapshot = await bridge.workspaceSnapshot();
       if (disposed) return;
-      store.setWorkspace(snapshot.root, snapshot.project, snapshot.projectPath, snapshot.tree);
+      store.setWorkspace(snapshot.root, snapshot.project, snapshot.projectPath, snapshot.tree, snapshot.recentProjects);
       const [summary, board] = await Promise.all([
         bridge.buildSummary(snapshot.root, snapshot.projectPath),
         bridge.activeBoard(snapshot.root, snapshot.projectPath),
@@ -106,12 +106,22 @@ function Workbench(): React.JSX.Element {
       verification: "verification",
       launcher: "welcome",
       "release-notes": "welcome",
+      "project-wizard": "welcome",
+      "custom-project": "welcome",
+      "project-search": "welcome",
     };
     const requestedView = captureViews[capture];
     if (requestedView) store.setView(requestedView);
     if ((capture === "analysis" || capture === "verification") && store.bottomOpen) store.toggleBottom();
     if (capture === "launcher") {
       window.setTimeout(() => window.dispatchEvent(new Event("fpga-studio:command-center")), 150);
+    }
+    if (capture === "project-wizard" || capture === "custom-project") {
+      window.setTimeout(store.openProjectWizard, 150);
+    }
+    if (capture === "project-search") {
+      store.setActivity("search");
+      window.setTimeout(() => window.dispatchEvent(new CustomEvent("fpga-studio:workspace-search", { detail: { mode: "symbols" } })), 200);
     }
   }, [store.ready]);
 
@@ -153,6 +163,7 @@ function Workbench(): React.JSX.Element {
     store.appendOutput({ jobId: "editor", phase: "save", stream: "system", message: `Saved ${active.path}`, timestamp: new Date().toISOString() });
     window.dispatchEvent(new Event("fpga-studio:analysis-refresh"));
     window.dispatchEvent(new Event("fpga-studio:verification-refresh"));
+    window.dispatchEvent(new Event("fpga-studio:intelligence-refresh"));
   }, [store]);
 
   const stop = useCallback(async () => {

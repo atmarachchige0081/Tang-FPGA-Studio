@@ -1,4 +1,7 @@
-use crate::models::{NodeKind, ProjectNode, ProjectTemplate, TemplateCatalog, WorkspaceSnapshot};
+use crate::models::{
+    CustomProjectRequest, FpgaTarget, NodeKind, ProjectNode, ProjectSearchMatch, ProjectTemplate,
+    TemplateCatalog, WorkspaceSnapshot,
+};
 use crate::security::{
     canonical_workspace, child_process_path, safe_existing_path, safe_file_path,
 };
@@ -50,6 +53,26 @@ pub fn snapshot() -> Result<WorkspaceSnapshot, String> {
         state.active_project.as_str()
     };
     snapshot_for(&root, active, state.recent_projects)
+}
+
+pub fn open_project(root: &str, project_path: &str) -> Result<WorkspaceSnapshot, String> {
+    let root = canonical_workspace(root)?;
+    let directory = safe_existing_path(&root, project_path)?;
+    if !directory.is_dir() || !directory.join("fpga.config.psd1").is_file() {
+        return Err("Select a project folder containing fpga.config.psd1".into());
+    }
+    let relative = directory
+        .strip_prefix(&root)
+        .map_err(|_| "Project escaped the workspace")?
+        .to_string_lossy()
+        .replace('\\', "/");
+    let mut state = read_workspace_state(&root);
+    state.recent_projects.retain(|item| item != &relative);
+    state.recent_projects.insert(0, relative.clone());
+    state.recent_projects.truncate(12);
+    state.active_project = relative.clone();
+    persist_workspace_state(&root, &state)?;
+    snapshot_for(&root, &relative, state.recent_projects)
 }
 
 fn snapshot_for(
@@ -152,21 +175,39 @@ pub fn create_project(
             let overlay = validate_template_source(&root, overlay)?;
             copy_template_tree(&overlay, &target)?;
         }
-        if selected_board != "tang_primer_20k" {
-            configure_board(&root, &target, selected_board)?;
-        }
+        configure_board(&root, &target, selected_board)?;
+        let profile = crate::boards::list(&root.to_string_lossy())?
+            .into_iter()
+            .find(|item| item.id == selected_board)
+            .ok_or_else(|| format!("Unknown board package '{selected_board}'"))?;
+        let target_profile = fpga_target(&profile);
         let title = if display_name.trim().is_empty() {
             template.name.as_str()
         } else {
             display_name.trim()
         };
         let manifest = serde_json::json!({
-            "schemaVersion": 1,
+            "schemaVersion": 2,
             "name": title,
             "folder": project_name,
-            "board": selected_board,
+            "mode": "template",
+            "board": {
+                "id": selected_board,
+                "name": profile.name,
+                "manufacturer": "Sipeed",
+                "targetDevice": profile.device
+            },
+            "target": target_profile,
             "top": "top",
             "template": template.id,
+            "clock": {
+                "signal": profile.clocks.first().map(|clock| clock.name.as_str()).unwrap_or("clk"),
+                "frequencyHz": profile.clocks.first().map(|clock| clock.frequency_hz).unwrap_or(0)
+            },
+            "constraints": profile.constraints.iter().filter_map(|path| Path::new(path).file_name()).map(|name| format!("constraints/{}", name.to_string_lossy())).collect::<Vec<_>>(),
+            "timingConstraints": profile.timing_constraints.iter().filter_map(|path| Path::new(path).file_name()).map(|name| format!("constraints/{}", name.to_string_lossy())).collect::<Vec<_>>(),
+            "toolchain": profile.build.as_ref().map(|build| build.backend.as_str()).unwrap_or("oss-cad-suite"),
+            "programmer": profile.programmer.board,
             "createdAt": Utc::now().to_rfc3339(),
             "languages": ["systemverilog"],
             "sourceRoots": ["rtl"],
@@ -206,6 +247,308 @@ pub fn create_project(
     state.active_project = project_path.clone();
     persist_workspace_state(&root, &state)?;
     snapshot_for(&root, &project_path, state.recent_projects)
+}
+
+pub fn create_custom_project(
+    root: &str,
+    name: &str,
+    request: CustomProjectRequest,
+) -> Result<WorkspaceSnapshot, String> {
+    let root = canonical_workspace(root)?;
+    let project_name = validate_project_name(name)?;
+    let profile = crate::boards::list(&root.to_string_lossy())?
+        .into_iter()
+        .find(|item| item.id == request.board_id)
+        .ok_or_else(|| format!("Unknown board package '{}'", request.board_id))?;
+    validate_custom_request(&profile, &request)?;
+
+    let projects_root = root.join("projects");
+    fs::create_dir_all(&projects_root)
+        .map_err(|error| format!("Cannot create projects directory: {error}"))?;
+    let target = projects_root.join(&project_name);
+    if target.exists() {
+        return Err(format!("A project named '{project_name}' already exists"));
+    }
+    let base = validate_template_source(&root, "projects/_template")?;
+    let result = (|| {
+        fs::create_dir(&target)
+            .map_err(|error| format!("Cannot create project folder: {error}"))?;
+        copy_template_tree(&base, &target)?;
+        configure_board(&root, &target, &request.board_id)?;
+        customize_generated_project(&target, &profile, &request)?;
+        generate_custom_scaffold(&target, &request)?;
+
+        let manifest = serde_json::json!({
+            "schemaVersion": 2,
+            "name": request.display_name.trim(),
+            "folder": project_name,
+            "mode": "custom",
+            "board": {
+                "id": profile.id,
+                "name": profile.name,
+                "manufacturer": "Sipeed",
+                "targetDevice": profile.device
+            },
+            "target": request.target,
+            "top": request.top,
+            "template": serde_json::Value::Null,
+            "clock": {
+                "signal": request.clock_signal,
+                "frequencyHz": (request.clock_mhz * 1_000_000.0).round() as u64
+            },
+            "constraints": [request.constraint_path],
+            "timingConstraints": request.timing_constraint_path.iter().collect::<Vec<_>>(),
+            "toolchain": request.toolchain,
+            "programmer": request.programmer,
+            "createdAt": Utc::now().to_rfc3339(),
+            "languages": ["systemverilog", "verilog"],
+            "sourceRoots": request.source_roots,
+            "testRoots": request.test_roots
+        });
+        fs::write(
+            target.join("fpga.project.json"),
+            serde_json::to_string_pretty(&manifest)
+                .map_err(|error| format!("Cannot serialize project manifest: {error}"))?
+                + "\n",
+        )
+        .map_err(|error| format!("Cannot write project manifest: {error}"))?;
+        Ok::<(), String>(())
+    })();
+    if let Err(error) = result {
+        let _ = fs::remove_dir_all(&target);
+        return Err(format!("Custom project creation was rolled back: {error}"));
+    }
+    let project_path = format!("projects/{project_name}");
+    open_project(&root.to_string_lossy(), &project_path)
+}
+
+fn validate_project_name(name: &str) -> Result<String, String> {
+    let project_name = name.trim();
+    let name_pattern = Regex::new(r"^\d{2}_[a-z][a-z0-9_]*$").expect("project name regex");
+    if !name_pattern.is_match(project_name) {
+        return Err(
+            "Use two digits, an underscore, and lowercase words, for example 04_spi_sensor".into(),
+        );
+    }
+    Ok(project_name.into())
+}
+
+fn fpga_target(profile: &crate::models::BoardProfile) -> FpgaTarget {
+    let package_pattern = Regex::new(r"(?:PG|QN|UG|BG|CS|FN)\d+[A-Z]?").expect("package regex");
+    let (package, speed_grade) = package_pattern
+        .find(&profile.device)
+        .map(|value| {
+            (
+                value.as_str().to_owned(),
+                profile.device[value.end()..].to_owned(),
+            )
+        })
+        .unwrap_or_else(|| ("registered-board-package".into(), "profile-defined".into()));
+    FpgaTarget {
+        vendor: profile.vendor.clone(),
+        family: profile.family.clone(),
+        device: profile.device.clone(),
+        package,
+        speed_grade,
+    }
+}
+
+fn validate_relative_project_path(path: &str, extension: &str) -> Result<(), String> {
+    let normalized = path.replace('\\', "/");
+    let candidate = Path::new(&normalized);
+    if candidate.is_absolute()
+        || normalized.starts_with('/')
+        || normalized
+            .split('/')
+            .any(|part| part == ".." || part.is_empty())
+        || !normalized.starts_with("constraints/")
+        || candidate.extension().and_then(|value| value.to_str()) != Some(extension)
+    {
+        return Err(format!(
+            "Use a project-relative constraints/{extension} path without '..' segments"
+        ));
+    }
+    Ok(())
+}
+
+fn validate_custom_request(
+    profile: &crate::models::BoardProfile,
+    request: &CustomProjectRequest,
+) -> Result<(), String> {
+    let expected_target = fpga_target(profile);
+    if request.target.vendor != expected_target.vendor
+        || request.target.family != expected_target.family
+        || request.target.device != expected_target.device
+        || request.target.package != expected_target.package
+        || request.target.speed_grade != expected_target.speed_grade
+    {
+        return Err("The FPGA target does not match the selected registered board package".into());
+    }
+    let identifier = Regex::new(r"^[A-Za-z_]\w*$").expect("HDL identifier regex");
+    if !identifier.is_match(request.top.trim()) || !identifier.is_match(request.clock_signal.trim())
+    {
+        return Err("Top module and clock signal must be valid HDL identifiers".into());
+    }
+    let board_clock = profile
+        .clocks
+        .first()
+        .ok_or("The selected board has no registered clock")?;
+    if request.clock_signal != board_clock.name {
+        return Err(format!(
+            "The '{}' board package constrains clock signal '{}'; custom pin renaming is not supported yet",
+            profile.name, board_clock.name
+        ));
+    }
+    if !request.clock_mhz.is_finite() || request.clock_mhz < 0.1 || request.clock_mhz > 1000.0 {
+        return Err("Clock target must be between 0.1 MHz and 1000 MHz".into());
+    }
+    let expected_toolchain = profile
+        .build
+        .as_ref()
+        .map(|build| build.backend.as_str())
+        .unwrap_or("oss-cad-suite");
+    if request.toolchain != expected_toolchain || request.programmer != profile.programmer.board {
+        return Err(
+            "Toolchain and programmer must match a supported registered board route".into(),
+        );
+    }
+    if request.source_roots != ["rtl"] || request.test_roots != ["sim"] {
+        return Err("This release supports portable rtl/ and sim/ source roots only".into());
+    }
+    validate_relative_project_path(&request.constraint_path, "cst")?;
+    if let Some(timing) = request.timing_constraint_path.as_deref() {
+        validate_relative_project_path(timing, "sdc")?;
+        if profile.timing_constraints.is_empty() {
+            return Err(
+                "The selected board package does not provide a timing constraint file".into(),
+            );
+        }
+    }
+    Ok(())
+}
+
+fn customize_generated_project(
+    target: &Path,
+    profile: &crate::models::BoardProfile,
+    request: &CustomProjectRequest,
+) -> Result<(), String> {
+    let config_path = target.join("fpga.config.psd1");
+    let mut config = fs::read_to_string(&config_path)
+        .map_err(|error| format!("Cannot read generated configuration: {error}"))?;
+    config = replace_config_string(&config, "Top", request.top.trim())?;
+    config = replace_config_number(&config, "ClockMHz", request.clock_mhz)?;
+
+    let source_constraint = profile
+        .constraints
+        .first()
+        .and_then(|path| Path::new(path).file_name())
+        .ok_or("Board package has no primary constraint")?;
+    move_generated_constraint(target, source_constraint, &request.constraint_path)?;
+    config = replace_config_string(&config, "Constraint", &request.constraint_path)?;
+
+    let timing_value = if let Some(requested) = request.timing_constraint_path.as_deref() {
+        let source = profile
+            .timing_constraints
+            .first()
+            .and_then(|path| Path::new(path).file_name())
+            .ok_or("Board package has no timing constraint")?;
+        move_generated_constraint(target, source, requested)?;
+        requested
+    } else {
+        ""
+    };
+    config = replace_config_string(&config, "TimingConstraint", timing_value)?;
+    fs::write(&config_path, config)
+        .map_err(|error| format!("Cannot save custom project configuration: {error}"))?;
+
+    Ok(())
+}
+
+fn generate_custom_scaffold(target: &Path, request: &CustomProjectRequest) -> Result<(), String> {
+    let constraint = fs::read_to_string(target.join(&request.constraint_path))
+        .map_err(|error| format!("Cannot read custom constraint scaffold: {error}"))?;
+    let led_pattern =
+        Regex::new(r#"(?m)IO_LOC\s+"led_n(?:\[(\d+)\])?""#).expect("LED constraint regex");
+    let mut led_width = 0usize;
+    for captures in led_pattern.captures_iter(&constraint) {
+        led_width = led_width.max(
+            captures
+                .get(1)
+                .and_then(|value| value.as_str().parse::<usize>().ok())
+                .unwrap_or(0)
+                + 1,
+        );
+    }
+    if led_width == 0 {
+        return Err(
+            "The selected board package has no led_n output for the portable starter".into(),
+        );
+    }
+    let led_declaration = if led_width == 1 {
+        "output logic led_n".to_owned()
+    } else {
+        format!("output logic [{}:0] led_n", led_width - 1)
+    };
+    let rtl = format!(
+        "`timescale 1ns/1ps\n`default_nettype none\n\n// Portable custom-project starter generated from the selected board package.\nmodule {} (\n    input  logic {},\n    {}\n);\n    logic [23:0] counter = '0;\n\n    always_ff @(posedge {})\n        counter <= counter + 1'b1;\n\n    always_comb begin\n        led_n = '1;\n        led_n[0] = ~counter[23];\n    end\nendmodule\n\n`default_nettype wire\n",
+        request.top, request.clock_signal, led_declaration, request.clock_signal
+    );
+    let testbench = format!(
+        "`timescale 1ns/1ps\n`default_nettype none\n\nmodule tb_top;\n    logic {} = 1'b0;\n    logic [{}:0] led_n;\n\n    {} dut (.*);\n    always #5 {} = ~{};\n\n    initial begin\n        $dumpfile(\"build/waves.vcd\");\n        $dumpvars(0, tb_top);\n        repeat (4) @(posedge {});\n        if (^dut.counter === 1'bx) $fatal(1, \"counter contains an unknown value\");\n        $display(\"PASS: custom project scaffold is running\");\n        $finish;\n    end\nendmodule\n\n`default_nettype wire\n",
+        request.clock_signal,
+        led_width - 1,
+        request.top,
+        request.clock_signal,
+        request.clock_signal,
+        request.clock_signal
+    );
+    fs::write(target.join("rtl/top.sv"), rtl)
+        .map_err(|error| format!("Cannot create custom RTL scaffold: {error}"))?;
+    fs::write(target.join("sim/tb_top.sv"), testbench)
+        .map_err(|error| format!("Cannot create custom simulation scaffold: {error}"))
+}
+
+fn move_generated_constraint(
+    target: &Path,
+    source_name: &std::ffi::OsStr,
+    destination: &str,
+) -> Result<(), String> {
+    let source = target.join("constraints").join(source_name);
+    let destination_path = target.join(destination);
+    if source != destination_path {
+        if let Some(parent) = destination_path.parent() {
+            fs::create_dir_all(parent)
+                .map_err(|error| format!("Cannot create custom constraint directory: {error}"))?;
+        }
+        fs::rename(&source, &destination_path)
+            .map_err(|error| format!("Cannot set custom constraint path: {error}"))?;
+    }
+    Ok(())
+}
+
+fn replace_config_string(config: &str, key: &str, value: &str) -> Result<String, String> {
+    let pattern = Regex::new(&format!(r"(?m)^(\s*{}\s*=\s*)'[^']*'", regex::escape(key)))
+        .expect("configuration key regex");
+    if !pattern.is_match(config) {
+        return Err(format!("Generated configuration has no {key} setting"));
+    }
+    Ok(pattern
+        .replace(config, format!("${{1}}'{value}'"))
+        .into_owned())
+}
+
+fn replace_config_number(config: &str, key: &str, value: f64) -> Result<String, String> {
+    let pattern = Regex::new(&format!(
+        r"(?m)^(\s*{}\s*=\s*)\d+(?:\.\d+)?",
+        regex::escape(key)
+    ))
+    .expect("numeric configuration key regex");
+    if !pattern.is_match(config) {
+        return Err(format!("Generated configuration has no {key} setting"));
+    }
+    Ok(pattern
+        .replace(config, format!("${{1}}{value}"))
+        .into_owned())
 }
 
 fn configure_board(root: &Path, target: &Path, board_id: &str) -> Result<(), String> {
@@ -513,6 +856,110 @@ pub fn read_text(root: &str, relative: &str) -> Result<String, String> {
     fs::read_to_string(&file).map_err(|error| format!("Cannot read {}: {error}", file.display()))
 }
 
+pub fn search_text(
+    root: &str,
+    project: &str,
+    query: &str,
+) -> Result<Vec<ProjectSearchMatch>, String> {
+    let query = query.trim();
+    if query.is_empty() {
+        return Ok(Vec::new());
+    }
+    if query.chars().count() > 120 {
+        return Err("Project search terms are limited to 120 characters".into());
+    }
+    let root = canonical_workspace(root)?;
+    let project = safe_existing_path(&root, project)?;
+    let mut paths = Vec::new();
+    collect_search_files(&project, &mut paths)?;
+    if paths.len() > 2_000 {
+        paths.truncate(2_000);
+    }
+    let needle = query.to_lowercase();
+    let mut matches = Vec::new();
+    for path in paths {
+        let metadata =
+            fs::metadata(&path).map_err(|error| format!("Cannot inspect search file: {error}"))?;
+        if metadata.len() > 2 * 1024 * 1024 {
+            continue;
+        }
+        let Ok(content) = fs::read_to_string(&path) else {
+            continue;
+        };
+        for (line_index, line) in content.lines().enumerate() {
+            let lower = line.to_lowercase();
+            let Some(byte_column) = lower.find(&needle) else {
+                continue;
+            };
+            let column = line[..byte_column].chars().count() as u32 + 1;
+            let preview: String = line.trim().chars().take(240).collect();
+            matches.push(ProjectSearchMatch {
+                file: path
+                    .strip_prefix(&root)
+                    .map_err(|_| "Search result escaped the workspace")?
+                    .to_string_lossy()
+                    .replace('\\', "/"),
+                line: line_index as u32 + 1,
+                column,
+                preview,
+            });
+            if matches.len() >= 500 {
+                return Ok(matches);
+            }
+        }
+    }
+    Ok(matches)
+}
+
+fn collect_search_files(directory: &Path, paths: &mut Vec<PathBuf>) -> Result<(), String> {
+    for entry in fs::read_dir(directory)
+        .map_err(|error| format!("Cannot scan project search files: {error}"))?
+    {
+        let entry =
+            entry.map_err(|error| format!("Cannot inspect project search entry: {error}"))?;
+        let file_type = entry
+            .file_type()
+            .map_err(|error| format!("Cannot inspect project search file: {error}"))?;
+        if file_type.is_symlink() {
+            continue;
+        }
+        let path = entry.path();
+        if file_type.is_dir() {
+            let name = entry.file_name();
+            let name = name.to_string_lossy();
+            if IGNORED_DIRECTORIES.contains(&name.as_ref())
+                || ["build", "obj_dir"].contains(&name.as_ref())
+            {
+                continue;
+            }
+            collect_search_files(&path, paths)?;
+        } else if file_type.is_file()
+            && matches!(
+                path.extension()
+                    .and_then(|value| value.to_str())
+                    .map(str::to_ascii_lowercase)
+                    .as_deref(),
+                Some(
+                    "v" | "sv"
+                        | "vh"
+                        | "svh"
+                        | "vhd"
+                        | "vhdl"
+                        | "cst"
+                        | "sdc"
+                        | "json"
+                        | "psd1"
+                        | "md"
+                        | "txt"
+                )
+            )
+        {
+            paths.push(path);
+        }
+    }
+    Ok(())
+}
+
 pub fn write_text(root: &str, relative: &str, content: &str) -> Result<(), String> {
     if content.len() > 4 * 1024 * 1024 {
         return Err("Refusing to save a text buffer larger than 4 MiB".into());
@@ -549,7 +996,11 @@ pub fn write_text(root: &str, relative: &str, content: &str) -> Result<(), Strin
 
 #[cfg(test)]
 mod tests {
-    use super::{configure_board, create_project};
+    use super::{
+        configure_board, copy_template_tree, create_custom_project, create_project, fpga_target,
+        open_project, search_text,
+    };
+    use crate::models::CustomProjectRequest;
     use std::fs;
 
     #[test]
@@ -559,12 +1010,26 @@ mod tests {
         let base = root.join("projects/_template");
         let overlay = root.join("templates/demo");
         fs::create_dir_all(base.join("rtl")).expect("base tree");
+        fs::create_dir_all(base.join("constraints")).expect("base constraints");
         fs::create_dir_all(base.join("build")).expect("generated tree");
         fs::create_dir_all(overlay.join("rtl")).expect("overlay tree");
         fs::write(root.join("fpga.ps1"), "# test").expect("workspace marker");
         fs::write(base.join("rtl/top.sv"), "module old; endmodule\n").expect("base source");
         fs::write(base.join("build/generated.bin"), "ignore").expect("generated file");
         fs::write(base.join("README.md"), "# Template\n").expect("readme");
+        fs::write(
+            base.join("fpga.config.psd1"),
+            "@{\n Top='top'\n Device='old'\n Family='old'\n YosysFamily='old'\n BuildBackend='old'\n GowinDeviceName='old'\n GowinDeviceCode=''\n GowinDeviceVersion=''\n Constraint='constraints/old.cst'\n TimingConstraint=''\n ClockMHz=1\n ProgrammerBoard='old'\n}\n",
+        )
+        .expect("base config");
+        let repository = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../..")
+            .canonicalize()
+            .expect("repository root");
+        let board_source = repository.join("boards/gowin/tang_primer_20k");
+        let board_target = root.join("boards/gowin/tang_primer_20k");
+        fs::create_dir_all(&board_target).expect("board target");
+        copy_template_tree(&board_source, &board_target).expect("board package copy");
         fs::write(overlay.join("rtl/top.sv"), "module top; endmodule\n").expect("overlay source");
         fs::write(
             root.join("templates/catalog.json"),
@@ -757,12 +1222,90 @@ mod tests {
                 &fs::read(root.join("projects").join(folder).join("fpga.project.json")).unwrap(),
             )
             .unwrap();
-            assert_eq!(manifest["board"], board);
+            assert_eq!(manifest["board"]["id"], board);
             let reopened =
                 crate::boards::active(&root.to_string_lossy(), &format!("projects/{folder}"))
                     .expect("persisted board selection reopens");
             assert_eq!(reopened.id, board);
         }
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn creates_validates_searches_and_reopens_portable_custom_project() {
+        let repository = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../..")
+            .canonicalize()
+            .unwrap();
+        let root =
+            std::env::temp_dir().join(format!("fpga-custom-project-test-{}", uuid::Uuid::new_v4()));
+        fs::create_dir_all(root.join("projects/_template")).unwrap();
+        fs::create_dir_all(root.join("boards/gowin/tang_nano_9k")).unwrap();
+        fs::write(root.join("fpga.ps1"), "# workspace marker\n").unwrap();
+        copy_template_tree(
+            &repository.join("projects/_template"),
+            &root.join("projects/_template"),
+        )
+        .unwrap();
+        copy_template_tree(
+            &repository.join("boards/gowin/tang_nano_9k"),
+            &root.join("boards/gowin/tang_nano_9k"),
+        )
+        .unwrap();
+        let profile = crate::boards::list(&root.to_string_lossy())
+            .unwrap()
+            .remove(0);
+        let request = CustomProjectRequest {
+            display_name: "Portable Nano laboratory".into(),
+            board_id: profile.id.clone(),
+            target: fpga_target(&profile),
+            top: "lab_top".into(),
+            clock_signal: profile.clocks[0].name.clone(),
+            clock_mhz: 30.0,
+            constraint_path: "constraints/custom_board.cst".into(),
+            timing_constraint_path: None,
+            toolchain: "oss-cad-suite".into(),
+            programmer: profile.programmer.board.clone(),
+            source_roots: vec!["rtl".into()],
+            test_roots: vec!["sim".into()],
+        };
+        let created =
+            create_custom_project(&root.to_string_lossy(), "04_portable_lab", request.clone())
+                .expect("custom project creation");
+        assert_eq!(created.project, "Portable Nano laboratory");
+        let directory = root.join("projects/04_portable_lab");
+        let manifest_text = fs::read_to_string(directory.join("fpga.project.json")).unwrap();
+        let manifest: serde_json::Value = serde_json::from_str(&manifest_text).unwrap();
+        assert_eq!(manifest["schemaVersion"], 2);
+        assert_eq!(manifest["mode"], "custom");
+        assert_eq!(manifest["board"]["id"], "tang_nano_9k");
+        assert_eq!(manifest["target"]["device"], profile.device);
+        assert_eq!(manifest["top"], "lab_top");
+        assert!(!manifest_text.contains(&root.to_string_lossy().to_string()));
+        assert!(directory.join("constraints/custom_board.cst").is_file());
+        let config = fs::read_to_string(directory.join("fpga.config.psd1")).unwrap();
+        assert!(
+            config.contains("Top              = 'lab_top'") || config.contains("Top='lab_top'")
+        );
+        assert!(config.contains("ClockMHz         = 30") || config.contains("ClockMHz=30"));
+        assert!(fs::read_to_string(directory.join("rtl/top.sv"))
+            .unwrap()
+            .contains("module lab_top"));
+
+        let reopened = open_project(&root.to_string_lossy(), "projects/04_portable_lab")
+            .expect("custom project reopens");
+        assert_eq!(reopened.project, "Portable Nano laboratory");
+        assert_eq!(reopened.project_path, "projects/04_portable_lab");
+        let matches = search_text(&root.to_string_lossy(), &reopened.project_path, "counter")
+            .expect("indexed project search");
+        assert!(matches.iter().any(|item| item.file.ends_with("rtl/top.sv")));
+
+        let mut invalid = request;
+        invalid.target.device = "unsupported-device".into();
+        assert!(
+            create_custom_project(&root.to_string_lossy(), "05_invalid_target", invalid).is_err()
+        );
+        assert!(!root.join("projects/05_invalid_target").exists());
         fs::remove_dir_all(root).unwrap();
     }
 }

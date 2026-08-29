@@ -9,7 +9,7 @@ terminal experience is required.
 > an external programmer and a different pin file, so it is not the beginner
 > path described here.
 
-> **Other supported Tang boards:** Studio 3.1 also includes build/programmer
+> **Other supported Tang boards:** Studio 3.2 also includes build/programmer
 > packages for Tang Nano 1K, 4K, 9K, and 20K, Primer Core and Lite, Tang
 > Console 60K, and current C-revision Tang Console 138K. Their
 > USB/debugger behavior and I/O differ, so complete this Dock walkthrough only
@@ -391,6 +391,24 @@ Inside the Studio:
 5. read the beginner-friendly message in the **Output** panel; and
 6. switch dark/light mode with `Ctrl+Shift+L`, or press `Ctrl+K` to search all
    actions.
+
+To create your own project in Studio 3.2, open **File → New FPGA project**:
+
+- choose **Template project** for a verified learning example; or
+- choose **Custom project** to select a registered FPGA target and physical
+  board separately, then set the top module, timing target, and portable
+  constraint filenames.
+
+Custom mode intentionally offers only installed Tang/Gowin build routes. Keep
+the suggested clock signal unless you are also maintaining a custom board
+package. The generated `fpga.project.json` contains only relative paths, so the
+project can be copied to another machine with the same toolchain support.
+
+While editing, use `Ctrl+P` for files, `Ctrl+T` for HDL symbols,
+`Ctrl+Shift+F` for project text, `F12` for a definition, and `Shift+F12` for
+references. Clicking a Problems entry opens the reported file, line, and
+column. If advanced indexing is unavailable, normal editing and syntax
+highlighting continue.
 
 Where beginners put code:
 

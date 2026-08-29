@@ -10,6 +10,7 @@ import type {
   BuildHistoryEntry,
   BuildSummary,
   CommandResult,
+  CustomProjectRequest,
   DesignIntelligenceGraph,
   DesignSnapshot,
   HdlIndex,
@@ -19,6 +20,7 @@ import type {
   OptimizationExperiment,
   OptimizationSummary,
   ProjectNode,
+  ProjectSearchMatch,
   ProjectTemplate,
   PluginInfo,
   SerialDevice,
@@ -103,6 +105,11 @@ export const bridge = {
     return { root: "Browser preview", project: "Tang Primer 20K Demo", projectPath: ".", tree: demoTree, recentProjects: [] };
   },
 
+  async openProject(root: string, project: string): Promise<WorkspaceSnapshot> {
+    if (isDesktop()) return invoke<WorkspaceSnapshot>("open_project", { root, project });
+    return { root, project: project.split("/").at(-1) ?? project, projectPath: project, tree: demoTree, recentProjects: [project] };
+  },
+
   async readText(root: string, path: string): Promise<string> {
     if (isDesktop()) return invoke<string>("read_text_file", { root, path });
     if (path === "rtl/top.sv") return demoSource;
@@ -111,6 +118,15 @@ export const bridge = {
 
   async writeText(root: string, path: string, content: string): Promise<void> {
     if (isDesktop()) await invoke("write_text_file", { root, path, content });
+  },
+
+  async searchProject(root: string, project: string, query: string): Promise<ProjectSearchMatch[]> {
+    if (isDesktop()) return invoke<ProjectSearchMatch[]>("search_project_text", { root, project, query });
+    const needle = query.toLowerCase();
+    return demoSource.split("\n").flatMap((line, index) => {
+      const column = line.toLowerCase().indexOf(needle);
+      return column >= 0 ? [{ file: "rtl/top.sv", line: index + 1, column: column + 1, preview: line.trim() }] : [];
+    });
   },
 
   async projectTemplates(root: string): Promise<ProjectTemplate[]> {
@@ -154,7 +170,15 @@ export const bridge = {
       { name: "clk", kind: "input", file: "rtl/top.sv", line: 2, column: 16, detail: "input declaration" },
       { name: "led", kind: "output", file: "rtl/top.sv", line: 4, column: 16, detail: "output declaration" },
       { name: "counter", kind: "logic", file: "rtl/top.sv", line: 6, column: 16, detail: "logic declaration" },
-    ], diagnostics: [], modules: [{ name: "top", file: "rtl/top.sv", line: 1, ports: ["clk", "reset_n", "led"] }], instances: [], clockDomains: [{ moduleName: "top", clock: "clk", edge: "posedge", reset: "reset_n", file: "rtl/top.sv", line: 8 }], signals: [
+    ], references: [
+      { name: "top", file: "rtl/top.sv", line: 1, column: 8, declaration: true },
+      { name: "clk", file: "rtl/top.sv", line: 2, column: 16, declaration: true },
+      { name: "clk", file: "rtl/top.sv", line: 8, column: 28, declaration: false },
+    ], diagnostics: [], modules: [{ name: "top", file: "rtl/top.sv", line: 1, ports: ["clk", "reset_n", "led"], portDetails: [
+      { name: "clk", direction: "input", dataType: "logic" },
+      { name: "reset_n", direction: "input", dataType: "logic" },
+      { name: "led", direction: "output", dataType: "logic" },
+    ] }], instances: [], clockDomains: [{ moduleName: "top", clock: "clk", edge: "posedge", reset: "reset_n", file: "rtl/top.sv", line: 8 }], signals: [
       { id: "top:counter", name: "counter", moduleName: "top", hierarchy: "counter", width: 24, kind: "logic", file: "rtl/top.sv", line: 6, column: 16, observable: true },
       { id: "top:led", name: "led", moduleName: "top", hierarchy: "led", width: 1, kind: "output", file: "rtl/top.sv", line: 4, column: 16, observable: true },
     ] };
@@ -244,6 +268,11 @@ export const bridge = {
   async createProject(root: string, name: string, templateId: string, displayName: string, boardId: string): Promise<WorkspaceSnapshot> {
     if (isDesktop()) return invoke<WorkspaceSnapshot>("create_project", { root, name, templateId, displayName, boardId });
     return { root, project: displayName || name, projectPath: `projects/${name}`, tree: demoTree, recentProjects: [`projects/${name}`] };
+  },
+
+  async createCustomProject(root: string, name: string, request: CustomProjectRequest): Promise<WorkspaceSnapshot> {
+    if (isDesktop()) return invoke<WorkspaceSnapshot>("create_custom_project", { root, name, request });
+    return { root, project: request.displayName || name, projectPath: `projects/${name}`, tree: demoTree, recentProjects: [`projects/${name}`] };
   },
 
   async run(root: string, project: string, action: BuildAction, jobId: string): Promise<CommandResult> {

@@ -24,6 +24,10 @@ export function TitleBar({ onRun, onSave }: Props): React.JSX.Element {
   const menuRoot = useRef<HTMLElement>(null);
   const toggleTheme = () => store.setTheme(store.theme === "light" ? "dark" : "light");
   const action = (run: () => void) => () => { setOpenMenu(null); run(); };
+  const openSearch = (mode: "text" | "files" | "symbols") => {
+    store.setActivity("search");
+    window.setTimeout(() => window.dispatchEvent(new CustomEvent("fpga-studio:workspace-search", { detail: { mode } })), 0);
+  };
 
   useEffect(() => {
     const outside = (event: PointerEvent) => {
@@ -38,6 +42,7 @@ export function TitleBar({ onRun, onSave }: Props): React.JSX.Element {
   const menus: Record<MenuId, MenuItem[]> = {
     file: [
       { label: "New FPGA project…", shortcut: "Ctrl+N", run: store.openProjectWizard },
+      { label: "Go to project file…", shortcut: "Ctrl+P", run: () => openSearch("files") },
       { label: "Save active file", shortcut: "Ctrl+S", disabled: !store.activePath, run: onSave },
     ],
     edit: [
@@ -48,6 +53,8 @@ export function TitleBar({ onRun, onSave }: Props): React.JSX.Element {
     ],
     project: [
       { label: "Project explorer", run: () => { store.setActivity("explorer"); store.setView("editor"); } },
+      { label: "Search project text…", shortcut: "Ctrl+Shift+F", run: () => openSearch("text") },
+      { label: "Go to HDL symbol…", shortcut: "Ctrl+T", run: () => openSearch("symbols") },
       { label: "RTL analysis & architecture", run: () => store.setView("analysis") },
       { label: "Verification center", run: () => store.setView("verification") },
       { label: "Design Health", run: () => store.setView("health") },
@@ -59,7 +66,7 @@ export function TitleBar({ onRun, onSave }: Props): React.JSX.Element {
     build: [
       { label: "Lint HDL", disabled: Boolean(store.runningJob), run: () => onRun("lint") },
       { label: "Run simulation", disabled: Boolean(store.runningJob), run: () => onRun("sim") },
-      { label: "Build bitstream", disabled: Boolean(store.runningJob), run: () => onRun("build") },
+      { label: "Build bitstream", shortcut: "Ctrl+Shift+B", disabled: Boolean(store.runningJob), run: () => onRun("build") },
     ],
     hardware: [
       { label: "Hardware manager", run: () => store.setView("hardware") },
@@ -80,7 +87,7 @@ export function TitleBar({ onRun, onSave }: Props): React.JSX.Element {
 
   return (
     <header className="titlebar" ref={menuRoot}>
-      <div className="brand-mark" aria-label="FPGA Studio"><Cpu size={18} /><span>FPGA Studio</span><span className="version-chip">v3.0</span></div>
+      <div className="brand-mark" aria-label="FPGA Studio"><Cpu size={17} /><span>FPGA Studio</span><span className="version-chip">3.2</span></div>
       <nav className="menu-strip" aria-label="Application menu">
         {renderMenu("file", "File")}{renderMenu("edit", "Edit")}{renderMenu("project", "Project")}{renderMenu("build", "Build")}{renderMenu("hardware", "Hardware")}{renderMenu("help", "Help")}
       </nav>
@@ -88,11 +95,11 @@ export function TitleBar({ onRun, onSave }: Props): React.JSX.Element {
         <Search size={14} /><span>{store.project || "Open a workspace"}</span><kbd>Ctrl K</kbd><ChevronDown size={13} />
       </button>
       <div className="window-tools">
-        <button className="icon-button" onClick={store.toggleSidebar} title="Toggle sidebar"><PanelLeft size={16} /></button>
-        <button className="icon-button" onClick={store.toggleBottom} title="Toggle panel"><PanelBottom size={16} /></button>
-        <button className="icon-button" onClick={toggleTheme} title="Toggle color theme">{store.theme === "light" ? <Moon size={16} /> : <Sun size={16} />}</button>
-        <button className="icon-button" title="Commands" onClick={openQuickLauncher}><Command size={16} /></button>
-        <button className="avatar" title="Local workspace"><Box size={14} /></button>
+        <button className="icon-button" onClick={store.toggleSidebar} title="Toggle sidebar" aria-label="Toggle sidebar"><PanelLeft size={16} /></button>
+        <button className="icon-button" onClick={store.toggleBottom} title="Toggle output panel" aria-label="Toggle output panel"><PanelBottom size={16} /></button>
+        <button className="icon-button" onClick={toggleTheme} title="Toggle color theme" aria-label="Toggle color theme">{store.theme === "light" ? <Moon size={16} /> : <Sun size={16} />}</button>
+        <button className="icon-button" title="Open action center" aria-label="Open action center" onClick={openQuickLauncher}><Command size={16} /></button>
+        <span className="workspace-indicator" title="Local workspace"><Box size={13} /><span>Local</span></span>
       </div>
     </header>
   );

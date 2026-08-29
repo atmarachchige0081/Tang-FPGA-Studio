@@ -56,6 +56,36 @@ export interface WorkspaceSnapshot {
   recentProjects: string[];
 }
 
+export interface FpgaTarget {
+  vendor: string;
+  family: string;
+  device: string;
+  package: string;
+  speedGrade: string;
+}
+
+export interface CustomProjectRequest {
+  displayName: string;
+  boardId: string;
+  target: FpgaTarget;
+  top: string;
+  clockSignal: string;
+  clockMhz: number;
+  constraintPath: string;
+  timingConstraintPath?: string;
+  toolchain: string;
+  programmer: string;
+  sourceRoots: string[];
+  testRoots: string[];
+}
+
+export interface ProjectSearchMatch {
+  file: string;
+  line: number;
+  column: number;
+  preview: string;
+}
+
 export interface BuildSummary {
   status: "ready" | "passed" | "failed" | "running";
   fmaxMHz: number | null;
@@ -300,10 +330,19 @@ export interface HdlSymbol {
   detail: string;
 }
 
+export interface HdlReference {
+  name: string;
+  file: string;
+  line: number;
+  column: number;
+  declaration: boolean;
+}
+
 export interface HdlIndex {
   top: string;
   files: string[];
   symbols: HdlSymbol[];
+  references: HdlReference[];
   diagnostics: Diagnostic[];
   modules: HdlModule[];
   instances: HdlInstance[];
@@ -330,6 +369,13 @@ export interface HdlModule {
   file: string;
   line: number;
   ports: string[];
+  portDetails: HdlPort[];
+}
+
+export interface HdlPort {
+  name: string;
+  direction: "input" | "output" | "inout";
+  dataType: string;
 }
 
 export interface HdlInstance {

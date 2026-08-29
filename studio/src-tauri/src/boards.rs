@@ -66,7 +66,11 @@ pub fn active(root: &str, project: &str) -> Result<BoardProfile, String> {
 fn read_board_id(project_dir: &Path) -> Option<String> {
     let value: serde_json::Value =
         serde_json::from_slice(&fs::read(project_dir.join("fpga.project.json")).ok()?).ok()?;
-    value.get("board")?.as_str().map(str::to_owned)
+    let board = value.get("board")?;
+    board
+        .as_str()
+        .or_else(|| board.get("id").and_then(serde_json::Value::as_str))
+        .map(str::to_owned)
 }
 
 fn validate(workspace: &Path, profile_path: &Path, profile: &BoardProfile) -> Result<(), String> {
@@ -172,6 +176,15 @@ mod tests {
         )
         .unwrap();
         assert_eq!(read_board_id(&directory).as_deref(), Some("tang_nano_9k"));
+        fs::write(
+            directory.join("fpga.project.json"),
+            r#"{"schemaVersion":2,"board":{"id":"tang_console_60k"}}"#,
+        )
+        .unwrap();
+        assert_eq!(
+            read_board_id(&directory).as_deref(),
+            Some("tang_console_60k")
+        );
         fs::remove_dir_all(directory).unwrap();
     }
 

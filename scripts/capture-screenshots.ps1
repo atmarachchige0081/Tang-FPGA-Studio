@@ -1,6 +1,10 @@
 [CmdletBinding()]
 param(
-    [string[]] $Only = @()
+    [string[]] $Only = @(),
+    [string[]] $Exclude = @(),
+    [ValidateRange(900, 7680)] [int] $Width = 1440,
+    [ValidateRange(620, 4320)] [int] $Height = 900,
+    [string] $Suffix = ''
 )
 
 Set-StrictMode -Version Latest
@@ -27,6 +31,9 @@ $views = @(
     @{ Capture = 'welcome';       Theme = 'dark';  File = 'studio-main.png' },
     @{ Capture = 'welcome';       Theme = 'light'; File = 'studio-main-light.png' },
     @{ Capture = 'release-notes'; Theme = 'dark';  File = 'studio-release-notes.png' },
+    @{ Capture = 'project-wizard'; Theme = 'dark'; File = 'studio-project-wizard.png' },
+    @{ Capture = 'custom-project'; Theme = 'dark'; File = 'studio-custom-project.png' },
+    @{ Capture = 'project-search'; Theme = 'dark'; File = 'studio-project-search.png' },
     @{ Capture = 'dashboard';     Theme = 'dark';  File = 'studio-insights.png' },
     @{ Capture = 'analysis';      Theme = 'dark';  File = 'studio-analysis.png' },
     @{ Capture = 'verification';  Theme = 'dark';  File = 'studio-verification-center.png' },
@@ -47,6 +54,9 @@ if ($Only.Count -gt 0) {
     if ($views.Count -eq 0) {
         throw "No Studio 3 screenshot matched -Only: $($Only -join ', ')"
     }
+}
+if ($Exclude.Count -gt 0) {
+    $views = @($views | Where-Object { $Exclude -notcontains $_.Capture })
 }
 
 New-Item -ItemType Directory -Force -Path $outputDirectory | Out-Null
@@ -72,7 +82,8 @@ try {
     if (-not $ready) { throw 'Timed out waiting for the Studio 3 preview server.' }
 
     foreach ($view in $views) {
-        $target = Join-Path $outputDirectory $view.File
+        $fileName = if ($Suffix) { ([IO.Path]::GetFileNameWithoutExtension($view.File)) + $Suffix + [IO.Path]::GetExtension($view.File) } else { $view.File }
+        $target = Join-Path $outputDirectory $fileName
         $url = "$baseUrl/?capture=$($view.Capture)&theme=$($view.Theme)"
         $viewProfile = Join-Path $profileDirectory ("$($view.Capture)-$($view.Theme)")
         $captureSucceeded = $false
@@ -91,7 +102,7 @@ try {
                 '--no-first-run',
                 '--hide-scrollbars',
                 '--force-device-scale-factor=1',
-                '--window-size=1440,900',
+                "--window-size=$Width,$Height",
                 '--run-all-compositor-stages-before-draw',
                 '--virtual-time-budget=3500',
                 "--user-data-dir=`"$attemptProfile`"",

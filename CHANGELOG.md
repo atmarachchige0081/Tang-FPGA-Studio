@@ -2,6 +2,67 @@
 
 All notable user-facing changes are recorded here.
 
+## 3.2.0 — 2026-08-29
+
+### UI
+
+- Redesigned the application shell and start screen as a compact professional
+  desktop IDE with the active project, target, device, clock, and build state
+  visible at a glance.
+- Replaced the marketing-style welcome page, oversized dashboard tiles, and
+  board product cards with structured panels, property rows, and compact
+  engineering tables.
+- Consolidated project creation into a task-oriented two-pane dialog with a
+  dense template list and standard project and target fields.
+- Simplified the build toolbar, target indicator, output dock, release dialog,
+  command palette, hardware manager, and intelligence workspaces.
+- Introduced a restrained shared color, spacing, radius, border, typography,
+  and focus system for dark and light themes.
+- Added reproducible screenshot checks for dialogs, exclusions, custom window
+  sizes, and the 1280 × 720, 1366 × 768, and 1920 × 1080 release layouts.
+
+### Projects
+
+- Added a Custom Project mode alongside the existing verified template
+  presets. Custom projects explicitly configure a registered board, separate
+  FPGA silicon target, top module, timing target, constraint paths, build
+  route, programmer route, and portable source structure.
+- Added schema-v2 portable project manifests with separate physical-board and
+  FPGA-target records. Machine-specific paths are not stored.
+- Added transactional recent-project reopening and backend validation that
+  rejects unsupported target/board, toolchain, programmer, clock, and unsafe
+  constraint-path combinations without leaving a partial project.
+- Kept template projects as presets that produce normal projects rather than a
+  separate restricted project type.
+
+### IDE
+
+- Added cached project-aware Verilog/SystemVerilog completion for modules,
+  signals, ports, parameters, localparams, functions, tasks, types, packages,
+  macros, keywords, and local HDL include files.
+- Added context-specific module-port completion and compact signature help,
+  hover declarations, go-to-definition, find-references, and a navigable module
+  hierarchy.
+- Added bounded asynchronous project-text search, file search, symbol search,
+  and keyboard navigation through `Ctrl+P`, `Ctrl+T`, `Ctrl+Shift+F`, `F12`,
+  and `Shift+F12`.
+- Professionalized the Problems panel with severity grouping, filtering,
+  sorting, source locations, and click-through navigation to file, line, and
+  column.
+- Added conservative missing-module and unclosed-module diagnostics while
+  preserving toolchain diagnostics as the authoritative result.
+
+### Performance and compatibility
+
+- Replaced repeated linear source-position scans with a cached per-file line
+  index and removed quadratic unused-signal counting from the Rust HDL index.
+- Added completion and large-source performance regression tests, graceful
+  degradation when indexing is unavailable, custom-project persistence tests,
+  and UI navigation tests.
+- Preserved existing board definitions, synthesis/programming behavior,
+  template compatibility, and existing project layouts. VHDL and arbitrary
+  unregistered FPGA vendors are not presented as supported.
+
 ## 3.1.1 — 2026-08-29
 
 ### Fixed

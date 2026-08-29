@@ -56,6 +56,9 @@ then reports the missing vendor place-and-route as an explicit limitation.
 The screenshot script launches the current React Studio 3 frontend in browser
 preview mode and captures its real dark/light views with Microsoft Edge. It
 must not be replaced with captures from the retired Python companion UI.
+Use `-Only welcome`, `-Exclude health`, or the `-Width`, `-Height`, and
+`-Suffix` options for focused responsive checks without replacing unrelated
+captures.
 
 ## Automatic one-file installer release
 

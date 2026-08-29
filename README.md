@@ -3,7 +3,7 @@
 [![Quality gates](https://github.com/atmarachchige0081/Tang-FPGA-Studio/actions/workflows/quality-gates.yml/badge.svg)](https://github.com/atmarachchige0081/Tang-FPGA-Studio/actions/workflows/quality-gates.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-6c63ff.svg)](LICENSE)
 [![Desktop: Tauri + Rust](https://img.shields.io/badge/desktop-Tauri%20%2B%20Rust-4f9cff.svg)](studio/)
-[![Release: v3.1.1](https://img.shields.io/badge/release-v3.1.1-42d392.svg)](CHANGELOG.md)
+[![Release: v3.2.0](https://img.shields.io/badge/release-v3.2.0-2d91b8.svg)](CHANGELOG.md)
 
 An open-source, beginner-friendly FPGA IDE and development environment for
 Sipeed Tang Nano, Tang Primer, and Tang Console boards. Simulate, inspect waveforms, lint,
@@ -58,6 +58,15 @@ worker entirely from the installed application. Source files open for editing
 offline instead of remaining on Monaco's **Loading...** screen. See the
 [incident notes](docs/RELEASE_3.1.1.md).
 
+**v3.2 professional configurable IDE:** the Studio now combines a compact
+project-centric desktop layout with portable custom projects and real
+project-aware Verilog/SystemVerilog assistance. The New Project dialog can use
+a verified template preset or explicitly configure a registered board,
+separate FPGA target, timing target, constraint paths, build route, and
+programmer. Definition/reference navigation, module-port completion, project
+search, and clickable Problems all use the local HDL index. See the
+[v3.2 release notes](docs/RELEASE_3.2.0.md).
+
 ## Beginner desktop IDE
 
 The one-file Windows installer creates a **Tang FPGA Studio** Desktop shortcut.
@@ -73,7 +82,41 @@ npm run desktop
 
 Run `npm run desktop:doctor` if Cargo is not yet visible in a new terminal.
 
-![Tang FPGA Studio 3 light workspace](docs/images/studio-main-light.png)
+| Professional dark workspace | Professional light workspace |
+|---|---|
+| ![Tang FPGA Studio 3.2 professional dark workspace](docs/images/studio-main.png) | ![Tang FPGA Studio 3.2 professional light workspace](docs/images/studio-main-light.png) |
+
+![Tang FPGA Studio 3.2 compact project creation](docs/images/studio-project-wizard.png)
+
+| Separate board/FPGA custom configuration | Indexed project navigation |
+|---|---|
+| ![Tang FPGA Studio 3.2 custom FPGA project](docs/images/studio-custom-project.png) | ![Tang FPGA Studio 3.2 project search](docs/images/studio-project-search.png) |
+
+### Configurable projects and HDL intelligence
+
+Choose **Template project** for a verified learning preset or **Custom
+project** for an explicit supported target. Custom mode separates the physical
+Sipeed board from its Gowin silicon target and shows only combinations backed
+by the installed board registry. It writes a portable schema-v2
+`fpga.project.json`; paths stay relative to the project. Recent projects reopen
+from the start screen with their board/target configuration restored.
+
+The editor supports Verilog and SystemVerilog project symbols, contextual
+module-port completion, include-file suggestions, signature/hover help,
+definitions, references, inline diagnostics, and a compact hierarchy. Use:
+
+| Shortcut | IDE action |
+|---|---|
+| `Ctrl+P` | Find a project file |
+| `Ctrl+T` | Find a module, port, signal, parameter, function, or task |
+| `Ctrl+Shift+F` | Search project source, constraints, manifests, and docs |
+| `F12` / `Shift+F12` | Definition / references |
+| `Ctrl+Shift+B` | Build the active project |
+
+The index refreshes after project open/save, while a lightweight current-
+buffer scan keeps local completions responsive. If indexing is unavailable,
+the editor keeps syntax highlighting and normal editing. VHDL and arbitrary
+unregistered vendor devices are deliberately not claimed as supported.
 
 ## Studio 3.0: Hardware Intelligence
 

@@ -91,6 +91,53 @@ pub struct BoardProgrammer {
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
+pub struct FpgaTarget {
+    pub vendor: String,
+    pub family: String,
+    pub device: String,
+    pub package: String,
+    pub speed_grade: String,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CustomProjectRequest {
+    pub display_name: String,
+    pub board_id: String,
+    pub target: FpgaTarget,
+    pub top: String,
+    pub clock_signal: String,
+    pub clock_mhz: f64,
+    pub constraint_path: String,
+    #[serde(default)]
+    pub timing_constraint_path: Option<String>,
+    pub toolchain: String,
+    pub programmer: String,
+    #[serde(default = "default_source_roots")]
+    pub source_roots: Vec<String>,
+    #[serde(default = "default_test_roots")]
+    pub test_roots: Vec<String>,
+}
+
+fn default_source_roots() -> Vec<String> {
+    vec!["rtl".into()]
+}
+
+fn default_test_roots() -> Vec<String> {
+    vec!["sim".into()]
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectSearchMatch {
+    pub file: String,
+    pub line: u32,
+    pub column: u32,
+    pub preview: String,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct BoardBuild {
     pub backend: String,
     pub device_name: String,
@@ -175,11 +222,22 @@ pub struct HdlIndex {
     pub top: String,
     pub files: Vec<String>,
     pub symbols: Vec<HdlSymbol>,
+    pub references: Vec<HdlReference>,
     pub diagnostics: Vec<Diagnostic>,
     pub modules: Vec<HdlModule>,
     pub instances: Vec<HdlInstance>,
     pub clock_domains: Vec<ClockDomain>,
     pub signals: Vec<HdlSignal>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct HdlReference {
+    pub name: String,
+    pub file: String,
+    pub line: u32,
+    pub column: u32,
+    pub declaration: bool,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -200,6 +258,15 @@ pub struct HdlModule {
     pub file: String,
     pub line: u32,
     pub ports: Vec<String>,
+    pub port_details: Vec<HdlPort>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct HdlPort {
+    pub name: String,
+    pub direction: String,
+    pub data_type: String,
 }
 
 #[derive(Debug, Clone, Serialize)]

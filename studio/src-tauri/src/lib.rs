@@ -19,10 +19,10 @@ mod waveform;
 use hardware::SerialRegistry;
 use models::{
     AnalyzerCapture, AnalyzerConfig, AnalyzerWorkspace, BoardProfile, BuildAction,
-    BuildHistoryEntry, BuildSummary, CommandResult, DesignIntelligenceGraph, DesignSnapshot,
-    GitStatus, HdlIndex, HdlPattern, NetlistGraph, OptimizationExperiment, OptimizationSummary,
-    PluginInfo, ProjectTemplate, SerialDevice, SnapshotComparison, VerificationSummary,
-    WaveformData, WorkspaceSnapshot,
+    BuildHistoryEntry, BuildSummary, CommandResult, CustomProjectRequest, DesignIntelligenceGraph,
+    DesignSnapshot, GitStatus, HdlIndex, HdlPattern, NetlistGraph, OptimizationExperiment,
+    OptimizationSummary, PluginInfo, ProjectSearchMatch, ProjectTemplate, SerialDevice,
+    SnapshotComparison, VerificationSummary, WaveformData, WorkspaceSnapshot,
 };
 use runner::JobRegistry;
 use tauri::{AppHandle, State};
@@ -43,6 +43,14 @@ async fn workspace_snapshot() -> Result<WorkspaceSnapshot, String> {
 }
 
 #[tauri::command]
+async fn open_project(root: String, project: String) -> Result<WorkspaceSnapshot, String> {
+    blocking("Project open", move || {
+        project::open_project(&root, &project)
+    })
+    .await
+}
+
+#[tauri::command]
 async fn read_text_file(root: String, path: String) -> Result<String, String> {
     blocking("File read", move || project::read_text(&root, &path)).await
 }
@@ -51,6 +59,18 @@ async fn read_text_file(root: String, path: String) -> Result<String, String> {
 async fn write_text_file(root: String, path: String, content: String) -> Result<(), String> {
     blocking("File save", move || {
         project::write_text(&root, &path, &content)
+    })
+    .await
+}
+
+#[tauri::command]
+async fn search_project_text(
+    root: String,
+    project: String,
+    query: String,
+) -> Result<Vec<ProjectSearchMatch>, String> {
+    blocking("Project search", move || {
+        project::search_text(&root, &project, &query)
     })
     .await
 }
@@ -230,6 +250,18 @@ async fn create_project(
 }
 
 #[tauri::command]
+async fn create_custom_project(
+    root: String,
+    name: String,
+    request: CustomProjectRequest,
+) -> Result<WorkspaceSnapshot, String> {
+    blocking("Custom project creation", move || {
+        project::create_custom_project(&root, &name, request)
+    })
+    .await
+}
+
+#[tauri::command]
 async fn run_fpga_command(
     app: AppHandle,
     jobs: State<'_, JobRegistry>,
@@ -359,8 +391,10 @@ pub fn run() -> Result<(), String> {
         .manage(SerialRegistry::default())
         .invoke_handler(tauri::generate_handler![
             workspace_snapshot,
+            open_project,
             read_text_file,
             write_text_file,
+            search_project_text,
             list_project_templates,
             list_hdl_patterns,
             list_boards,
@@ -380,6 +414,7 @@ pub fn run() -> Result<(), String> {
             prepare_optimization_experiment,
             finish_optimization_experiment,
             create_project,
+            create_custom_project,
             run_fpga_command,
             cancel_job,
             read_build_summary,

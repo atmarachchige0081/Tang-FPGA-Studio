@@ -44,7 +44,38 @@ export function QuickLauncher({ onRun, onSave }: Props): React.JSX.Element | nul
     return () => { window.removeEventListener(launcherEvent, reveal); window.removeEventListener("keydown", shortcut); };
   }, []);
 
+  useEffect(() => {
+    const shortcuts = (event: KeyboardEvent) => {
+      if (!(event.ctrlKey || event.metaKey)) return;
+      const key = event.key.toLowerCase();
+      const state = useWorkbench.getState();
+      const search = (mode: "text" | "files" | "symbols") => {
+        state.setActivity("search");
+        window.setTimeout(() => window.dispatchEvent(new CustomEvent("fpga-studio:workspace-search", { detail: { mode } })), 0);
+      };
+      if (key === "s" && !event.shiftKey) { event.preventDefault(); onSave(); }
+      else if (key === "b" && event.shiftKey) { event.preventDefault(); onRun("build"); }
+      else if (key === "n" && !event.shiftKey) { event.preventDefault(); state.openProjectWizard(); }
+      else if (key === "p" && !event.shiftKey) { event.preventDefault(); search("files"); }
+      else if (key === "t" && !event.shiftKey) { event.preventDefault(); search("symbols"); }
+      else if (key === "f" && event.shiftKey) { event.preventDefault(); search("text"); }
+      else if (key === "w" && state.activePath) { event.preventDefault(); state.closeFile(state.activePath); }
+      else if (event.key === "Tab" && state.tabs.length > 1) {
+        event.preventDefault();
+        const current = state.tabs.findIndex((tab) => tab.path === state.activePath);
+        const next = state.tabs[(current + (event.shiftKey ? -1 : 1) + state.tabs.length) % state.tabs.length];
+        if (next) state.openFile(next);
+      }
+    };
+    window.addEventListener("keydown", shortcuts);
+    return () => window.removeEventListener("keydown", shortcuts);
+  }, [onRun, onSave]);
+
   const go = (view: WorkbenchView) => { store.setView(view); setOpen(false); };
+  const search = (mode: "text" | "files" | "symbols") => {
+    store.setActivity("search");
+    window.setTimeout(() => window.dispatchEvent(new CustomEvent("fpga-studio:workspace-search", { detail: { mode } })), 0);
+  };
   const execute = (action: LauncherAction) => { action.run(); setOpen(false); };
   const recommended: LauncherAction = store.diagnostics.some((item) => item.severity === "error")
     ? { id: "problems", label: "Review errors before continuing", detail: "Open Problems and fix the first reported issue", group: "Recommended", icon: Bug, keywords: "errors problems diagnostics fix", run: () => store.setBottomPanel("problems") }
@@ -56,6 +87,9 @@ export function QuickLauncher({ onRun, onSave }: Props): React.JSX.Element | nul
     recommended,
     { id: "new", label: "Create a verified FPGA project", detail: "Choose a board-aware beginner template", group: "Project", icon: FilePlus2, keywords: "new create template board", run: store.openProjectWizard },
     { id: "save", label: "Save active source file", detail: "Write the current editor tab to disk", group: "Project", icon: Save, keywords: "save file ctrl s", run: onSave },
+    { id: "files", label: "Go to project file", detail: "Indexed filename navigation · Ctrl+P", group: "Project", icon: Search, keywords: "open file quick ctrl p", run: () => search("files") },
+    { id: "symbols", label: "Go to HDL symbol", detail: "Modules, ports, signals, parameters, functions · Ctrl+T", group: "Project", icon: ScanSearch, keywords: "symbol definition module signal ctrl t", run: () => search("symbols") },
+    { id: "search", label: "Search project text", detail: "Search source, constraints, manifests, and documentation · Ctrl+Shift+F", group: "Project", icon: Search, keywords: "text workspace project search", run: () => search("text") },
     { id: "lint", label: "Lint HDL", detail: "Check syntax without running synthesis", group: "Build", icon: Bug, keywords: "lint syntax errors", run: () => onRun("lint") },
     { id: "simulate", label: "Run simulation", detail: "Execute the self-checking testbench", group: "Build", icon: Play, keywords: "sim testbench iverilog", run: () => onRun("sim") },
     { id: "build", label: "Build bitstream", detail: "Synthesize, place, route, and pack", group: "Build", icon: Activity, keywords: "build synthesize pnr bitstream", run: () => onRun("build") },

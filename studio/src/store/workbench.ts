@@ -1,5 +1,12 @@
 import { create } from "zustand";
-import type { Activity, BoardProfile, BottomPanel, BuildEvent, BuildSummary, Diagnostic, GitStatus, OpenFile, ProjectNode, ThemeMode, WorkbenchView } from "../types";
+import type { Activity, BoardProfile, BottomPanel, BuildEvent, BuildSummary, Diagnostic, GitStatus, HdlIndex, OpenFile, ProjectNode, ThemeMode, WorkbenchView } from "../types";
+
+interface NavigationTarget {
+  path: string;
+  line: number;
+  column: number;
+  nonce: number;
+}
 
 interface WorkbenchState {
   ready: boolean;
@@ -7,6 +14,7 @@ interface WorkbenchState {
   project: string;
   projectPath: string;
   tree: ProjectNode[];
+  recentProjects: string[];
   activity: Activity;
   view: WorkbenchView;
   bottomPanel: BottomPanel;
@@ -17,12 +25,15 @@ interface WorkbenchState {
   activePath: string | null;
   output: BuildEvent[];
   diagnostics: Diagnostic[];
+  hdlIndex: HdlIndex | null;
+  intelligenceStatus: "idle" | "indexing" | "ready" | "degraded";
+  navigation: NavigationTarget | null;
   build: BuildSummary | null;
   runningJob: string | null;
   board: BoardProfile | null;
   git: GitStatus | null;
   projectWizardOpen: boolean;
-  setWorkspace: (root: string, project: string, projectPath: string, tree: ProjectNode[]) => void;
+  setWorkspace: (root: string, project: string, projectPath: string, tree: ProjectNode[], recentProjects?: string[]) => void;
   setActivity: (activity: Activity) => void;
   setView: (view: WorkbenchView) => void;
   setBottomPanel: (panel: BottomPanel) => void;
@@ -36,6 +47,9 @@ interface WorkbenchState {
   appendOutput: (event: BuildEvent) => void;
   clearOutput: () => void;
   setDiagnostics: (items: Diagnostic[]) => void;
+  setHdlIndex: (index: HdlIndex | null, status?: WorkbenchState["intelligenceStatus"]) => void;
+  navigateTo: (path: string, line?: number, column?: number) => void;
+  clearNavigation: () => void;
   setBuild: (summary: BuildSummary) => void;
   setRunningJob: (jobId: string | null) => void;
   setBoard: (board: BoardProfile) => void;
@@ -52,6 +66,7 @@ export const useWorkbench = create<WorkbenchState>((set) => ({
   project: "",
   projectPath: ".",
   tree: [],
+  recentProjects: [],
   activity: "explorer",
   view: "welcome",
   bottomPanel: "output",
@@ -62,12 +77,15 @@ export const useWorkbench = create<WorkbenchState>((set) => ({
   activePath: null,
   output: [],
   diagnostics: [],
+  hdlIndex: null,
+  intelligenceStatus: "idle",
+  navigation: null,
   build: null,
   runningJob: null,
   board: null,
   git: null,
   projectWizardOpen: false,
-  setWorkspace: (root, project, projectPath, tree) => set({ root, project, projectPath, tree, ready: true, tabs: [], activePath: null, view: "welcome" }),
+  setWorkspace: (root, project, projectPath, tree, recentProjects = []) => set({ root, project, projectPath, tree, recentProjects, ready: true, tabs: [], activePath: null, view: "welcome", hdlIndex: null, intelligenceStatus: "idle", navigation: null }),
   setActivity: (activity) => set({ activity, sidebarOpen: true }),
   setView: (view) => set({ view }),
   setBottomPanel: (bottomPanel) => set({ bottomPanel, bottomOpen: true }),
@@ -97,6 +115,9 @@ export const useWorkbench = create<WorkbenchState>((set) => ({
   }),
   clearOutput: () => set({ output: [] }),
   setDiagnostics: (diagnostics) => set({ diagnostics }),
+  setHdlIndex: (hdlIndex, intelligenceStatus = hdlIndex ? "ready" : "degraded") => set({ hdlIndex, intelligenceStatus }),
+  navigateTo: (path, line = 1, column = 1) => set({ navigation: { path, line, column, nonce: Date.now() } }),
+  clearNavigation: () => set({ navigation: null }),
   setBuild: (build) => set({ build }),
   setRunningJob: (runningJob) => set({ runningJob }),
   setBoard: (board) => set({ board }),
