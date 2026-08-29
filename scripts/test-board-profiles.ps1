@@ -14,11 +14,12 @@ if (-not $testRoot.StartsWith($workspace + '\', [StringComparison]::OrdinalIgnor
 }
 
 $profiles = @(
-    @{ Id='tang_nano_1k'; Device='GW1NZ-LV1QN48C6/I5'; Family='GW1NZ-1'; Yosys='gw1n'; Programmer='tangnano1k'; Clock='47'; Led='9' },
-    @{ Id='tang_nano_4k'; Device='GW1NSR-LV4CQN48PC6/I5'; Family='GW1NS-4'; Yosys='gw1n'; Programmer='tangnano4k'; Clock='45'; Led='10' },
-    @{ Id='tang_nano_9k'; Device='GW1NR-LV9QN88PC6/I5'; Family='GW1N-9C'; Yosys='gw1n'; Programmer='tangnano9k'; Clock='52'; Led='10' },
-    @{ Id='tang_nano_20k'; Device='GW2AR-LV18QN88C8/I7'; Family='GW2A-18C'; Yosys='gw2a'; Programmer='tangnano20k'; Clock='4'; Led='15' },
-    @{ Id='tang_primer_20k'; Device='GW2A-LV18PG256C8/I7'; Family='GW2A-18'; Yosys='gw2a'; Programmer='tangprimer20k'; Clock='H11'; Led='L16' }
+    @{ Id='tang_nano_1k'; Device='GW1NZ-LV1QN48C6/I5'; Family='GW1NZ-1'; Yosys='gw1n'; Programmer='tangnano1k'; ClockName='clk_27mhz'; ClockMHz=27; Clock='47'; Led='9' },
+    @{ Id='tang_nano_4k'; Device='GW1NSR-LV4CQN48PC6/I5'; Family='GW1NS-4'; Yosys='gw1n'; Programmer='tangnano4k'; ClockName='clk_27mhz'; ClockMHz=27; Clock='45'; Led='10' },
+    @{ Id='tang_nano_9k'; Device='GW1NR-LV9QN88PC6/I5'; Family='GW1N-9C'; Yosys='gw1n'; Programmer='tangnano9k'; ClockName='clk_27mhz'; ClockMHz=27; Clock='52'; Led='10' },
+    @{ Id='tang_nano_20k'; Device='GW2AR-LV18QN88C8/I7'; Family='GW2A-18C'; Yosys='gw2a'; Programmer='tangnano20k'; ClockName='clk_27mhz'; ClockMHz=27; Clock='4'; Led='15' },
+    @{ Id='tang_primer_20k'; Device='GW2A-LV18PG256C8/I7'; Family='GW2A-18'; Yosys='gw2a'; Programmer='tangprimer20k'; ClockName='clk_27mhz'; ClockMHz=27; Clock='H11'; Led='L16' },
+    @{ Id='tang_console_138k'; Device='GW5AST-LV138PG484AC1/I0'; Family='GW5AST-138C'; Yosys='gw5a'; Programmer='tangmega138k'; ClockName='clk_50mhz'; ClockMHz=50; Clock='V22'; Led='G11' }
 )
 
 function New-SmokeProject {
@@ -33,8 +34,9 @@ function New-SmokeProject {
     Device = '$($Profile.Device)'
     Family = '$($Profile.Family)'
     YosysFamily = '$($Profile.Yosys)'
+    BuildBackend = 'oss-cad-suite'
     Constraint = 'constraints/smoke.cst'
-    ClockMHz = 27
+    ClockMHz = $($Profile.ClockMHz)
     ProgrammerBoard = '$($Profile.Programmer)'
     Bitstream = 'build/top.fs'
 }
@@ -42,17 +44,17 @@ function New-SmokeProject {
     [IO.File]::WriteAllText((Join-Path $directory 'fpga.config.psd1'), $configText, [Text.UTF8Encoding]::new($false))
     $sourceText = @"
 ``default_nettype none
-module top(input logic clk_27mhz, output logic led_n);
+module top(input logic $($Profile.ClockName), output logic led_n);
     logic [23:0] counter = '0;
-    always_ff @(posedge clk_27mhz) counter <= counter + 1'b1;
+    always_ff @(posedge $($Profile.ClockName)) counter <= counter + 1'b1;
     assign led_n = ~counter[23];
 endmodule
 ``default_nettype wire
 "@
     [IO.File]::WriteAllText((Join-Path $directory 'rtl\top.sv'), $sourceText, [Text.UTF8Encoding]::new($false))
     @"
-IO_LOC "clk_27mhz" $($Profile.Clock);
-IO_PORT "clk_27mhz" IO_TYPE=LVCMOS33 PULL_MODE=UP;
+IO_LOC "$($Profile.ClockName)" $($Profile.Clock);
+IO_PORT "$($Profile.ClockName)" IO_TYPE=LVCMOS33 PULL_MODE=UP;
 IO_LOC "led_n" $($Profile.Led);
 IO_PORT "led_n" IO_TYPE=LVCMOS33 DRIVE=8;
 "@ | Set-Content -LiteralPath (Join-Path $directory 'constraints\smoke.cst') -Encoding ASCII

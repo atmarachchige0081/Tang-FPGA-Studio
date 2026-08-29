@@ -12,9 +12,10 @@ Requirements:
 - PowerShell 5.1 or later.
 - Microsoft Edge WebView2 (included with current Windows 10/11 and repaired by
   the Tauri installer when necessary).
-- A supported Tang Nano or Tang Primer board package; the Primer 20K Dock is
+- A supported Tang Nano, Tang Primer, or Tang Console board package; the Primer 20K Dock is
   the maintained hardware/JTAG/UART acceptance target.
-- The pinned OSS CAD Suite installed by `./fpga.ps1 setup`.
+- The pinned OSS CAD Suite installed by `./fpga.ps1 setup`. Tang Console 60K
+  builds additionally require Gowin EDA Education 1.9.11.03 or newer.
 
 Installed users launch **Tang FPGA Studio** from the Desktop or Start menu and
 do not need Python, Node.js, or Rust. Source contributors need current Node.js
@@ -26,6 +27,7 @@ Run this before distributing a checkout or publishing a tag:
 
 ```powershell
 .\scripts\release-check.ps1
+.\scripts\test-console-boards.ps1 -Parallelism 2
 .\scripts\stress-test.ps1 -Rounds 3 -Parallelism 2
 .\scripts\capture-screenshots.ps1
 .\scripts\release-check.ps1 -SkipHdl -SkipNative
@@ -40,11 +42,16 @@ the full default gate used for a release runner.
 The release check preserves regression coverage for the legacy companion UI,
 parses all PowerShell scripts, validates JSON, runs HDL lint/simulation, builds
 the native frontend, and runs the Rust security, parser, and project tests.
-The stress runner additionally builds five distinct Tang device families in
+The stress runner additionally builds six distinct open-source Tang device families in
 parallel, repeats UI and backend suites, and exercises the backend's same-project
 job lock. Parallelism is capped at four and defaults to two for laptop safety.
 GitHub Actions repeats platform-independent gates for every push and pull
 request.
+
+`scripts/test-console-boards.ps1` exercises minimal, LED, counter, clocked,
+reset, and moderate designs on both Console packages. Without Gowin EDA it
+performs full 138K bitstreams and 60K synthesis/generated-project validation,
+then reports the missing vendor place-and-route as an explicit limitation.
 
 The screenshot script launches the current React Studio 3 frontend in browser
 preview mode and captures its real dark/light views with Microsoft Edge. It

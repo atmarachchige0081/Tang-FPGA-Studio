@@ -1,4 +1,4 @@
-export const RELEASE_NOTES_VERSION = "3.0.0";
+export const RELEASE_NOTES_VERSION = "3.1.0";
 const STORAGE_KEY = "fpga-studio.release-notes.seen";
 
 export function releaseNotesPending(storage: Pick<Storage, "getItem"> = localStorage): boolean {

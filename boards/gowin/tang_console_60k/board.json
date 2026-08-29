@@ -1,0 +1,33 @@
+{
+  "$schema": "../../schema/board.schema.json",
+  "schemaVersion": 1,
+  "id": "tang_console_60k",
+  "name": "Sipeed Tang Console 60K",
+  "vendor": "Gowin",
+  "family": "GW5AT-60B",
+  "yosysFamily": "gw5a",
+  "device": "GW5AT-LV60PG484AC1/I0",
+  "build": {
+    "backend": "gowin-eda",
+    "deviceName": "GW5AT-60B",
+    "deviceCode": "gw5at60b-002",
+    "deviceVersion": "B"
+  },
+  "logicCells": 59904,
+  "clocks": [
+    { "name": "clk_50mhz", "frequencyHz": 50000000, "pin": "V22", "ioStandard": "LVCMOS33" }
+  ],
+  "programmer": {
+    "backend": "openFPGALoader",
+    "board": "tangconsole",
+    "transport": "bl616",
+    "jtagInterface": 0,
+    "uartInterface": 1,
+    "usbVid": "0403",
+    "usbPid": "6010"
+  },
+  "constraints": ["constraints/tang_console_60k.cst"],
+  "timingConstraints": ["constraints/tang_console_60k.sdc"],
+  "documentation": "README.md",
+  "capabilities": ["jtag", "sram", "flash", "uart", "leds", "buttons", "pmod", "hdmi", "usb", "sd-card", "ddr3"]
+}

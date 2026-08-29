@@ -239,6 +239,12 @@ export interface BoardProfile {
   yosysFamily?: string;
   device: string;
   logicCells?: number;
+  build?: {
+    backend: "oss-cad-suite" | "gowin-eda";
+    deviceName: string;
+    deviceCode?: string;
+    deviceVersion?: "A" | "B" | "C";
+  };
   clocks: BoardClock[];
   programmer: {
     backend: string;
@@ -250,6 +256,7 @@ export interface BoardProfile {
     usbPid?: string;
   };
   constraints: string[];
+  timingConstraints?: string[];
   documentation?: string;
   capabilities: string[];
 }

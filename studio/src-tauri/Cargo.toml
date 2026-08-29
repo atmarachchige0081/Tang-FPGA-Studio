@@ -1,6 +1,6 @@
 [package]
 name = "fpga-studio"
-version = "3.0.0"
+version = "3.1.0"
 description = "A professional, beginner-friendly FPGA development workspace"
 authors = ["FPGA Studio contributors"]
 license = "MIT"

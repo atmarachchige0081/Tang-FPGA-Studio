@@ -108,7 +108,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          for project in spi_controller vga_timing riscv_scaffold; do
+          for project in spi_controller vga_timing riscv_scaffold console_led_button; do
             echo "Verifying templates/${project}"
             pushd "templates/${project}" >/dev/null
             mkdir -p build

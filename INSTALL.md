@@ -9,8 +9,9 @@ terminal experience is required.
 > an external programmer and a different pin file, so it is not the beginner
 > path described here.
 
-> **Other supported Tang boards:** Studio 3 also includes build/programmer
-> packages for Tang Nano 1K, 4K, 9K, and 20K plus Primer Core and Lite. Their
+> **Other supported Tang boards:** Studio 3.1 also includes build/programmer
+> packages for Tang Nano 1K, 4K, 9K, and 20K, Primer Core and Lite, Tang
+> Console 60K, and current C-revision Tang Console 138K. Their
 > USB/debugger behavior and I/O differ, so complete this Dock walkthrough only
 > when you own the Dock. In the New Project Wizard, choose your actual board;
 > it will show only compatible templates and will never apply the Dock Zadig
@@ -52,10 +53,12 @@ connected. Seat the core board fully in the Dock before powering it.
 | Git | Recommended | Downloads the repository and makes future updates easy. A ZIP download also works. |
 | Visual Studio Code | Optional | Provides another code editor and ready-made FPGA tasks. The included desktop Studio works without it. |
 | OSS CAD Suite | Yes | Contains Yosys, nextpnr, Project Apicula, openFPGALoader, Icarus Verilog, Verilator, GTKWave, and other FPGA tools. The repository installs it for you. |
+| Gowin EDA Education 1.9.11.03+ | Console 60K builds only | Supplies GW5AT-60B place-and-route because that device is not in the pinned open-source database. |
 | Zadig | Only for Dock JTAG on Windows | Changes only the Dock's JTAG USB interface to WinUSB. The repository downloads and verifies it for you. |
 
-Installer users do **not** need WSL, Python, Node.js, Rust, `pip install`, a
-virtual environment, Gowin EDA, or a paid license for this workflow.
+Installer users do **not** need WSL, Python, Node.js, Rust, `pip install`, or a
+virtual environment for the Primer walkthrough. Gowin EDA is needed only when
+building Tang Console 60K; Console 138K C-revision uses the pinned OSS tools.
 
 ## A note about commands
 
@@ -257,6 +260,40 @@ Run '.\fpga.ps1 doctor' to validate the installation.
 ```
 
 Running setup again is safe. It reuses the verified installation.
+
+### Tang Console 60K only — install Gowin EDA
+
+Skip this subsection for Tang Nano, Tang Primer, and current C-revision Tang
+Console 138K. The pinned open-source database does not include `GW5AT-60B`, so
+60K place-and-route needs Gowin EDA Education 1.9.11.03 or newer.
+
+1. Open Sipeed's official
+   [Gowin IDE installation guide](https://wiki.sipeed.com/hardware/en/tang/common-doc/get_started/install-the-ide.html).
+2. Download and install the current 64-bit Windows Education edition.
+3. Find the installed folder containing `IDE\bin\gw_sh.exe`.
+4. In PowerShell, set the location for this window (replace the example path
+   with the folder you installed):
+
+```powershell
+$env:GOWIN_EDA_ROOT = 'C:\Gowin\Gowin_V1.9.11.03_Education_x64'
+Test-Path "$env:GOWIN_EDA_ROOT\IDE\bin\gw_sh.exe"
+```
+
+The final command must print `True`. To remember the setting for your Windows
+account, run:
+
+```powershell
+[Environment]::SetEnvironmentVariable(
+    'GOWIN_EDA_ROOT',
+    $env:GOWIN_EDA_ROOT,
+    'User'
+)
+```
+
+Close and reopen Tang FPGA Studio after changing a permanent environment
+variable. Running **Doctor** on a Console 60K project displays the selected
+Gowin EDA executable. Studio selects `GW5AT-60B`, internal code
+`gw5at60b-002`, and uncompressed output automatically.
 
 ## Step 7 — Verify all installed tools
 

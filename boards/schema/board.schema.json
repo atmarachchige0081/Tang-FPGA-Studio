@@ -13,6 +13,17 @@
     "family": { "type": "string" },
     "yosysFamily": { "type": "string" },
     "device": { "type": "string" },
+    "build": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["backend", "deviceName"],
+      "properties": {
+        "backend": { "enum": ["oss-cad-suite", "gowin-eda"] },
+        "deviceName": { "type": "string", "minLength": 2 },
+        "deviceCode": { "type": "string", "minLength": 2 },
+        "deviceVersion": { "enum": ["A", "B", "C"] }
+      }
+    },
     "logicCells": { "type": "integer", "minimum": 1 },
     "clocks": {
       "type": "array",
@@ -42,6 +53,7 @@
       }
     },
     "constraints": { "type": "array", "items": { "type": "string" }, "minItems": 1 },
+    "timingConstraints": { "type": "array", "items": { "type": "string" } },
     "documentation": { "type": "string" },
     "capabilities": { "type": "array", "items": { "type": "string" } }
   }

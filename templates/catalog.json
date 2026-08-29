@@ -13,6 +13,18 @@
       "tags": ["led", "button", "counter"]
     },
     {
+      "id": "console_led_button",
+      "name": "Tang Console LED and buttons",
+      "description": "A 50 MHz Console starter with two active-low buttons, reset behavior, two LEDs, simulation, and revision-correct constraints.",
+      "level": "Beginner",
+      "category": "Fundamentals",
+      "base": "projects/_template",
+      "overlay": "templates/console_led_button",
+      "hardwareReady": true,
+      "supportedBoards": ["tang_console_60k", "tang_console_138k"],
+      "tags": ["console", "led", "button", "reset", "counter"]
+    },
+    {
       "id": "uart_terminal",
       "name": "UART terminal",
       "description": "Verified 115200-baud TX/RX with greeting, echo, terminal workflow, and loopback simulation.",

@@ -61,6 +61,7 @@ const demoTree: ProjectNode[] = [
 
 const demoTemplates: ProjectTemplate[] = [
   { id: "led_button", name: "LED and button starter", description: "Board I/O, counter, simulation, and waveform.", level: "Beginner", category: "Fundamentals", base: "projects/_template", hardwareReady: true, tags: ["led", "button"] },
+  { id: "console_led_button", name: "Tang Console LED and buttons", description: "A 50 MHz Console starter with revision-correct I/O.", level: "Beginner", category: "Fundamentals", base: "projects/_template", overlay: "templates/console_led_button", hardwareReady: true, tags: ["console", "led", "button"], supportedBoards: ["tang_console_60k", "tang_console_138k"] },
   { id: "uart_terminal", name: "UART terminal", description: "Verified greeting and echo at 115200 baud.", level: "Beginner +", category: "Interfaces", base: "projects/03_uart_terminal", hardwareReady: true, tags: ["uart", "serial"] },
   { id: "serial_commands", name: "Friendly serial command console", description: "Verified command parsing and friendly FPGA replies.", level: "Beginner +", category: "Interfaces", base: "projects/05_serial_command_console", hardwareReady: true, tags: ["uart", "commands"] },
   { id: "hardware_intelligence", name: "Hardware Intelligence laboratory", description: "Trace real paths, probe internal state, and compare evidence-backed builds.", level: "Beginner +", category: "Debugging", base: "projects/06_hardware_intelligence", hardwareReady: true, tags: ["analyzer", "traceability", "timing"] },
@@ -77,6 +78,22 @@ const demoBoard: BoardProfile = {
   programmer: { backend: "openFPGALoader", board: "tangprimer20k", transport: "ftdi-mpsse", jtagInterface: 0, uartInterface: 1, usbVid: "0403", usbPid: "6010" },
   constraints: ["constraints/primer20k_dock.cst"], capabilities: ["jtag", "sram", "flash", "uart", "leds"],
 };
+
+const demoBoards: BoardProfile[] = [demoBoard, {
+  schemaVersion: 1, id: "tang_console_60k", name: "Sipeed Tang Console 60K",
+  vendor: "Gowin", family: "GW5AT-60B", yosysFamily: "gw5a", device: "GW5AT-LV60PG484AC1/I0",
+  build: { backend: "gowin-eda", deviceName: "GW5AT-60B", deviceCode: "gw5at60b-002", deviceVersion: "B" },
+  logicCells: 59904, clocks: [{ name: "clk_50mhz", frequencyHz: 50000000, pin: "V22", ioStandard: "LVCMOS33" }],
+  programmer: { backend: "openFPGALoader", board: "tangconsole", transport: "bl616", jtagInterface: 0, uartInterface: 1, usbVid: "0403", usbPid: "6010" },
+  constraints: ["constraints/tang_console_60k.cst"], timingConstraints: ["constraints/tang_console_60k.sdc"], capabilities: ["jtag", "sram", "flash", "uart", "leds", "buttons"],
+}, {
+  schemaVersion: 1, id: "tang_console_138k", name: "Sipeed Tang Console 138K",
+  vendor: "Gowin", family: "GW5AST-138C", yosysFamily: "gw5a", device: "GW5AST-LV138PG484AC1/I0",
+  build: { backend: "oss-cad-suite", deviceName: "GW5AST-138C", deviceCode: "gw5ast138c-007", deviceVersion: "C" },
+  logicCells: 138240, clocks: [{ name: "clk_50mhz", frequencyHz: 50000000, pin: "V22", ioStandard: "LVCMOS33" }],
+  programmer: { backend: "openFPGALoader", board: "tangmega138k", transport: "bl616", jtagInterface: 0, uartInterface: 1, usbVid: "0403", usbPid: "6010" },
+  constraints: ["constraints/tang_console_138k.cst"], timingConstraints: ["constraints/tang_console_138k.sdc"], capabilities: ["jtag", "sram", "flash", "uart", "leds", "buttons"],
+}];
 
 export const bridge = {
   isDesktop,
@@ -110,7 +127,7 @@ export const bridge = {
   },
 
   async boards(root: string): Promise<BoardProfile[]> {
-    return isDesktop() ? invoke<BoardProfile[]>("list_boards", { root }) : [demoBoard];
+    return isDesktop() ? invoke<BoardProfile[]>("list_boards", { root }) : demoBoards;
   },
 
   async activeBoard(root: string, project: string): Promise<BoardProfile> {

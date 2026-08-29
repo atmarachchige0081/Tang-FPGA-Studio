@@ -1,0 +1,33 @@
+{
+  "$schema": "../../schema/board.schema.json",
+  "schemaVersion": 1,
+  "id": "tang_console_138k",
+  "name": "Sipeed Tang Console 138K",
+  "vendor": "Gowin",
+  "family": "GW5AST-138C",
+  "yosysFamily": "gw5a",
+  "device": "GW5AST-LV138PG484AC1/I0",
+  "build": {
+    "backend": "oss-cad-suite",
+    "deviceName": "GW5AST-138C",
+    "deviceCode": "gw5ast138c-007",
+    "deviceVersion": "C"
+  },
+  "logicCells": 138240,
+  "clocks": [
+    { "name": "clk_50mhz", "frequencyHz": 50000000, "pin": "V22", "ioStandard": "LVCMOS33" }
+  ],
+  "programmer": {
+    "backend": "openFPGALoader",
+    "board": "tangmega138k",
+    "transport": "bl616",
+    "jtagInterface": 0,
+    "uartInterface": 1,
+    "usbVid": "0403",
+    "usbPid": "6010"
+  },
+  "constraints": ["constraints/tang_console_138k.cst"],
+  "timingConstraints": ["constraints/tang_console_138k.sdc"],
+  "documentation": "README.md",
+  "capabilities": ["jtag", "sram", "flash", "uart", "leds", "buttons", "pmod", "hdmi", "usb", "sd-card", "ddr3", "pcie"]
+}

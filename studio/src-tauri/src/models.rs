@@ -91,6 +91,17 @@ pub struct BoardProgrammer {
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
+pub struct BoardBuild {
+    pub backend: String,
+    pub device_name: String,
+    #[serde(default)]
+    pub device_code: Option<String>,
+    #[serde(default)]
+    pub device_version: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct BoardProfile {
     pub schema_version: u32,
     pub id: String,
@@ -102,9 +113,13 @@ pub struct BoardProfile {
     pub device: String,
     #[serde(default)]
     pub logic_cells: Option<u64>,
+    #[serde(default)]
+    pub build: Option<BoardBuild>,
     pub clocks: Vec<BoardClock>,
     pub programmer: BoardProgrammer,
     pub constraints: Vec<String>,
+    #[serde(default)]
+    pub timing_constraints: Vec<String>,
     #[serde(default)]
     pub documentation: Option<String>,
     #[serde(default)]

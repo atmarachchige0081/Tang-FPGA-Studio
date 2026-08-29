@@ -1,0 +1,14 @@
+// Tang Console 138K C-revision (GW5AST-LV138PG484AC1/I0, PG484A).
+// Unlike the 60K SOM, the Console 138K button bank is 3.3 V.
+IO_LOC  "clk_50mhz" V22;
+IO_PORT "clk_50mhz" IO_TYPE=LVCMOS33 PULL_MODE=NONE DRIVE=OFF;
+
+IO_LOC  "btn_n[0]" AB13; // USER button, active-low
+IO_PORT "btn_n[0]" IO_TYPE=LVCMOS33 PULL_MODE=UP DRIVE=OFF BANK_VCCIO=3.3;
+IO_LOC  "btn_n[1]" AA13; // RESET button, active-low
+IO_PORT "btn_n[1]" IO_TYPE=LVCMOS33 PULL_MODE=UP DRIVE=OFF BANK_VCCIO=3.3;
+
+IO_LOC  "led_n[0]" G11; // FPGA DONE/user LED, active-low
+IO_PORT "led_n[0]" IO_TYPE=LVCMOS33 DRIVE=4 PULL_MODE=NONE BANK_VCCIO=3.3;
+IO_LOC  "led_n[1]" U12; // FPGA READY/user LED, active-low
+IO_PORT "led_n[1]" IO_TYPE=LVCMOS33 DRIVE=4 PULL_MODE=NONE BANK_VCCIO=3.3;

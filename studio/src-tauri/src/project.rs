@@ -234,8 +234,38 @@ fn configure_board(root: &Path, target: &Path, board_id: &str) -> Result<(), Str
     let destination_directory = target.join("constraints");
     fs::create_dir_all(&destination_directory)
         .map_err(|error| format!("Cannot create project constraints: {error}"))?;
-    fs::copy(&source, destination_directory.join(file_name))
+    for entry in fs::read_dir(&destination_directory)
+        .map_err(|error| format!("Cannot inspect generated constraints: {error}"))?
+    {
+        let path = entry
+            .map_err(|error| format!("Cannot inspect generated constraint: {error}"))?
+            .path();
+        if path.is_file()
+            && matches!(
+                path.extension().and_then(|value| value.to_str()),
+                Some("cst" | "sdc")
+            )
+        {
+            fs::remove_file(&path)
+                .map_err(|error| format!("Cannot replace generated constraints: {error}"))?;
+        }
+    }
+    let package = root.join("boards/gowin").join(&profile.id);
+    for relative in profile
+        .constraints
+        .iter()
+        .chain(profile.timing_constraints.iter())
+    {
+        let constraint_source = package.join(relative);
+        let constraint_name = constraint_source
+            .file_name()
+            .ok_or("Board constraint filename is invalid")?;
+        fs::copy(
+            &constraint_source,
+            destination_directory.join(constraint_name),
+        )
         .map_err(|error| format!("Cannot copy board constraints: {error}"))?;
+    }
 
     let config_path = target.join("fpga.config.psd1");
     let mut config = fs::read_to_string(&config_path)
@@ -244,21 +274,57 @@ fn configure_board(root: &Path, target: &Path, board_id: &str) -> Result<(), Str
         .yosys_family
         .as_deref()
         .ok_or_else(|| format!("Board '{}' has no Yosys family", profile.name))?;
+    let build_backend = profile
+        .build
+        .as_ref()
+        .map(|build| build.backend.as_str())
+        .unwrap_or("oss-cad-suite");
+    let gowin_device_name = profile
+        .build
+        .as_ref()
+        .map(|build| build.device_name.as_str())
+        .unwrap_or(profile.family.as_str());
+    let gowin_device_code = profile
+        .build
+        .as_ref()
+        .and_then(|build| build.device_code.as_deref())
+        .unwrap_or("");
+    let gowin_device_version = profile
+        .build
+        .as_ref()
+        .and_then(|build| build.device_version.as_deref())
+        .unwrap_or("");
+    let timing_constraint = profile
+        .timing_constraints
+        .first()
+        .and_then(|relative| Path::new(relative).file_name())
+        .and_then(|name| name.to_str())
+        .map(|name| format!("constraints/{name}"))
+        .unwrap_or_default();
     for (key, value) in [
         ("Device", profile.device.as_str()),
         ("Family", profile.family.as_str()),
         ("YosysFamily", yosys_family),
+        ("BuildBackend", build_backend),
+        ("GowinDeviceName", gowin_device_name),
+        ("GowinDeviceCode", gowin_device_code),
+        ("GowinDeviceVersion", gowin_device_version),
         ("Constraint", &format!("constraints/{file_name}")),
+        ("TimingConstraint", timing_constraint.as_str()),
         ("ProgrammerBoard", profile.programmer.board.as_str()),
     ] {
         let pattern =
             Regex::new(&format!(r"(?m)^(\s*{}\s*=\s*)'[^']*'", regex::escape(key))).unwrap();
-        if !pattern.is_match(&config) {
-            return Err(format!("Generated configuration has no {key} setting"));
+        if pattern.is_match(&config) {
+            config = pattern
+                .replace(&config, format!("${{1}}'{value}'"))
+                .into_owned();
+        } else {
+            let close = config
+                .rfind('}')
+                .ok_or("Generated configuration is not a PowerShell data file")?;
+            config.insert_str(close, &format!("    {key} = '{value}'\n"));
         }
-        config = pattern
-            .replace(&config, format!("${{1}}'{value}'"))
-            .into_owned();
     }
     let frequency_mhz = profile
         .clocks
@@ -567,5 +633,136 @@ mod tests {
         assert!(config.contains("constraints/tang_nano_9k.cst"));
         assert!(target.join("constraints/tang_nano_9k.cst").is_file());
         fs::remove_dir_all(target).unwrap();
+    }
+
+    #[test]
+    fn applies_independent_console_device_and_constraint_packages() {
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../..")
+            .canonicalize()
+            .unwrap();
+        for (board, device, family, backend, constraint, timing, programmer) in [
+            (
+                "tang_console_60k",
+                "GW5AT-LV60PG484AC1/I0",
+                "GW5AT-60B",
+                "gowin-eda",
+                "tang_console_60k.cst",
+                "tang_console_60k.sdc",
+                "tangconsole",
+            ),
+            (
+                "tang_console_138k",
+                "GW5AST-LV138PG484AC1/I0",
+                "GW5AST-138C",
+                "oss-cad-suite",
+                "tang_console_138k.cst",
+                "tang_console_138k.sdc",
+                "tangmega138k",
+            ),
+        ] {
+            let target = std::env::temp_dir().join(format!(
+                "fpga-console-config-test-{}-{}",
+                board,
+                uuid::Uuid::new_v4()
+            ));
+            fs::create_dir_all(target.join("constraints")).unwrap();
+            fs::write(target.join("constraints/old.cst"), "old").unwrap();
+            fs::write(
+                target.join("fpga.config.psd1"),
+                "@{\n Device='old'\n Family='old'\n YosysFamily='old'\n Constraint='old.cst'\n ClockMHz=1\n ProgrammerBoard='old'\n}\n",
+            )
+            .unwrap();
+            configure_board(&root, &target, board).expect("Console configuration");
+            let config = fs::read_to_string(target.join("fpga.config.psd1")).unwrap();
+            assert!(config.contains(device));
+            assert!(config.contains(family));
+            assert!(config.contains(&format!("BuildBackend = '{backend}'")));
+            assert!(config.contains(constraint));
+            assert!(config.contains(timing));
+            assert!(config.contains(programmer));
+            assert!(target.join("constraints").join(constraint).is_file());
+            assert!(target.join("constraints").join(timing).is_file());
+            assert!(!target.join("constraints/old.cst").exists());
+            fs::remove_dir_all(target).unwrap();
+        }
+    }
+
+    #[test]
+    fn persists_and_reopens_each_console_board_selection() {
+        let repository = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../..")
+            .canonicalize()
+            .unwrap();
+        let root = std::env::temp_dir().join(format!(
+            "fpga-console-persistence-test-{}",
+            uuid::Uuid::new_v4()
+        ));
+        fs::create_dir_all(root.join("projects/_template/rtl")).unwrap();
+        fs::create_dir_all(root.join("projects/_template/constraints")).unwrap();
+        fs::create_dir_all(root.join("templates")).unwrap();
+        fs::create_dir_all(root.join("boards/gowin")).unwrap();
+        fs::write(root.join("fpga.ps1"), "# workspace marker\n").unwrap();
+        fs::write(
+            root.join("projects/_template/rtl/top.sv"),
+            "module top; endmodule\n",
+        )
+        .unwrap();
+        fs::write(root.join("projects/_template/README.md"), "# Template\n").unwrap();
+        fs::write(
+            root.join("projects/_template/fpga.config.psd1"),
+            "@{\n Device='old'\n Family='old'\n YosysFamily='old'\n BuildBackend='old'\n GowinDeviceName='old'\n GowinDeviceCode='old'\n GowinDeviceVersion='old'\n Constraint='old.cst'\n TimingConstraint=''\n ClockMHz=1\n ProgrammerBoard='old'\n}\n",
+        )
+        .unwrap();
+        fs::write(
+            root.join("templates/catalog.json"),
+            r#"{
+              "schemaVersion": 1,
+              "templates": [{
+                "id": "console", "name": "Console", "description": "Test",
+                "level": "Beginner", "category": "Test", "base": "projects/_template",
+                "hardwareReady": true, "supportedBoards": ["tang_console_60k", "tang_console_138k"],
+                "tags": ["console"]
+              }]
+            }"#,
+        )
+        .unwrap();
+        for board in ["tang_console_60k", "tang_console_138k"] {
+            let source = repository.join("boards/gowin").join(board);
+            let destination = root.join("boards/gowin").join(board);
+            fs::create_dir_all(destination.join("constraints")).unwrap();
+            fs::copy(source.join("board.json"), destination.join("board.json")).unwrap();
+            for constraint in [format!("{board}.cst"), format!("{board}.sdc")] {
+                fs::copy(
+                    source.join("constraints").join(&constraint),
+                    destination.join("constraints").join(constraint),
+                )
+                .unwrap();
+            }
+        }
+
+        for (folder, board) in [
+            ("04_console_60k", "tang_console_60k"),
+            ("05_console_138k", "tang_console_138k"),
+        ] {
+            create_project(
+                &root.to_string_lossy(),
+                folder,
+                "console",
+                "Console project",
+                board,
+            )
+            .expect("Console project creation");
+            let manifest: serde_json::Value = serde_json::from_slice(
+                &fs::read(root.join("projects").join(folder).join("fpga.project.json")).unwrap(),
+            )
+            .unwrap();
+            assert_eq!(manifest["board"], board);
+            let reopened =
+                crate::boards::active(&root.to_string_lossy(), &format!("projects/{folder}"))
+                    .expect("persisted board selection reopens");
+            assert_eq!(reopened.id, board);
+        }
+        fs::remove_dir_all(root).unwrap();
     }
 }

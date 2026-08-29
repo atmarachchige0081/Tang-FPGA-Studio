@@ -3,10 +3,10 @@
 [![Quality gates](https://github.com/atmarachchige0081/Tang-FPGA-Studio/actions/workflows/quality-gates.yml/badge.svg)](https://github.com/atmarachchige0081/Tang-FPGA-Studio/actions/workflows/quality-gates.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-6c63ff.svg)](LICENSE)
 [![Desktop: Tauri + Rust](https://img.shields.io/badge/desktop-Tauri%20%2B%20Rust-4f9cff.svg)](studio/)
-[![Release: v3.0.0](https://img.shields.io/badge/release-v3.0.0-42d392.svg)](CHANGELOG.md)
+[![Release: v3.1.0](https://img.shields.io/badge/release-v3.1.0-42d392.svg)](CHANGELOG.md)
 
 An open-source, beginner-friendly FPGA IDE and development environment for
-Sipeed Tang Nano and Tang Primer boards. Simulate, inspect waveforms, lint,
+Sipeed Tang Nano, Tang Primer, and Tang Console boards. Simulate, inspect waveforms, lint,
 build, trace implemented paths, capture internal FPGA signals, compare builds,
 upload to SRAM, and flash persistent designs through a polished desktop
 interface or single commands. Existing projects remain backward compatible.
@@ -25,7 +25,7 @@ first LED program on real hardware.
 > not yet have a trusted Windows Authenticode publisher certificate, so
 > Windows may display **Unknown publisher**.
 
-The pinned [OSS CAD Suite](https://github.com/YosysHQ/oss-cad-suite-build) provides Yosys synthesis, nextpnr-himbaechel placement/routing, Project Apicula bitstream packing, openFPGALoader programming, Verilator linting, Icarus simulation, GTKWave, and formal tools. It is installed at `C:\fpga-tools\2026-07-26\oss-cad-suite` so the tool path contains no spaces, as recommended by YosysHQ. The project path may contain spaces because all build commands run with relative paths.
+The pinned [OSS CAD Suite](https://github.com/YosysHQ/oss-cad-suite-build) provides Yosys synthesis, nextpnr-himbaechel placement/routing, Project Apicula bitstream packing, openFPGALoader programming, Verilator linting, Icarus simulation, GTKWave, and formal tools. It is installed at `C:\fpga-tools\2026-07-26\oss-cad-suite` so the tool path contains no spaces, as recommended by YosysHQ. The project path may contain spaces because all build commands run with relative paths. Console 60K is the one exception to the open-source implementation route: the pinned database has no GW5AT-60B, so Studio generates and runs a Gowin EDA project for that target.
 
 ## Supported Tang boards in Studio 3
 
@@ -37,12 +37,21 @@ The pinned [OSS CAD Suite](https://github.com/YosysHQ/oss-cad-suite-build) provi
 | Tang Nano 20K | `GW2AR-LV18QN88C8/I7` | `tangnano20k` | Full build plus UART-capable pin package |
 | Tang Primer 20K + Dock | `GW2A-LV18PG256C8/I7` | `tangprimer20k` | Full build, JTAG detect, UART, and Dock I/O |
 | Tang Primer 20K Core / Lite | `GW2A-LV18PG256C8/I7` | `tangprimer20k` | Device build verified; external carrier pins stay user-defined |
+| Tang Console 60K | `GW5AT-LV60PG484AC1/I0` | `tangconsole` | Yosys + Gowin project generation verified; Gowin EDA required for place/route |
+| Tang Console 138K (C revision) | `GW5AST-LV138PG484AC1/I0` | `tangmega138k` | Full open-source build matrix with `GW5AST-138C` database |
 
 The New Project Wizard filters the list by template compatibility, then writes
-the selected device, internal nextpnr family, constraint file, clock, and
-openFPGALoader alias into that project. This prevents a beginner from silently
+the selected device/revision, build backend, constraint and timing files,
+clock, and openFPGALoader alias into that project. This prevents a beginner from silently
 building a Dock pinout for a Nano board. Primer Core and Lite profiles include
 only the safe onboard clock until carrier-specific I/O is deliberately added.
+
+For Console boards choose the **Tang Console LED and buttons** template. It
+uses the real 50 MHz `V22` clock, two active-low buttons, and two active-low
+LEDs. The 60K and 138K packages do not share electrical constraints: the 60K
+button bank is 1.5 V, while the 138K C-revision package uses 3.3 V. See the
+[v3.1 release notes](docs/RELEASE_3.1.0.md) for verified identifiers, sources,
+toolchain requirements, and hardware-validation limits.
 
 ## Beginner desktop IDE
 

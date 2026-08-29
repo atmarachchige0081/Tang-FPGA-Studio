@@ -2,6 +2,68 @@
 
 All notable user-facing changes are recorded here.
 
+## 3.1.0 — 2026-08-29
+
+### Added
+
+- Added first-class Sipeed Tang Console 60K support for
+  `GW5AT-LV60PG484AC1/I0` / `GW5AT-60B`, including PG484A metadata, a 50 MHz
+  clock, BL616 JTAG/UART, openFPGALoader `tangconsole`, Gowin EDA project
+  generation, and version-B selection.
+- Added first-class current-revision Tang Console 138K support for
+  `GW5AST-LV138PG484AC1/I0` / `GW5AST-138C`, including the bundled
+  nextpnr/Apicula database and openFPGALoader `tangmega138k` route.
+- Added independent `.cst` and `.sdc` packages for both boards. The 60K button
+  bank remains `LVCMOS15`; the 138K C-revision button bank is `LVCMOS33`.
+- Added a self-checking Tang Console LED/button/reset starter template and
+  project-wizard filtering for both Console targets.
+- Added backend/revision metadata to the board registry, generated project
+  configuration, browser preview, project wizard, and Hardware Manager.
+- Added six-design Console validation across minimal logic, LEDs, counters,
+  clocked logic, reset logic, and a moderate multi-lane design.
+
+### Changed
+
+- Project generation now removes inherited `.cst`/`.sdc` files before copying
+  the chosen board package, preventing generated Console projects from keeping
+  stale Primer constraints.
+- Builds route through the pinned open-source flow or Gowin EDA according to
+  board metadata. Missing Gowin EDA reports the exact Console 60K prerequisite
+  instead of failing later as an unknown nextpnr device.
+- Generalized dual-interface JTAG guidance for the Primer and Console onboard
+  debuggers while continuing to protect UART Interface 1 from driver changes.
+
+### Fixed
+
+- Isolated Yosys/ABC scratch paths per project. Parallel builds no longer race
+  through a shared temporary directory; the 12-case Console matrix reproduced
+  the old collision and passed completely after this fix.
+
+### Verified
+
+- 46 Rust backend tests passed, including registry, exact device metadata,
+  generated constraints, backend persistence, negative paths, and existing
+  project compatibility.
+- The self-checking Console starter simulation passed.
+- Parallel bitstream smoke builds passed for Nano 1K/4K/9K/20K, Primer 20K,
+  and Console 138K C-revision with the pinned OSS CAD Suite.
+- Console 138K received full open-source build-matrix validation. Console 60K
+  received Yosys synthesis plus generated Gowin project/Tcl validation because
+  Gowin EDA is not installed on the release machine.
+- The optimized application, NSIS installer, 3.1.0 version resources, and
+  packaged headless smoke test passed.
+
+### Limitations
+
+- GW5AT-60B is absent from the pinned open-source nextpnr/Apicula database, so
+  Console 60K place-and-route and bitstream generation require Gowin EDA
+  Education 1.9.11.03 or newer. Set `GOWIN_EDA_ROOT` when `gw_sh` is not on
+  `PATH`.
+- The Console 138K profile deliberately targets current C-revision silicon.
+  Older B-revision SOMs require Gowin EDA and a B-revision project selection.
+- No physical Tang Console board was available for v3.1 hardware validation;
+  no Console programming or I/O behavior claim is made.
+
 ## 3.0.0 — 2026-08-16
 
 ### Added

@@ -1,5 +1,6 @@
 use crate::models::BoardProfile;
 use crate::security::{canonical_workspace, safe_existing_path};
+use std::collections::HashSet;
 use std::fs;
 use std::path::Path;
 
@@ -34,6 +35,16 @@ pub fn list(root: &str) -> Result<Vec<BoardProfile>, String> {
         .map_err(|error| format!("Board profile {} is invalid: {error}", path.display()))?;
         validate(&workspace, &path, &profile)?;
         profiles.push(profile);
+    }
+    let mut ids = HashSet::new();
+    let mut names = HashSet::new();
+    for profile in &profiles {
+        if !ids.insert(profile.id.as_str()) {
+            return Err(format!("Duplicate board id '{}'", profile.id));
+        }
+        if !names.insert(profile.name.as_str()) {
+            return Err(format!("Duplicate board display name '{}'", profile.name));
+        }
     }
     profiles.sort_by(|left, right| left.name.cmp(&right.name));
     if profiles.is_empty() {
@@ -89,6 +100,30 @@ fn validate(workspace: &Path, profile_path: &Path, profile: &BoardProfile) -> Re
             profile_path.display()
         ));
     }
+    if let Some(build) = &profile.build {
+        if !matches!(build.backend.as_str(), "oss-cad-suite" | "gowin-eda") {
+            return Err(format!(
+                "Board '{}' requests unsupported build backend '{}'",
+                profile.id, build.backend
+            ));
+        }
+        if build.device_name.trim().is_empty() {
+            return Err(format!("Board '{}' has no Gowin device name", profile.id));
+        }
+        if build.backend == "gowin-eda"
+            && (build.device_code.as_deref().unwrap_or_default().is_empty()
+                || build
+                    .device_version
+                    .as_deref()
+                    .unwrap_or_default()
+                    .is_empty())
+        {
+            return Err(format!(
+                "Board '{}' must declare the Gowin device code and version",
+                profile.id
+            ));
+        }
+    }
     let package = profile_path
         .parent()
         .ok_or("Board package has no directory")?;
@@ -101,6 +136,19 @@ fn validate(workspace: &Path, profile_path: &Path, profile: &BoardProfile) -> Re
         {
             return Err(format!(
                 "Board '{}' is missing constraint file {relative}",
+                profile.id
+            ));
+        }
+    }
+    for relative in &profile.timing_constraints {
+        let constraint = safe_existing_path(package, relative);
+        if !constraint
+            .as_ref()
+            .map(|path| path.starts_with(workspace) && path.is_file())
+            .unwrap_or(false)
+        {
+            return Err(format!(
+                "Board '{}' is missing timing constraint file {relative}",
                 profile.id
             ));
         }
@@ -137,6 +185,8 @@ mod tests {
             "tang_nano_4k",
             "tang_nano_9k",
             "tang_nano_20k",
+            "tang_console_60k",
+            "tang_console_138k",
             "tang_primer_20k",
             "tang_primer_20k_core",
             "tang_primer_20k_lite",
@@ -146,5 +196,31 @@ mod tests {
                 "missing {expected}"
             );
         }
+        let console_60k = profiles
+            .iter()
+            .find(|profile| profile.id == "tang_console_60k")
+            .expect("Console 60K profile");
+        assert_eq!(console_60k.name, "Sipeed Tang Console 60K");
+        assert_eq!(console_60k.device, "GW5AT-LV60PG484AC1/I0");
+        assert_eq!(console_60k.family, "GW5AT-60B");
+        assert_eq!(console_60k.clocks[0].frequency_hz, 50_000_000);
+        assert_eq!(console_60k.programmer.board, "tangconsole");
+        assert_eq!(
+            console_60k
+                .build
+                .as_ref()
+                .map(|build| build.backend.as_str()),
+            Some("gowin-eda")
+        );
+
+        let console_138k = profiles
+            .iter()
+            .find(|profile| profile.id == "tang_console_138k")
+            .expect("Console 138K profile");
+        assert_eq!(console_138k.name, "Sipeed Tang Console 138K");
+        assert_eq!(console_138k.device, "GW5AST-LV138PG484AC1/I0");
+        assert_eq!(console_138k.family, "GW5AST-138C");
+        assert_eq!(console_138k.clocks[0].pin, "V22");
+        assert_eq!(console_138k.programmer.board, "tangmega138k");
     }
 }
