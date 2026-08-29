@@ -3,7 +3,7 @@
 [![Quality gates](https://github.com/atmarachchige0081/Tang-FPGA-Studio/actions/workflows/quality-gates.yml/badge.svg)](https://github.com/atmarachchige0081/Tang-FPGA-Studio/actions/workflows/quality-gates.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-6c63ff.svg)](LICENSE)
 [![Desktop: Tauri + Rust](https://img.shields.io/badge/desktop-Tauri%20%2B%20Rust-4f9cff.svg)](studio/)
-[![Release: v3.1.0](https://img.shields.io/badge/release-v3.1.0-42d392.svg)](CHANGELOG.md)
+[![Release: v3.1.1](https://img.shields.io/badge/release-v3.1.1-42d392.svg)](CHANGELOG.md)
 
 An open-source, beginner-friendly FPGA IDE and development environment for
 Sipeed Tang Nano, Tang Primer, and Tang Console boards. Simulate, inspect waveforms, lint,
@@ -52,6 +52,11 @@ LEDs. The 60K and 138K packages do not share electrical constraints: the 60K
 button bank is 1.5 V, while the 138K C-revision package uses 3.3 V. See the
 [v3.1 release notes](docs/RELEASE_3.1.0.md) for verified identifiers, sources,
 toolchain requirements, and hardware-validation limits.
+
+**v3.1.1 hotfix:** packaged desktop builds now load the code editor and its
+worker entirely from the installed application. Source files open for editing
+offline instead of remaining on Monaco's **Loading...** screen. See the
+[incident notes](docs/RELEASE_3.1.1.md).
 
 ## Beginner desktop IDE
 

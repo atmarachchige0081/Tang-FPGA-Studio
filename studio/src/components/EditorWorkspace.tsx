@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import Editor, { type BeforeMount, type Monaco, type OnMount } from "@monaco-editor/react";
 import { CircleX, Code2, GitCompareArrows, X } from "lucide-react";
 import { bridge } from "../lib/bridge";
+import "../lib/monaco-loader";
 import { useWorkbench } from "../store/workbench";
 import type { HdlIndex, HdlSymbol } from "../types";
 

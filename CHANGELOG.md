@@ -2,6 +2,22 @@
 
 All notable user-facing changes are recorded here.
 
+## 3.1.1 — 2026-08-29
+
+### Fixed
+
+- Fixed source files remaining on Monaco's **Loading...** screen in packaged
+  desktop builds. The editor and its worker now load from application-bundled
+  assets instead of a CDN blocked by the desktop content-security policy, so
+  HDL files open for editing without network access.
+
+### Verified
+
+- Added a regression test that requires the React editor loader to receive the
+  bundled Monaco instance and create a local editor worker.
+- Rebuilt the optimized frontend with a packaged `editor.worker` asset. No
+  board registry, build, programming, or hardware behavior changed.
+
 ## 3.1.0 — 2026-08-29
 
 ### Added

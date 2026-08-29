@@ -21,7 +21,7 @@ Push-Location $workspace
 try {
     $requiredFiles = @(
         'LICENSE', 'SECURITY.md', 'CONTRIBUTING.md', 'CHANGELOG.md', 'INSTALL.md',
-        'docs\DEPLOYMENT.md', 'docs\RELEASE_3.0.0.md', 'docs\RELEASE_3.1.0.md', 'docs\HARDWARE_ANALYZER.md',
+        'docs\DEPLOYMENT.md', 'docs\RELEASE_3.0.0.md', 'docs\RELEASE_3.1.0.md', 'docs\RELEASE_3.1.1.md', 'docs\HARDWARE_ANALYZER.md',
         'docs\images\studio-main-light.png', 'docs\images\studio-release-notes.png',
         'docs\images\studio-traceability.png', 'docs\images\studio-traceability-light.png',
         'docs\images\studio-hardware-analyzer.png', 'docs\images\studio-hardware-analyzer-light.png'
