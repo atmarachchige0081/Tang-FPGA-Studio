@@ -2,6 +2,23 @@
 
 All notable user-facing changes are recorded here.
 
+## 3.2.2 — 2026-08-30
+
+### Fixed
+
+- Moved the new `PROCASSINIT` waiver from HDL source metacomments to the pinned
+  Windows Verilator invocation. This preserves strict lint on OSS CAD Suite
+  5.051 while keeping Ubuntu's older stable Verilator compatible.
+- Added a regression that prevents version-specific Verilator warning comments
+  from returning to maintained HDL examples.
+
+### Verified
+
+- Repassed the 37-test Python suite and all four genuine Windows Verilator and
+  Icarus HDL lint/simulation routes, including the overflow-safe UART console.
+- Passed both Windows application jobs and the Ubuntu HDL quality gate for the
+  final branch and immutable `v3.2.2` tag.
+
 ## 3.2.1 — 2026-08-30
 
 ### Fixed

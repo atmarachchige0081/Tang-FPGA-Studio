@@ -39,6 +39,7 @@ if (-not (Test-Path -LiteralPath $ConfigPath)) {
 $Config = Import-PowerShellDataFile -LiteralPath $ConfigPath
 $BuildDir = Join-Path $ProjectRoot 'build'
 $script:VerilatorExecutable = 'verilator'
+$script:VerilatorWarningArguments = @()
 
 function Write-Usage {
     @'
@@ -99,6 +100,10 @@ function Initialize-Toolchain {
         }
         $env:VERILATOR_ROOT = $verilatorRoot
         $script:VerilatorExecutable = $nativeVerilator
+        # PROCASSINIT was introduced after the Verilator version packaged by
+        # Ubuntu LTS. Keep the waiver on the pinned executable invocation so
+        # older tools never have to parse an unknown source metacomment.
+        $script:VerilatorWarningArguments = @('-Wno-PROCASSINIT')
     }
 
     # Yosys/ABC on Windows still splits some temporary paths at spaces. Keep
@@ -299,7 +304,7 @@ function Invoke-Lint {
     Invoke-NativeTool $script:VerilatorExecutable (@(
         '--lint-only', '--timing', '-Wall', '-Wno-DECLFILENAME',
         '--top-module', $Config.Top
-    ) + $sources)
+    ) + $script:VerilatorWarningArguments + $sources)
     Write-Host 'RTL lint passed.' -ForegroundColor Green
 }
 

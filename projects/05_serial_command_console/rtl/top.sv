@@ -25,7 +25,6 @@ module top (
 
     // Gowin configuration memory initializes this counter so the design can
     // create a short power-on reset without consuming a board input pin.
-    /* verilator lint_off PROCASSINIT */
     logic [7:0] power_on_count = '0;
     logic rst_n;
     logic [7:0] rx_data, tx_data;
@@ -41,7 +40,6 @@ module top (
     assign rst_n = &power_on_count;
     assign led_n = {5'b11111, ~led_on};
     always_ff @(posedge clk_27mhz) if (!rst_n) power_on_count <= power_on_count + 1'b1;
-    /* verilator lint_on PROCASSINIT */
 
     function automatic logic [7:0] upper(input logic [7:0] value);
         upper = (value >= "a" && value <= "z") ? value - 8'd32 : value;
