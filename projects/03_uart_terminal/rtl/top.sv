@@ -10,6 +10,9 @@ module top (
 );
     localparam logic [5:0] GREETING_LAST_INDEX = 6'd29;
 
+    // The configuration image supplies the initial value; a button can then
+    // restart the lesson and both UART state machines deterministically.
+    /* verilator lint_off PROCASSINIT */
     logic [7:0] power_on_count = '0;
     logic       rst_n;
     logic [7:0] rx_data;
@@ -31,6 +34,7 @@ module top (
         else if (~&power_on_count)
             power_on_count <= power_on_count + 1'b1;
     end
+    /* verilator lint_on PROCASSINIT */
     assign rst_n = &power_on_count;
 
     function automatic logic [7:0] greeting_byte(input logic [5:0] index);

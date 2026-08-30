@@ -23,12 +23,16 @@ module top (
     localparam logic [ABOUT_LEN*8-1:0] ABOUT_TEXT = "Tang FPGA Studio beginner command console\r\n> ";
     localparam logic [UNKNOWN_LEN*8-1:0] UNKNOWN = "I do not know that command. Try HELP.\r\n> ";
 
+    // Gowin configuration memory initializes this counter so the design can
+    // create a short power-on reset without consuming a board input pin.
+    /* verilator lint_off PROCASSINIT */
     logic [7:0] power_on_count = '0;
     logic rst_n;
     logic [7:0] rx_data, tx_data;
     logic rx_valid, rx_error, tx_valid, tx_ready;
-    logic [127:0] command_buffer;
+    logic [55:0] command_buffer;
     logic [4:0] command_length;
+    logic command_overflow;
     logic [3:0] response_id;
     logic [6:0] response_index;
     logic response_active;
@@ -37,6 +41,7 @@ module top (
     assign rst_n = &power_on_count;
     assign led_n = {5'b11111, ~led_on};
     always_ff @(posedge clk_27mhz) if (!rst_n) power_on_count <= power_on_count + 1'b1;
+    /* verilator lint_on PROCASSINIT */
 
     function automatic logic [7:0] upper(input logic [7:0] value);
         upper = (value >= "a" && value <= "z") ? value - 8'd32 : value;
@@ -54,15 +59,15 @@ module top (
 
     function automatic logic [7:0] response_byte(input logic [3:0] id, input logic [6:0] index);
         case (id)
-            R_WELCOME: response_byte = WELCOME[(WELCOME_LEN-1-index)*8 +: 8];
-            R_HELP: response_byte = HELP_TEXT[(HELP_LEN-1-index)*8 +: 8];
-            R_PONG: response_byte = PONG[(PONG_LEN-1-index)*8 +: 8];
-            R_LED_ON: response_byte = LED_ON_TEXT[(LED_ON_LEN-1-index)*8 +: 8];
-            R_LED_OFF: response_byte = LED_OFF_TEXT[(LED_OFF_LEN-1-index)*8 +: 8];
-            R_STATUS_ON: response_byte = STATUS_ON[(STATUS_ON_LEN-1-index)*8 +: 8];
-            R_STATUS_OFF: response_byte = STATUS_OFF[(STATUS_OFF_LEN-1-index)*8 +: 8];
-            R_ABOUT: response_byte = ABOUT_TEXT[(ABOUT_LEN-1-index)*8 +: 8];
-            default: response_byte = UNKNOWN[(UNKNOWN_LEN-1-index)*8 +: 8];
+            R_WELCOME: response_byte = WELCOME[(WELCOME_LEN-1-integer'(index))*8 +: 8];
+            R_HELP: response_byte = HELP_TEXT[(HELP_LEN-1-integer'(index))*8 +: 8];
+            R_PONG: response_byte = PONG[(PONG_LEN-1-integer'(index))*8 +: 8];
+            R_LED_ON: response_byte = LED_ON_TEXT[(LED_ON_LEN-1-integer'(index))*8 +: 8];
+            R_LED_OFF: response_byte = LED_OFF_TEXT[(LED_OFF_LEN-1-integer'(index))*8 +: 8];
+            R_STATUS_ON: response_byte = STATUS_ON[(STATUS_ON_LEN-1-integer'(index))*8 +: 8];
+            R_STATUS_OFF: response_byte = STATUS_OFF[(STATUS_OFF_LEN-1-integer'(index))*8 +: 8];
+            R_ABOUT: response_byte = ABOUT_TEXT[(ABOUT_LEN-1-integer'(index))*8 +: 8];
+            default: response_byte = UNKNOWN[(UNKNOWN_LEN-1-integer'(index))*8 +: 8];
         endcase
     endfunction
 
@@ -71,13 +76,13 @@ module top (
 
     always_ff @(posedge clk_27mhz) begin
         if (!rst_n) begin
-            command_buffer <= '0; command_length <= '0; response_id <= R_WELCOME;
+            command_buffer <= '0; command_length <= '0; command_overflow <= 1'b0; response_id <= R_WELCOME;
             response_index <= '0; response_active <= 1'b1; tx_data <= '0;
             tx_valid <= 1'b0; led_on <= 1'b0;
         end else begin
             if (tx_valid && tx_ready) begin
                 tx_valid <= 1'b0;
-                if (response_index + 1 >= response_length(response_id)) begin
+                if (integer'(response_index) + 1 >= response_length(response_id)) begin
                     response_index <= '0; response_active <= 1'b0;
                 end else response_index <= response_index + 1'b1;
             end
@@ -89,7 +94,8 @@ module top (
                 if (rx_data == 8'h0d || rx_data == 8'h0a) begin
                     if (command_length != 0) begin
                         response_index <= '0; response_active <= 1'b1;
-                        if (command_length == 4 && command_buffer[31:0] == "HELP") response_id <= R_HELP;
+                        if (command_overflow) response_id <= R_UNKNOWN;
+                        else if (command_length == 4 && command_buffer[31:0] == "HELP") response_id <= R_HELP;
                         else if (command_length == 4 && command_buffer[31:0] == "PING") response_id <= R_PONG;
                         else if (command_length == 6 && command_buffer[47:0] == "LED ON") begin response_id <= R_LED_ON; led_on <= 1'b1; end
                         else if (command_length == 7 && command_buffer[55:0] == "LED OFF") begin response_id <= R_LED_OFF; led_on <= 1'b0; end
@@ -97,13 +103,17 @@ module top (
                         else if (command_length == 5 && command_buffer[39:0] == "ABOUT") response_id <= R_ABOUT;
                         else response_id <= R_UNKNOWN;
                     end
-                    command_buffer <= '0; command_length <= '0;
-                end else if (command_length < 16 && rx_data >= 8'h20 && rx_data <= 8'h7e) begin
-                    command_buffer <= {command_buffer[119:0], upper(rx_data)};
-                    command_length <= command_length + 1'b1;
+                    command_buffer <= '0; command_length <= '0; command_overflow <= 1'b0;
+                end else if (rx_data >= 8'h20 && rx_data <= 8'h7e) begin
+                    if (command_length < 7) begin
+                        command_buffer <= {command_buffer[47:0], upper(rx_data)};
+                        command_length <= command_length + 1'b1;
+                    end else begin
+                        command_overflow <= 1'b1;
+                    end
                 end
             end
-            if (rx_error) begin command_buffer <= '0; command_length <= '0; end
+            if (rx_error) begin command_buffer <= '0; command_length <= '0; command_overflow <= 1'b0; end
         end
     end
 endmodule

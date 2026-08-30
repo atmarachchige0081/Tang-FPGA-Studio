@@ -3,7 +3,7 @@
 [![Quality gates](https://github.com/atmarachchige0081/Tang-FPGA-Studio/actions/workflows/quality-gates.yml/badge.svg)](https://github.com/atmarachchige0081/Tang-FPGA-Studio/actions/workflows/quality-gates.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-6c63ff.svg)](LICENSE)
 [![Desktop: Tauri + Rust](https://img.shields.io/badge/desktop-Tauri%20%2B%20Rust-4f9cff.svg)](studio/)
-[![Release: v3.2.0](https://img.shields.io/badge/release-v3.2.0-2d91b8.svg)](CHANGELOG.md)
+[![Release: v3.2.1](https://img.shields.io/badge/release-v3.2.1-2d91b8.svg)](CHANGELOG.md)
 
 An open-source, beginner-friendly FPGA IDE and development environment for
 Sipeed Tang Nano, Tang Primer, and Tang Console boards. Simulate, inspect waveforms, lint,
@@ -66,6 +66,13 @@ separate FPGA target, timing target, constraint paths, build route, and
 programmer. Definition/reference navigation, module-port completion, project
 search, and clickable Problems all use the local HDL index. See the
 [v3.2 release notes](docs/RELEASE_3.2.0.md).
+
+**v3.2.1 reliability hotfix:** Windows lint now invokes Verilator's native
+executable instead of the extensionless Perl wrapper, repeated test runs use a
+bounded worker pool, the serial command example rejects overlong command
+prefixes, and Hardware Doctor distinguishes missing hardware from USB or
+Interface 0 access failures. See the
+[v3.2.1 hotfix notes](docs/RELEASE_3.2.1.md).
 
 ## Beginner desktop IDE
 

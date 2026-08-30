@@ -12,12 +12,16 @@ module reset_generator #(
     localparam logic [COUNTER_WIDTH-1:0] RESET_LIMIT =
         COUNTER_WIDTH'(RESET_CYCLES);
 
+    // The FPGA configuration image supplies this deterministic power-on value.
+    // A board reset pin is intentionally not required by this learning design.
+    /* verilator lint_off PROCASSINIT */
     logic [COUNTER_WIDTH-1:0] counter = '0;
 
     always_ff @(posedge clk) begin
         if (counter < RESET_LIMIT)
             counter <= counter + 1'b1;
     end
+    /* verilator lint_on PROCASSINIT */
 
     assign reset = (counter < RESET_LIMIT);
 endmodule

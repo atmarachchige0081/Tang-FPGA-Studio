@@ -2,6 +2,38 @@
 
 All notable user-facing changes are recorded here.
 
+## 3.2.1 — 2026-08-30
+
+### Fixed
+
+- Fixed Windows Verilator jobs opening the extensionless OSS CAD Suite Perl
+  wrapper as a document, which could hang lint or report a false pass. Studio
+  now invokes `verilator_bin.exe` with a validated `VERILATOR_ROOT`.
+- Bounded Vitest to two workers so full and repeated verification runs remain
+  reliable under laptop CPU and memory pressure.
+- Kept the HDL indexer's three-second debug performance budget while allowing
+  one fresh measurement, preventing an unrelated OS scheduling pause from
+  becoming a false release failure.
+- Fixed strict Verilator findings in maintained example projects while keeping
+  the Gowin power-on initialization intent explicit and narrowly waived.
+- Fixed the serial command console accepting or acting on a truncated prefix
+  of an overlong command. The example now reports an unknown command without
+  changing LED state, with simulation coverage for the regression.
+- Distinguished absent JTAG hardware from FTDI reset, USB enumeration, and
+  Interface 0 access failures so beginners are not incorrectly told to replace
+  a driver when the board or cable is not visible.
+- Added execution-policy-safe `.cmd` entry points for release, stress, board,
+  and screenshot verification on Windows.
+
+### Verified
+
+- Passed the production frontend build, 32 frontend tests, Rust backend suite,
+  Python UI/toolchain suite, strict HDL lint/simulation, six-board build matrix,
+  three-round concurrency stress run, Clippy with warnings denied, and Windows
+  package launch smoke test.
+- Audited 216 npm and 425 locked Rust dependencies with zero known
+  vulnerabilities affecting the shipped Windows application.
+
 ## 3.2.0 — 2026-08-29
 
 ### UI

@@ -38,6 +38,7 @@ if (-not (Test-Path -LiteralPath $ConfigPath)) {
 }
 $Config = Import-PowerShellDataFile -LiteralPath $ConfigPath
 $BuildDir = Join-Path $ProjectRoot 'build'
+$script:VerilatorExecutable = 'verilator'
 
 function Write-Usage {
     @'
@@ -83,6 +84,22 @@ function Initialize-Toolchain {
     # unset, so set it explicitly when a caller selects an override.
     $env:YOSYSHQ_ROOT = "$($toolchainRoot.TrimEnd('\'))\"
     . $environmentScript
+
+    # OSS CAD Suite ships Verilator's Unix Perl wrapper as an extensionless
+    # file on Windows. PowerShell treats that file as a document and can open
+    # it in Notepad/Open With while returning a false-success exit code. Use
+    # the native executable explicitly and provide the data root it normally
+    # discovers through the Perl wrapper.
+    $nativeVerilator = Join-Path $toolchainRoot 'bin\verilator_bin.exe'
+    if (Test-Path -LiteralPath $nativeVerilator -PathType Leaf) {
+        $verilatorRoot = Join-Path $toolchainRoot 'share\verilator'
+        $stdWaiver = Join-Path $verilatorRoot 'include\verilated_std_waiver.vlt'
+        if (-not (Test-Path -LiteralPath $stdWaiver -PathType Leaf)) {
+            throw "Verilator's runtime data is missing at '$verilatorRoot'. Reinstall the pinned OSS CAD Suite."
+        }
+        $env:VERILATOR_ROOT = $verilatorRoot
+        $script:VerilatorExecutable = $nativeVerilator
+    }
 
     # Yosys/ABC on Windows still splits some temporary paths at spaces. Keep
     # its scratch directory beside the toolchain, outside the spaced user path.
@@ -279,7 +296,7 @@ function Invoke-GowinEdaBuild {
 function Invoke-Lint {
     New-BuildDirectory
     $sources = @(Get-RtlSources | ForEach-Object { Get-RelativeProjectPath $_.FullName })
-    Invoke-NativeTool 'verilator' (@(
+    Invoke-NativeTool $script:VerilatorExecutable (@(
         '--lint-only', '--timing', '-Wall', '-Wno-DECLFILENAME',
         '--top-module', $Config.Top
     ) + $sources)
@@ -513,11 +530,14 @@ function Invoke-Detect {
     if ($detectExitCode -eq 0) { return }
 
     $diagnosis = $detectOutput -join "`n"
+    if ($diagnosis -match 'device not found|no JTAG probe|no cable found') {
+        throw 'No JTAG programmer is currently visible. Connect the board port marked JTAG/UART or MCU directly to the computer, confirm the FPGA/SOM is enabled, then retry Detect JTAG.'
+    }
     if ($diagnosis -match 'ftdi_usb_reset|FTDI reset|configure bitbang') {
         throw 'JTAG Interface 0 is connected but its FTDI endpoint could not reset. Unplug the board USB cable, wait five seconds, reconnect it, close other FPGA programmer tools, then run Detect JTAG again. Do not replace the driver: Interface 0 already uses WinUSB.'
     }
     if ($diagnosis -match 'unable to open ftdi device|usb_open') {
-        throw 'Windows can see the JTAG adapter but openFPGALoader cannot claim Interface 0. Close other programmer tools, reconnect the board, and retry. On supported dual-interface Tang debuggers only Interface 0 uses WinUSB; leave Interface 1 as the UART driver.'
+        throw 'The JTAG adapter could not be opened. Close other programmer tools, reconnect the board directly without a hub, and retry. If Hardware Doctor lists Interface 0, verify that only Interface 0 uses WinUSB; leave Interface 1 as the UART driver.'
     }
     throw "JTAG detection failed. Reconnect the board, confirm the selected board profile, and retry (openFPGALoader exit code $detectExitCode)."
 }
@@ -561,7 +581,7 @@ function Invoke-Doctor {
     & nextpnr-himbaechel --version
     & openFPGALoader --version
     & iverilog -V 2>&1 | Select-Object -First 1
-    & verilator --version
+    Invoke-NativeTool $script:VerilatorExecutable @('--version')
     if ((Get-ProjectBuildBackend) -eq 'gowin-eda') {
         $gowinShell = Get-GowinShell
         Write-Host "  Gowin EDA:  $gowinShell"
@@ -581,6 +601,8 @@ function Invoke-Doctor {
     $scanOutput | ForEach-Object { Write-Host $_ }
     if ($scanExitCode -ne 0) {
         Write-Warning 'USB scan returned an error. Check the debugger USB cable/driver.'
+    } elseif ($scanOutput -match 'Operation not supported|Error code -12|Device Descriptor Request Failed') {
+        Write-Warning 'The debugger USB endpoint did not enumerate cleanly. Reconnect it directly without a hub and try a known data-capable cable before changing any driver.'
     } elseif ($scanOutput -match "can't open device") {
         Write-Warning "The Dock is connected, but JTAG interface A is not using WinUSB. Run '.\fpga.ps1 driver'."
     } elseif ($scanOutput.Count -le 1) {

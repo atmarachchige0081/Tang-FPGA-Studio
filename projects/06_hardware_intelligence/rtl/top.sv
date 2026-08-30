@@ -10,9 +10,12 @@ module top #(
     output wire       uart_tx,
     output wire [5:0] led_n
 );
+    // Intentional FPGA power-on initialization for this pin-minimal demo.
+    /* verilator lint_off PROCASSINIT */
     logic [7:0] reset_pipe = '0;
     wire rst_n = &reset_pipe;
     always_ff @(posedge clk_27mhz) if (!rst_n) reset_pipe <= reset_pipe + 1'b1;
+    /* verilator lint_on PROCASSINIT */
 
     logic [23:0] heartbeat_counter;
     logic [7:0] event_count;

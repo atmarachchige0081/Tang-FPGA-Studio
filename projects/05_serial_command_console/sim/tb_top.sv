@@ -47,6 +47,9 @@ module tb_top;
     task automatic send_status;
         send_byte("S"); send_byte("T"); send_byte("A"); send_byte("T"); send_byte("U"); send_byte("S"); send_byte(8'h0d);
     endtask
+    task automatic send_overlong_led_off;
+        send_byte("L"); send_byte("E"); send_byte("D"); send_byte(" "); send_byte("O"); send_byte("F"); send_byte("F"); send_byte("X"); send_byte(8'h0d);
+    endtask
 
     initial begin
         $dumpfile("build/waves.vcd"); $dumpvars(0, tb_top);
@@ -55,7 +58,9 @@ module tb_top;
         send_led_on(); expect_response(3, 23);
         if (led_n !== 6'b111110) $fatal(1, "LED ON command did not turn on LED 0");
         send_status(); expect_response(5, 40);
-        $display("PASS: startup, case-insensitive commands, friendly replies, and LED state verified");
+        send_overlong_led_off(); expect_response(8, 41);
+        if (led_n !== 6'b111110) $fatal(1, "Overlong command incorrectly changed LED state");
+        $display("PASS: startup, case-insensitive commands, overflow-safe replies, and LED state verified");
         $finish;
     end
 endmodule

@@ -26,11 +26,11 @@ and Rust, then run `npm install` and `npm run desktop` inside `studio`.
 Run this before distributing a checkout or publishing a tag:
 
 ```powershell
-.\scripts\release-check.ps1
-.\scripts\test-console-boards.ps1 -Parallelism 2
-.\scripts\stress-test.ps1 -Rounds 3 -Parallelism 2
-.\scripts\capture-screenshots.ps1
-.\scripts\release-check.ps1 -SkipHdl -SkipNative
+.\scripts\release-check.cmd
+.\scripts\test-console-boards.cmd -Parallelism 2
+.\scripts\stress-test.cmd -Rounds 3 -Parallelism 2
+.\scripts\capture-screenshots.cmd
+.\scripts\release-check.cmd -SkipHdl -SkipNative
 git diff --check
 ```
 

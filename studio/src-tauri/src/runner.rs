@@ -338,6 +338,12 @@ fn parse_diagnostics(lines: &[String]) -> Vec<Diagnostic> {
 
 fn friendly_failure(action: BuildAction, lines: &[String]) -> String {
     let combined = lines.join("\n").to_ascii_lowercase();
+    if combined.contains("device not found")
+        || combined.contains("no jtag probe")
+        || combined.contains("no cable found")
+    {
+        return "No JTAG programmer is currently visible. Connect the board port marked JTAG/UART or MCU directly to the computer, confirm the FPGA/SOM is enabled, then run Detect JTAG again.".into();
+    }
     if combined.contains("ftdi_usb_reset failed")
         || combined.contains("ftdi reset failed")
         || combined.contains("unable to configure bitbang mode")
@@ -346,7 +352,7 @@ fn friendly_failure(action: BuildAction, lines: &[String]) -> String {
         return "JTAG Interface 0 already uses WinUSB, but the FTDI controller did not respond to reset. Unplug the board's JTAG USB cable, wait 3 seconds, reconnect it, then run Detect JTAG. Do not replace either interface driver.".into();
     }
     if combined.contains("usb_open() failed") || combined.contains("unable to open ftdi device") {
-        return "The FPGA programmer is connected but Windows cannot open JTAG Interface 0. Install WinUSB on Interface 0 only, leave Interface 1 unchanged, then run Detect JTAG again.".into();
+        return "The JTAG adapter could not be opened. Close other programmer tools, reconnect the board directly without a hub, and retry. If Hardware Doctor lists Interface 0, verify that only Interface 0 uses WinUSB; leave Interface 1 unchanged for UART.".into();
     }
     if combined.contains("usb bulk write failed")
         || combined.contains("low level ftdi init failed")
@@ -413,6 +419,17 @@ mod tests {
         );
         assert!(message.contains("Unplug"));
         assert!(message.contains("Do not replace"));
+    }
+
+    #[test]
+    fn distinguishes_an_absent_programmer_from_a_driver_failure() {
+        let message = friendly_failure(
+            BuildAction::Detect,
+            &["unable to open ftdi device: -3 (device not found)".into()],
+        );
+        assert!(message.contains("No JTAG programmer"));
+        assert!(!message.contains("Windows cannot open"));
+        assert!(!message.contains("WinUSB"));
     }
 
     #[test]

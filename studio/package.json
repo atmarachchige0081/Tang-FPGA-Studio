@@ -1,13 +1,13 @@
 {
   "name": "tang-fpga-studio",
   "private": true,
-  "version": "3.2.0",
+  "version": "3.2.1",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
-    "test": "vitest run",
+    "test": "vitest run --maxWorkers=2",
     "test:watch": "vitest",
     "check": "npm run build && npm run test",
     "tauri": "tauri",
