@@ -68,6 +68,8 @@ jobs:
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
           python ide\fpga_ide.py --check projects\03_uart_terminal
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          python ide\fpga_ide.py --check projects\05_serial_command_console
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
           python ide\fpga_ide.py --check projects\06_hardware_intelligence
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
       - name: Parse PowerShell and JSON
@@ -97,6 +99,15 @@ jobs:
           vvp build/tb_top.vvp
       - name: UART lesson lint and self-checking simulation
         working-directory: projects/03_uart_terminal
+        run: |
+          mkdir -p build
+          verilator --lint-only --timing -Wall -Wno-DECLFILENAME --top-module top \
+            rtl/top.sv rtl/uart_rx.sv rtl/uart_tx.sv
+          iverilog -g2012 -Wall -s tb_top -o build/tb_top.vvp \
+            rtl/top.sv rtl/uart_rx.sv rtl/uart_tx.sv sim/tb_top.sv
+          vvp build/tb_top.vvp
+      - name: Serial command console lint and self-checking simulation
+        working-directory: projects/05_serial_command_console
         run: |
           mkdir -p build
           verilator --lint-only --timing -Wall -Wno-DECLFILENAME --top-module top \

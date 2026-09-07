@@ -5,7 +5,7 @@ use crate::models::{
     AnalyzerTrigger, AnalyzerTriggerClause, AnalyzerWorkspace, DesignEvidence, EvidenceClass,
     WaveSample, WaveSignal, WaveformData,
 };
-use crate::security::{canonical_workspace, safe_existing_path};
+use crate::security::{canonical_workspace, resolve_project_path};
 use chrono::Utc;
 use regex::Regex;
 use serde_json::Value;
@@ -22,6 +22,7 @@ const MAX_CHANNELS: usize = 16;
 const MAX_CAPTURE_BITS: u32 = 128;
 const MIN_DEPTH: usize = 64;
 const MAX_DEPTH: usize = 4096;
+const MAX_ANALYZER_JSON_BYTES: u64 = 64 * 1024 * 1024;
 
 #[derive(Debug, Clone)]
 struct NetPort {
@@ -32,7 +33,7 @@ struct NetPort {
 
 pub fn workspace(root: &str, project: &str) -> Result<AnalyzerWorkspace, String> {
     let workspace_root = canonical_workspace(root)?;
-    let project_path = safe_existing_path(&workspace_root, project)?;
+    let project_path = resolve_project_path(&workspace_root, project)?;
     let signals = discover_signals_at(&workspace_root, &project_path)?;
     let config =
         read_config(&project_path).unwrap_or_else(|| default_config(&project_path, &signals));
@@ -53,7 +54,7 @@ pub fn save(
     config: AnalyzerConfig,
 ) -> Result<AnalyzerWorkspace, String> {
     let workspace_root = canonical_workspace(root)?;
-    let project_path = safe_existing_path(&workspace_root, project)?;
+    let project_path = resolve_project_path(&workspace_root, project)?;
     let signals = discover_signals_at(&workspace_root, &project_path)?;
     validate_config(&project_path, &config, &signals)?;
     persist_json(&project_path, "analyzer.json", &config)?;
@@ -63,7 +64,7 @@ pub fn save(
 
 pub fn prepare(root: &str, project: &str) -> Result<AnalyzerWorkspace, String> {
     let workspace_root = canonical_workspace(root)?;
-    let project_path = safe_existing_path(&workspace_root, project)?;
+    let project_path = resolve_project_path(&workspace_root, project)?;
     let signals = discover_signals_at(&workspace_root, &project_path)?;
     let config = read_config(&project_path).ok_or(
         "No Logic Analyzer configuration is saved. Select signals and save the configuration first.",
@@ -83,7 +84,7 @@ pub fn capture(
         return Err("Capture timeout must be between 1 and 120 seconds".into());
     }
     let workspace = canonical_workspace(root)?;
-    let project_path = safe_existing_path(&workspace, project)?;
+    let project_path = resolve_project_path(&workspace, project)?;
     let signals = discover_signals_at(&workspace, &project_path)?;
     let config = read_config(&project_path).ok_or("No Logic Analyzer configuration is saved")?;
     validate_config(&project_path, &config, &signals)?;
@@ -185,10 +186,17 @@ pub fn capture(
 
 pub fn latest_capture(root: &str, project: &str) -> Result<Option<AnalyzerCapture>, String> {
     let workspace = canonical_workspace(root)?;
-    let project_path = safe_existing_path(&workspace, project)?;
+    let project_path = resolve_project_path(&workspace, project)?;
     let path = project_path.join(".fpga-studio/analyzer-capture.json");
     if !path.is_file() {
         return Ok(None);
+    }
+    if fs::metadata(&path)
+        .map_err(|error| format!("Cannot inspect analyzer capture: {error}"))?
+        .len()
+        > MAX_ANALYZER_JSON_BYTES
+    {
+        return Err("Analyzer capture exceeds the 64 MiB safety limit".into());
     }
     let capture = serde_json::from_slice(
         &fs::read(&path).map_err(|error| format!("Cannot read analyzer capture: {error}"))?,
@@ -218,6 +226,13 @@ fn discover_signals_at(workspace: &Path, project: &Path) -> Result<Vec<AnalyzerS
                 })
                 .collect(),
         );
+    }
+    if fs::metadata(&netlist_path)
+        .map_err(|error| format!("Cannot inspect synthesized netlist: {error}"))?
+        .len()
+        > MAX_ANALYZER_JSON_BYTES
+    {
+        return Err("Synthesized analyzer netlist exceeds the 64 MiB safety limit".into());
     }
     let payload: Value = serde_json::from_slice(
         &fs::read(&netlist_path)

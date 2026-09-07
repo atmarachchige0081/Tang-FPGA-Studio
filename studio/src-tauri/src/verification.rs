@@ -3,7 +3,7 @@ use crate::models::{
     HardwareVerificationRecord, VerificationStage, VerificationStageStatus, VerificationSummary,
 };
 use crate::reports;
-use crate::security::{canonical_workspace, safe_existing_path};
+use crate::security::{canonical_workspace, resolve_project_path};
 use crate::{design_graph, hdl};
 use chrono::{DateTime, Utc};
 use std::fs;
@@ -13,7 +13,7 @@ use std::time::SystemTime;
 pub fn summary(root: &str, project: &str) -> Result<VerificationSummary, String> {
     let hdl = hdl::index(root, project)?;
     let workspace = canonical_workspace(root)?;
-    let project_path = safe_existing_path(&workspace, project)?;
+    let project_path = resolve_project_path(&workspace, project)?;
     let history = reports::read_history_file(&project_path)?;
     let newest_source = newest_source_time(&project_path);
     let project_updated_at = newest_source.map(|time| DateTime::<Utc>::from(time).to_rfc3339());
@@ -327,7 +327,7 @@ pub fn record_hardware(
         return Err("Hardware evidence notes are limited to 500 characters.".into());
     }
     let workspace = canonical_workspace(root)?;
-    let project_path = safe_existing_path(&workspace, project)?;
+    let project_path = resolve_project_path(&workspace, project)?;
     let directory = project_path.join(".fpga-studio");
     fs::create_dir_all(&directory)
         .map_err(|error| format!("Cannot create verification directory: {error}"))?;

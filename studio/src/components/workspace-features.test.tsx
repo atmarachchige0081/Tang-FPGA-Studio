@@ -34,12 +34,13 @@ describe("configurable project and navigation UI", () => {
     useWorkbench.setState({ projectWizardOpen: true });
     render(<ProjectWizard/>);
     fireEvent.click(await screen.findByRole("tab", { name: /Custom project/i }));
+    fireEvent.change(screen.getByRole("textbox", { name: /Project name/i }), { target: { value: "UART Terminal v1" } });
     expect(await screen.findByText("FPGA vendor")).toBeTruthy();
     expect(screen.getByText("Physical board")).toBeTruthy();
-    expect(screen.getByText("Portable source structure")).toBeTruthy();
+    expect(screen.getByText("Portable paths follow this project automatically")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Create project" }));
     await waitFor(() => expect(useWorkbench.getState().projectWizardOpen).toBe(false));
-    expect(useWorkbench.getState().projectPath).toBe("projects/06_my_fpga_project");
+    expect(useWorkbench.getState().projectPath).toBe("projects/UART Terminal v1");
   });
 
   it("groups Problems by severity and opens the exact source location", async () => {
@@ -54,9 +55,24 @@ describe("configurable project and navigation UI", () => {
   it("provides keyboard-style file and symbol search in the project sidebar", async () => {
     useWorkbench.setState({ activity: "search" });
     render(<Sidebar/>);
+    fireEvent.change(screen.getByRole("textbox", { name: "Find in project" }), { target: { value: "logic" } });
+    await waitFor(() => expect(screen.getByText(/logic \[23:0\] counter/i)).toBeTruthy());
+    fireEvent.click(screen.getByRole("button", { name: "Toggle Replace" }));
+    expect(screen.getByRole("textbox", { name: "Replace in project" })).toBeTruthy();
     fireEvent.click(screen.getByRole("tab", { name: /Files/i }));
+    fireEvent.change(screen.getByRole("textbox", { name: "Find in project" }), { target: { value: "" } });
     expect(screen.getByRole("button", { name: /top\.sv/i })).toBeTruthy();
     fireEvent.click(screen.getByRole("tab", { name: /Symbols/i }));
     expect(await screen.findByRole("button", { name: /top.*module/i })).toBeTruthy();
+  });
+
+  it("creates files and refreshes the Explorer without discarding the workspace", async () => {
+    render(<Sidebar/>);
+    fireEvent.click(screen.getByRole("button", { name: "New file" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "New file path" }), { target: { value: "rtl/new_uart.sv" } });
+    fireEvent.click(screen.getByRole("button", { name: "Create" }));
+    await waitFor(() => expect(useWorkbench.getState().activePath).toBe("rtl/new_uart.sv"));
+    fireEvent.click(screen.getByRole("button", { name: "Refresh Explorer" }));
+    await waitFor(() => expect(useWorkbench.getState().output.some((event) => event.phase === "refresh")).toBe(true));
   });
 });

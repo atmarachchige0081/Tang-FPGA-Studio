@@ -25,7 +25,8 @@ $projectCandidate = if ([IO.Path]::IsPathRooted($Project)) {
     Join-Path $WorkspaceRoot $Project
 }
 $ProjectRoot = [IO.Path]::GetFullPath($projectCandidate).TrimEnd('\')
-if ($ProjectRoot -ne $WorkspaceRoot -and
+if (-not [IO.Path]::IsPathRooted($Project) -and
+    $ProjectRoot -ne $WorkspaceRoot -and
     -not $ProjectRoot.StartsWith($WorkspaceRoot + '\', [StringComparison]::OrdinalIgnoreCase)) {
     throw "Project must be inside the workspace: $ProjectRoot"
 }
@@ -65,7 +66,8 @@ Tang Primer 20K FPGA commands
 Add -NoBuild to upload/flash to reuse build/top.fs.
 Use -Testbench sim/tb_name.sv -TestbenchTop tb_name to select one testbench.
 Use -WaveLayout sim/name.gtkw with wave/debug to select a GTKWave layout.
-Use -Project projects/<folder> to run a project from the workspace root.
+Use -Project projects/<folder> or an absolute project path. Build artifacts are
+always written inside that project's build/ directory.
 '@ | Write-Host
 }
 

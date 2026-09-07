@@ -87,7 +87,7 @@ export function TitleBar({ onRun, onSave }: Props): React.JSX.Element {
 
   return (
     <header className="titlebar" ref={menuRoot}>
-      <div className="brand-mark" aria-label="FPGA Studio"><Cpu size={17} /><span>FPGA Studio</span><span className="version-chip">3.2</span></div>
+      <div className="brand-mark" aria-label="FPGA Studio"><Cpu size={17} /><span>FPGA Studio</span><span className="version-chip">3.3</span></div>
       <nav className="menu-strip" aria-label="Application menu">
         {renderMenu("file", "File")}{renderMenu("edit", "Edit")}{renderMenu("project", "Project")}{renderMenu("build", "Build")}{renderMenu("hardware", "Hardware")}{renderMenu("help", "Help")}
       </nav>

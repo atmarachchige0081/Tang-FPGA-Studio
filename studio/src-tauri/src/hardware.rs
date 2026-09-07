@@ -1,5 +1,5 @@
 use crate::models::{SerialDevice, SerialEvent};
-use crate::security::{canonical_workspace, child_process_path, safe_existing_path};
+use crate::security::{canonical_workspace, child_process_path, resolve_project_path};
 use chrono::Utc;
 use serialport::{DataBits, FlowControl, Parity, SerialPort, StopBits};
 use std::collections::HashMap;
@@ -20,7 +20,7 @@ pub fn launch_zadig(root: &str, project: &str) -> Result<String, String> {
     #[cfg(windows)]
     {
         let workspace = canonical_workspace(root)?;
-        let project_directory = safe_existing_path(&workspace, project)?;
+        let project_directory = resolve_project_path(&workspace, project)?;
         if !project_directory.join("fpga.config.psd1").is_file() {
             return Err("The active project has no fpga.config.psd1".into());
         }

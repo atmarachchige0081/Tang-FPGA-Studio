@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import Editor, { type BeforeMount, type Monaco, type OnMount } from "@monaco-editor/react";
 import { CircleX, Code2, GitCompareArrows, X } from "lucide-react";
 import { bridge } from "../lib/bridge";
+import { confirmDiscardUnsaved } from "../lib/documents";
 import {
   completionCandidates,
   definitionFor,
@@ -14,8 +15,9 @@ import {
 } from "../lib/hdl-intelligence";
 import { fileName, languageForPath } from "../lib/language";
 import "../lib/monaco-loader";
+import { openWorkspaceLocation } from "../lib/navigation";
 import { useWorkbench } from "../store/workbench";
-import type { HdlIndex } from "../types";
+import type { HdlIndex, ProjectNode } from "../types";
 
 type MonacoModel = import("monaco-editor").editor.ITextModel;
 type MonacoPosition = import("monaco-editor").Position;
@@ -25,6 +27,15 @@ let liveIndex: HdlIndex = emptyHdlIndex();
 let liveRoot = "";
 let monacoApi: Monaco | null = null;
 let languageServicesConfigured = false;
+
+function firstSourceFile(nodes: ProjectNode[]): string | undefined {
+  for (const node of nodes) {
+    if (node.kind === "file" && /\.(?:sv|v|svh|vh)$/i.test(node.name)) return node.path;
+    const nested = node.children ? firstSourceFile(node.children) : undefined;
+    if (nested) return nested;
+  }
+  return undefined;
+}
 
 function candidateKind(monaco: Monaco, candidate: CompletionCandidate): number {
   if (candidate.kind === "keyword") return monaco.languages.CompletionItemKind.Keyword;
@@ -177,13 +188,23 @@ const configureMonaco: BeforeMount = (monaco) => {
 
 export function EditorWorkspace(): React.JSX.Element {
   const {
-    root, projectPath, tabs, activePath, theme, updateFile, closeFile, openFile, setDiagnostics,
-    setHdlIndex, navigation, clearNavigation, navigateTo,
+    root, projectPath, tree, tabs, activePath, theme, updateFile, closeFile, openFile, setDiagnostics,
+    setHdlIndex, navigation, clearNavigation, navigateTo, appendOutput,
   } = useWorkbench();
   const [index, setIndex] = useState<HdlIndex>(liveIndex);
   const editorRef = useRef<MonacoEditor | null>(null);
   const active = tabs.find((tab) => tab.path === activePath);
   const savedRevision = tabs.map((tab) => `${tab.path}:${tab.savedContent}`).join("\u0000");
+  const firstSource = firstSourceFile(tree);
+
+  const openFirstSource = async () => {
+    if (!firstSource) return;
+    try {
+      await openWorkspaceLocation(firstSource);
+    } catch (error) {
+      appendOutput({ jobId: "editor", phase: "open", stream: "stderr", message: error instanceof Error ? error.message : String(error), timestamp: new Date().toISOString() });
+    }
+  };
 
   useEffect(() => {
     let disposed = false;
@@ -235,14 +256,14 @@ export function EditorWorkspace(): React.JSX.Element {
   return (
     <section className="editor-workspace">
       <div className="editor-tabs" role="tablist">
-        {tabs.map((tab) => <button role="tab" aria-selected={tab.path === activePath} className={tab.path === activePath ? "active" : ""} key={tab.path} onClick={() => openFile(tab)}><Code2 size={14}/><span>{tab.name}</span>{tab.content !== tab.savedContent && <span className="dirty-dot" title="Unsaved"/>}<X size={13} onClick={(event) => { event.stopPropagation(); closeFile(tab.path); }}/></button>)}
+        {tabs.map((tab) => <button role="tab" aria-selected={tab.path === activePath} className={tab.path === activePath ? "active" : ""} key={tab.path} onClick={() => openFile(tab)}><Code2 size={14}/><span>{tab.name}</span>{tab.content !== tab.savedContent && <span className="dirty-dot" title="Unsaved"/>}<X size={13} onClick={(event) => { event.stopPropagation(); if (confirmDiscardUnsaved([tab])) closeFile(tab.path); }}/></button>)}
       </div>
       {active ? <>
         <div className="breadcrumbs"><span>{active.path.replaceAll("/", "  ›  ")}</span><span className="breadcrumb-symbol">◇ {index.top} · {index.symbols.length} symbols · F12 definition · Shift+F12 references</span></div>
         <div className="editor-area">
           <Editor beforeMount={configureMonaco} onMount={mounted} path={active.path} language={active.language} value={active.content} theme={theme === "light" ? "light" : "vs-dark"} onChange={(value) => updateFile(active.path, value ?? "")} options={{ fontFamily: "'JetBrains Mono', 'Cascadia Code', Consolas, monospace", fontSize: 13, lineHeight: 21, minimap: { enabled: true, scale: 1 }, smoothScrolling: true, cursorSmoothCaretAnimation: "on", renderWhitespace: "selection", bracketPairColorization: { enabled: true }, guides: { bracketPairs: true, indentation: true }, padding: { top: 12 }, automaticLayout: true, formatOnPaste: true, scrollBeyondLastLine: false, wordWrap: "off", quickSuggestions: { other: true, comments: false, strings: false }, suggestOnTriggerCharacters: true, folding: true, multiCursorModifier: "alt" }}/>
         </div>
-      </> : <div className="empty-editor"><CircleX size={30}/><h2>No source file open</h2><p>Select a file from Explorer or create a module.</p><button className="secondary-button"><GitCompareArrows size={15}/> Open recent source</button></div>}
+      </> : <div className="empty-editor"><CircleX size={30}/><h2>No source file open</h2><p>Select a file from Explorer or create a module.</p><button className="secondary-button" disabled={!firstSource} onClick={() => void openFirstSource()}><GitCompareArrows size={15}/> Open first HDL source</button></div>}
     </section>
   );
 }

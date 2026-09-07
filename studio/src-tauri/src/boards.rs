@@ -1,5 +1,5 @@
 use crate::models::BoardProfile;
-use crate::security::{canonical_workspace, safe_existing_path};
+use crate::security::{canonical_workspace, resolve_project_path, safe_existing_path};
 use std::collections::HashSet;
 use std::fs;
 use std::path::Path;
@@ -15,7 +15,18 @@ pub fn list(root: &str) -> Result<Vec<BoardProfile>, String> {
         .map_err(|error| format!("Cannot inspect board packages: {error}"))?
     {
         let entry = entry.map_err(|error| format!("Cannot read a board package: {error}"))?;
-        let path = entry.path().join("board.json");
+        let file_type = entry
+            .file_type()
+            .map_err(|error| format!("Cannot inspect a board package: {error}"))?;
+        if file_type.is_symlink() || !file_type.is_dir() {
+            continue;
+        }
+        let package = fs::canonicalize(entry.path())
+            .map_err(|error| format!("Cannot resolve a board package: {error}"))?;
+        if !package.starts_with(&vendor_root) {
+            continue;
+        }
+        let path = package.join("board.json");
         if !path.is_file() {
             continue;
         }
@@ -55,7 +66,7 @@ pub fn list(root: &str) -> Result<Vec<BoardProfile>, String> {
 
 pub fn active(root: &str, project: &str) -> Result<BoardProfile, String> {
     let workspace = canonical_workspace(root)?;
-    let project_dir = safe_existing_path(&workspace, project)?;
+    let project_dir = resolve_project_path(&workspace, project)?;
     let board_id = read_board_id(&project_dir).unwrap_or_else(|| "tang_primer_20k".into());
     list(&workspace.to_string_lossy())?
         .into_iter()

@@ -1,14 +1,17 @@
 use crate::models::{
-    CustomProjectRequest, FpgaTarget, NodeKind, ProjectNode, ProjectSearchMatch, ProjectTemplate,
-    TemplateCatalog, WorkspaceSnapshot,
+    CustomProjectRequest, FpgaTarget, NodeKind, ProjectNode, ProjectReplaceSummary,
+    ProjectSearchMatch, ProjectTemplate, TemplateCatalog, WorkspaceSnapshot,
 };
 use crate::security::{
-    canonical_workspace, child_process_path, safe_existing_path, safe_file_path,
+    canonical_workspace, child_process_path, resolve_project_path, safe_existing_path,
+    safe_file_path, workspace_path_reference,
 };
 use chrono::Utc;
-use regex::Regex;
+use regex::{NoExpand, Regex, RegexBuilder};
 use std::fs;
+use std::fs::OpenOptions;
 use std::path::{Path, PathBuf};
+use std::sync::{Mutex, OnceLock};
 
 #[derive(Debug, Default, serde::Deserialize, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -25,6 +28,8 @@ const IGNORED_DIRECTORIES: &[&str] = &[
     "__pycache__",
 ];
 const MAX_TREE_ENTRIES: usize = 20_000;
+const PROJECT_AGENT_GUIDE: &str = include_str!("../../../projects/AGENTS.md");
+static FILE_WRITE_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
 
 pub fn discover_workspace() -> Result<PathBuf, String> {
     if let Ok(override_root) = std::env::var("FPGA_STUDIO_WORKSPACE") {
@@ -57,15 +62,8 @@ pub fn snapshot() -> Result<WorkspaceSnapshot, String> {
 
 pub fn open_project(root: &str, project_path: &str) -> Result<WorkspaceSnapshot, String> {
     let root = canonical_workspace(root)?;
-    let directory = safe_existing_path(&root, project_path)?;
-    if !directory.is_dir() || !directory.join("fpga.config.psd1").is_file() {
-        return Err("Select a project folder containing fpga.config.psd1".into());
-    }
-    let relative = directory
-        .strip_prefix(&root)
-        .map_err(|_| "Project escaped the workspace")?
-        .to_string_lossy()
-        .replace('\\', "/");
+    let directory = resolve_project_path(&root, project_path)?;
+    let relative = workspace_path_reference(&root, &directory);
     let mut state = read_workspace_state(&root);
     state.recent_projects.retain(|item| item != &relative);
     state.recent_projects.insert(0, relative.clone());
@@ -81,19 +79,10 @@ fn snapshot_for(
     recent_projects: Vec<String>,
 ) -> Result<WorkspaceSnapshot, String> {
     let directory =
-        safe_existing_path(root, project_path).or_else(|_| safe_existing_path(root, "."))?;
-    let relative = directory
-        .strip_prefix(root)
-        .unwrap_or(Path::new("."))
-        .to_string_lossy()
-        .replace('\\', "/");
-    let project_path = if relative.is_empty() {
-        ".".to_owned()
-    } else {
-        relative
-    };
+        resolve_project_path(root, project_path).or_else(|_| resolve_project_path(root, "."))?;
+    let project_path = workspace_path_reference(root, &directory);
     let mut seen = 0;
-    let tree = list_directory(root, &directory, &mut seen)?;
+    let tree = list_directory(root, &directory, &directory, &mut seen)?;
     let project = project_display_name(&directory);
     Ok(WorkspaceSnapshot {
         root: child_process_path(root).to_string_lossy().into_owned(),
@@ -130,18 +119,13 @@ pub fn templates(root: &str) -> Result<Vec<ProjectTemplate>, String> {
 pub fn create_project(
     root: &str,
     name: &str,
+    location: &str,
     template_id: &str,
     display_name: &str,
     board_id: &str,
 ) -> Result<WorkspaceSnapshot, String> {
     let root = canonical_workspace(root)?;
-    let project_name = name.trim();
-    let name_pattern = Regex::new(r"^\d{2}_[a-z][a-z0-9_]*$").expect("project name regex is valid");
-    if !name_pattern.is_match(project_name) {
-        return Err(
-            "Use two digits, an underscore, and lowercase words, for example 04_spi_sensor".into(),
-        );
-    }
+    let project_name = validate_project_name(name)?;
     let template = templates(&root.to_string_lossy())?
         .into_iter()
         .find(|item| item.id == template_id)
@@ -159,10 +143,7 @@ pub fn create_project(
     if !supported_boards.iter().any(|id| id == selected_board) {
         return Err(format!("The '{}' template is not hardware-ready for board '{}'. Choose a compatible template or the Primer 20K Dock.", template.name, selected_board));
     }
-    let projects_root = root.join("projects");
-    fs::create_dir_all(&projects_root)
-        .map_err(|error| format!("Cannot create projects directory: {error}"))?;
-    let target = projects_root.join(project_name);
+    let (target, project_path) = project_target(&root, &project_name, location)?;
     if target.exists() {
         return Err(format!("A project named '{project_name}' already exists"));
     }
@@ -189,7 +170,7 @@ pub fn create_project(
         let manifest = serde_json::json!({
             "schemaVersion": 2,
             "name": title,
-            "folder": project_name,
+            "folder": &project_name,
             "mode": "template",
             "board": {
                 "id": selected_board,
@@ -220,6 +201,7 @@ pub fn create_project(
                 + "\n",
         )
         .map_err(|error| format!("Cannot write project manifest: {error}"))?;
+        install_agent_guide(&target)?;
         let readme = target.join("README.md");
         if readme.is_file() && !display_name.trim().is_empty() {
             let existing = fs::read_to_string(&readme)
@@ -239,7 +221,6 @@ pub fn create_project(
         let _ = fs::remove_dir_all(&target);
         return Err(format!("Project creation was rolled back: {error}"));
     }
-    let project_path = format!("projects/{project_name}");
     let mut state = read_workspace_state(&root);
     state.recent_projects.retain(|item| item != &project_path);
     state.recent_projects.insert(0, project_path.clone());
@@ -252,6 +233,7 @@ pub fn create_project(
 pub fn create_custom_project(
     root: &str,
     name: &str,
+    location: &str,
     request: CustomProjectRequest,
 ) -> Result<WorkspaceSnapshot, String> {
     let root = canonical_workspace(root)?;
@@ -262,10 +244,7 @@ pub fn create_custom_project(
         .ok_or_else(|| format!("Unknown board package '{}'", request.board_id))?;
     validate_custom_request(&profile, &request)?;
 
-    let projects_root = root.join("projects");
-    fs::create_dir_all(&projects_root)
-        .map_err(|error| format!("Cannot create projects directory: {error}"))?;
-    let target = projects_root.join(&project_name);
+    let (target, project_path) = project_target(&root, &project_name, location)?;
     if target.exists() {
         return Err(format!("A project named '{project_name}' already exists"));
     }
@@ -312,25 +291,71 @@ pub fn create_custom_project(
                 + "\n",
         )
         .map_err(|error| format!("Cannot write project manifest: {error}"))?;
+        install_agent_guide(&target)?;
         Ok::<(), String>(())
     })();
     if let Err(error) = result {
         let _ = fs::remove_dir_all(&target);
         return Err(format!("Custom project creation was rolled back: {error}"));
     }
-    let project_path = format!("projects/{project_name}");
     open_project(&root.to_string_lossy(), &project_path)
+}
+
+fn install_agent_guide(target: &Path) -> Result<(), String> {
+    fs::write(target.join("AGENTS.md"), PROJECT_AGENT_GUIDE)
+        .map_err(|error| format!("Cannot install AI development guidance: {error}"))
 }
 
 fn validate_project_name(name: &str) -> Result<String, String> {
     let project_name = name.trim();
-    let name_pattern = Regex::new(r"^\d{2}_[a-z][a-z0-9_]*$").expect("project name regex");
-    if !name_pattern.is_match(project_name) {
+    if project_name.is_empty() || project_name.chars().count() > 80 {
+        return Err("Project name must contain between 1 and 80 characters".into());
+    }
+    if project_name.starts_with('.')
+        || project_name.ends_with(['.', ' '])
+        || project_name
+            .chars()
+            .any(|character| character.is_control() || r#"<>:\"/\\|?*"#.contains(character))
+    {
         return Err(
-            "Use two digits, an underscore, and lowercase words, for example 04_spi_sensor".into(),
+            "Project name cannot start with '.', end with a dot or space, or contain < > : \" / \\ | ? *".into(),
         );
     }
+    let stem = project_name
+        .split('.')
+        .next()
+        .unwrap_or(project_name)
+        .to_ascii_uppercase();
+    let reserved = ["CON", "PRN", "AUX", "NUL"];
+    let reserved_port = stem
+        .strip_prefix("COM")
+        .or_else(|| stem.strip_prefix("LPT"))
+        .is_some_and(|suffix| {
+            matches!(suffix, "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9")
+        });
+    if reserved.contains(&stem.as_str()) || reserved_port {
+        return Err(format!("'{project_name}' is a reserved system folder name"));
+    }
     Ok(project_name.into())
+}
+
+fn project_target(root: &Path, name: &str, location: &str) -> Result<(PathBuf, String), String> {
+    let requested = if location.trim().is_empty() {
+        let default = root.join("projects");
+        fs::create_dir_all(&default)
+            .map_err(|error| format!("Cannot create default projects directory: {error}"))?;
+        default
+    } else {
+        PathBuf::from(location.trim())
+    };
+    let parent = fs::canonicalize(&requested)
+        .map_err(|error| format!("Selected project location is unavailable: {error}"))?;
+    if !parent.is_dir() {
+        return Err("Selected project location is not a folder".into());
+    }
+    let target = parent.join(name);
+    let project_path = workspace_path_reference(root, &target);
+    Ok((target, project_path))
 }
 
 fn fpga_target(profile: &crate::models::BoardProfile) -> FpgaTarget {
@@ -793,41 +818,52 @@ fn copy_template_tree(source: &Path, target: &Path) -> Result<(), String> {
 }
 
 fn list_directory(
-    root: &Path,
+    workspace: &Path,
+    project_root: &Path,
     directory: &Path,
     seen: &mut usize,
 ) -> Result<Vec<ProjectNode>, String> {
-    let mut entries = fs::read_dir(directory)
+    let mut entries = Vec::new();
+    for entry in fs::read_dir(directory)
         .map_err(|error| format!("Cannot list {}: {error}", directory.display()))?
-        .filter_map(Result::ok)
-        .filter(|entry| {
-            let name = entry.file_name();
-            let name = name.to_string_lossy();
-            !(entry.path().is_dir() && IGNORED_DIRECTORIES.contains(&name.as_ref()))
-                && name != "studio"
-        })
-        .collect::<Vec<_>>();
-    entries.sort_by_key(|entry| {
+    {
+        let entry = entry.map_err(|error| format!("Cannot read a project entry: {error}"))?;
+        let file_type = entry
+            .file_type()
+            .map_err(|error| format!("Cannot inspect a project entry: {error}"))?;
+        if file_type.is_symlink() {
+            continue;
+        }
+        let name = entry.file_name();
+        let name = name.to_string_lossy();
+        if name == "studio" || (file_type.is_dir() && IGNORED_DIRECTORIES.contains(&name.as_ref()))
+        {
+            continue;
+        }
+        entries.push((entry, file_type));
+    }
+    entries.sort_by_key(|(entry, file_type)| {
         (
-            !entry.path().is_dir(),
+            !file_type.is_dir(),
             entry.file_name().to_string_lossy().to_lowercase(),
         )
     });
     let mut nodes = Vec::new();
-    for entry in entries {
+    for (entry, file_type) in entries {
         if *seen >= MAX_TREE_ENTRIES {
             break;
         }
         *seen += 1;
         let path = entry.path();
-        let relative = path
-            .strip_prefix(root)
-            .map_err(|_| "Project tree escaped the workspace")?
-            .to_string_lossy()
-            .replace('\\', "/");
+        let resolved = fs::canonicalize(&path)
+            .map_err(|error| format!("Cannot resolve project entry: {error}"))?;
+        if !resolved.starts_with(project_root) {
+            continue;
+        }
+        let relative = workspace_path_reference(workspace, &path);
         let name = entry.file_name().to_string_lossy().into_owned();
-        if path.is_dir() {
-            let children = list_directory(root, &path, seen)?;
+        if file_type.is_dir() {
+            let children = list_directory(workspace, project_root, &path, seen)?;
             nodes.push(ProjectNode {
                 name,
                 path: relative,
@@ -846,9 +882,55 @@ fn list_directory(
     Ok(nodes)
 }
 
+fn save_backup_path(file: &Path) -> PathBuf {
+    let suffix = file
+        .extension()
+        .and_then(|value| value.to_str())
+        .unwrap_or("txt");
+    file.with_extension(format!("{suffix}.fpga-studio-backup"))
+}
+
+fn recover_interrupted_save(file: &Path) -> Result<(), String> {
+    let backup = save_backup_path(file);
+    if !file.exists() && backup.is_file() {
+        fs::rename(&backup, file)
+            .map_err(|error| format!("Cannot recover the interrupted file save: {error}"))?;
+    }
+    Ok(())
+}
+
+fn editable_file_path(workspace: &Path, reference: &str) -> Result<PathBuf, String> {
+    let requested = Path::new(reference);
+    if !requested.is_absolute() {
+        return safe_file_path(workspace, reference);
+    }
+    let file_name = requested.file_name().ok_or("Selected file has no name")?;
+    let parent = requested.parent().ok_or("Selected file has no parent")?;
+    let candidate = fs::canonicalize(parent)
+        .map_err(|error| format!("File directory is unavailable: {error}"))?
+        .join(file_name);
+    let state = read_workspace_state(workspace);
+    for project_reference in std::iter::once(state.active_project.as_str())
+        .chain(state.recent_projects.iter().map(String::as_str))
+    {
+        if !Path::new(project_reference).is_absolute() {
+            continue;
+        }
+        let Ok(project) = resolve_project_path(workspace, project_reference) else {
+            continue;
+        };
+        let Ok(relative) = candidate.strip_prefix(&project) else {
+            continue;
+        };
+        return safe_file_path(&project, &relative.to_string_lossy());
+    }
+    Err("The selected file is outside the active FPGA project".into())
+}
+
 pub fn read_text(root: &str, relative: &str) -> Result<String, String> {
     let root = canonical_workspace(root)?;
-    let file = safe_file_path(&root, relative)?;
+    let file = editable_file_path(&root, relative)?;
+    recover_interrupted_save(&file)?;
     let metadata = fs::metadata(&file).map_err(|error| format!("Cannot inspect file: {error}"))?;
     if metadata.len() > 4 * 1024 * 1024 {
         return Err("Text files larger than 4 MiB are opened read-only by external tools".into());
@@ -869,7 +951,7 @@ pub fn search_text(
         return Err("Project search terms are limited to 120 characters".into());
     }
     let root = canonical_workspace(root)?;
-    let project = safe_existing_path(&root, project)?;
+    let project = resolve_project_path(&root, project)?;
     let mut paths = Vec::new();
     collect_search_files(&project, &mut paths)?;
     if paths.len() > 2_000 {
@@ -891,14 +973,10 @@ pub fn search_text(
             let Some(byte_column) = lower.find(&needle) else {
                 continue;
             };
-            let column = line[..byte_column].chars().count() as u32 + 1;
+            let column = original_column_for_folded_byte(line, byte_column);
             let preview: String = line.trim().chars().take(240).collect();
             matches.push(ProjectSearchMatch {
-                file: path
-                    .strip_prefix(&root)
-                    .map_err(|_| "Search result escaped the workspace")?
-                    .to_string_lossy()
-                    .replace('\\', "/"),
+                file: workspace_path_reference(&root, &path),
                 line: line_index as u32 + 1,
                 column,
                 preview,
@@ -909,6 +987,139 @@ pub fn search_text(
         }
     }
     Ok(matches)
+}
+
+pub fn replace_text(
+    root: &str,
+    project: &str,
+    query: &str,
+    replacement: &str,
+) -> Result<ProjectReplaceSummary, String> {
+    let query = query.trim();
+    if query.is_empty() {
+        return Err("Enter text to replace".into());
+    }
+    if query.chars().count() > 120 {
+        return Err("Search terms are limited to 120 characters".into());
+    }
+    if replacement.len() > 64 * 1024 {
+        return Err("Replacement text is limited to 64 KiB".into());
+    }
+    let root = canonical_workspace(root)?;
+    let project = resolve_project_path(&root, project)?;
+    let matcher = RegexBuilder::new(&regex::escape(query))
+        .case_insensitive(true)
+        .build()
+        .map_err(|error| format!("Cannot prepare replacement: {error}"))?;
+    let mut paths = Vec::new();
+    collect_search_files(&project, &mut paths)?;
+    if paths.len() > 2_000 {
+        paths.truncate(2_000);
+    }
+    let mut changes = Vec::new();
+    let mut replacements = 0;
+    for path in paths {
+        let metadata = fs::metadata(&path)
+            .map_err(|error| format!("Cannot inspect replacement file: {error}"))?;
+        if metadata.len() > 2 * 1024 * 1024 {
+            continue;
+        }
+        let Ok(original) = fs::read_to_string(&path) else {
+            continue;
+        };
+        let count = matcher.find_iter(&original).count();
+        if count == 0 {
+            continue;
+        }
+        let updated = matcher
+            .replace_all(&original, NoExpand(replacement))
+            .into_owned();
+        let relative = workspace_path_reference(&root, &path);
+        replacements += count;
+        changes.push((relative, original, updated));
+    }
+
+    let _write_guard = FILE_WRITE_LOCK
+        .get_or_init(|| Mutex::new(()))
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    let mut completed: Vec<usize> = Vec::new();
+    for (index, (relative, _original, updated)) in changes.iter().enumerate() {
+        if let Err(error) = write_text_unlocked(&root, relative, updated) {
+            let mut rollback_failed = false;
+            completed.push(index);
+            for rollback_index in completed.into_iter().rev() {
+                let (rollback_path, rollback_content, _) = &changes[rollback_index];
+                rollback_failed |=
+                    write_text_unlocked(&root, rollback_path, rollback_content).is_err();
+            }
+            return Err(if rollback_failed {
+                format!("Replacement stopped at {relative}: {error}. Some rollback writes also failed; inspect the affected files before continuing")
+            } else {
+                format!("Replacement was rolled back after {relative} could not be saved: {error}")
+            });
+        }
+        completed.push(index);
+    }
+    Ok(ProjectReplaceSummary {
+        files_changed: changes.len(),
+        replacements,
+        files: changes.into_iter().map(|(path, _, _)| path).collect(),
+    })
+}
+
+pub fn create_entry(
+    root: &str,
+    project: &str,
+    relative: &str,
+    directory: bool,
+) -> Result<String, String> {
+    let root = canonical_workspace(root)?;
+    let project = resolve_project_path(&root, project)?;
+    let normalized = relative.trim().replace('\\', "/");
+    let entry = Path::new(&normalized);
+    if normalized.is_empty()
+        || entry.is_absolute()
+        || entry
+            .components()
+            .any(|component| !matches!(component, std::path::Component::Normal(_)))
+    {
+        return Err("Use a project-relative path without '.' or '..' segments".into());
+    }
+    let target = project.join(entry);
+    let parent = target.parent().ok_or("New project entry has no parent")?;
+    let parent = fs::canonicalize(parent)
+        .map_err(|error| format!("Parent folder is unavailable: {error}"))?;
+    if !parent.starts_with(&project) {
+        return Err("New project entry escaped the active project".into());
+    }
+    if target.exists() {
+        return Err(format!("'{}' already exists", normalized));
+    }
+    let workspace_relative = workspace_path_reference(&root, &target);
+    if directory {
+        fs::create_dir(&target).map_err(|error| format!("Cannot create folder: {error}"))?;
+    } else {
+        safe_file_path(&project, &normalized)?;
+        OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&target)
+            .map_err(|error| format!("Cannot create file: {error}"))?;
+    }
+    Ok(workspace_relative)
+}
+
+fn original_column_for_folded_byte(line: &str, folded_byte: usize) -> u32 {
+    let mut folded_cursor = 0;
+    for (index, character) in line.chars().enumerate() {
+        let folded_len = character.to_lowercase().map(char::len_utf8).sum::<usize>();
+        if folded_byte < folded_cursor + folded_len {
+            return index as u32 + 1;
+        }
+        folded_cursor += folded_len;
+    }
+    line.chars().count() as u32 + 1
 }
 
 fn collect_search_files(directory: &Path, paths: &mut Vec<PathBuf>) -> Result<(), String> {
@@ -948,9 +1159,28 @@ fn collect_search_files(directory: &Path, paths: &mut Vec<PathBuf>) -> Result<()
                         | "cst"
                         | "sdc"
                         | "json"
+                        | "jsonc"
                         | "psd1"
                         | "md"
                         | "txt"
+                        | "toml"
+                        | "yml"
+                        | "yaml"
+                        | "ps1"
+                        | "tcl"
+                        | "gtkw"
+                        | "py"
+                        | "rs"
+                        | "ts"
+                        | "tsx"
+                        | "js"
+                        | "jsx"
+                        | "css"
+                        | "html"
+                        | "htm"
+                        | "sh"
+                        | "bat"
+                        | "cmd"
                 )
             )
         {
@@ -964,8 +1194,20 @@ pub fn write_text(root: &str, relative: &str, content: &str) -> Result<(), Strin
     if content.len() > 4 * 1024 * 1024 {
         return Err("Refusing to save a text buffer larger than 4 MiB".into());
     }
+    let _write_guard = FILE_WRITE_LOCK
+        .get_or_init(|| Mutex::new(()))
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
     let root = canonical_workspace(root)?;
-    let file = safe_file_path(&root, relative)?;
+    write_text_unlocked(&root, relative, content)
+}
+
+fn write_text_unlocked(root: &Path, relative: &str, content: &str) -> Result<(), String> {
+    if content.len() > 4 * 1024 * 1024 {
+        return Err("Refusing to save a text buffer larger than 4 MiB".into());
+    }
+    let file = editable_file_path(root, relative)?;
+    recover_interrupted_save(&file)?;
     let suffix = file
         .extension()
         .and_then(|value| value.to_str())
@@ -973,15 +1215,22 @@ pub fn write_text(root: &str, relative: &str, content: &str) -> Result<(), Strin
     let temporary = file.with_extension(format!("{suffix}.{}.tmp", uuid::Uuid::new_v4()));
     fs::write(&temporary, content).map_err(|error| format!("Cannot stage file: {error}"))?;
     if !file.exists() {
-        return fs::rename(&temporary, &file)
-            .map_err(|error| format!("Cannot commit saved file: {error}"));
+        return fs::rename(&temporary, &file).map_err(|error| {
+            let _ = fs::remove_file(&temporary);
+            format!("Cannot commit saved file: {error}")
+        });
     }
-    let backup = file.with_extension(format!("{suffix}.fpga-studio-backup"));
+    let backup = save_backup_path(&file);
     if backup.exists() {
-        fs::remove_file(&backup)
-            .map_err(|error| format!("Cannot remove stale save backup: {error}"))?;
+        if let Err(error) = fs::remove_file(&backup) {
+            let _ = fs::remove_file(&temporary);
+            return Err(format!("Cannot remove stale save backup: {error}"));
+        }
     }
-    fs::rename(&file, &backup).map_err(|error| format!("Cannot stage existing file: {error}"))?;
+    if let Err(error) = fs::rename(&file, &backup) {
+        let _ = fs::remove_file(&temporary);
+        return Err(format!("Cannot stage existing file: {error}"));
+    }
     if let Err(error) = fs::rename(&temporary, &file) {
         let _ = fs::rename(&backup, &file);
         let _ = fs::remove_file(&temporary);
@@ -997,11 +1246,225 @@ pub fn write_text(root: &str, relative: &str, content: &str) -> Result<(), Strin
 #[cfg(test)]
 mod tests {
     use super::{
-        configure_board, copy_template_tree, create_custom_project, create_project, fpga_target,
-        open_project, search_text,
+        configure_board, copy_template_tree, create_custom_project, create_entry, create_project,
+        fpga_target, open_project, project_target, read_text, replace_text, save_backup_path,
+        search_text, validate_project_name, write_text,
     };
     use crate::models::CustomProjectRequest;
     use std::fs;
+    use std::path::Path;
+
+    #[test]
+    fn accepts_friendly_project_names_and_rejects_unsafe_folder_names() {
+        for name in ["UART Terminal v1", "beginner-led", "控制器_lab"] {
+            assert_eq!(validate_project_name(name).unwrap(), name);
+        }
+        for name in ["", "../escape", "bad/name", "CON", ".hidden", "trailing."] {
+            assert!(
+                validate_project_name(name).is_err(),
+                "{name} must be rejected"
+            );
+        }
+    }
+
+    #[test]
+    fn selected_project_location_can_be_outside_the_workspace() {
+        let root = std::env::temp_dir().join(format!(
+            "fpga-project-location-test-{}",
+            uuid::Uuid::new_v4()
+        ));
+        let inside = root.join("My Labs");
+        let outside = std::env::temp_dir().join(format!(
+            "fpga-project-outside-test-{}",
+            uuid::Uuid::new_v4()
+        ));
+        fs::create_dir_all(&inside).unwrap();
+        fs::create_dir_all(&outside).unwrap();
+        let canonical_root = fs::canonicalize(&root).unwrap();
+
+        let (_, relative) =
+            project_target(&canonical_root, "UART Project", &inside.to_string_lossy()).unwrap();
+        assert_eq!(relative.replace('\\', "/"), "My Labs/UART Project");
+        let (outside_target, outside_reference) =
+            project_target(&canonical_root, "UART Project", &outside.to_string_lossy()).unwrap();
+        assert_eq!(
+            outside_target,
+            fs::canonicalize(&outside).unwrap().join("UART Project")
+        );
+        assert!(Path::new(&outside_reference).is_absolute());
+
+        fs::remove_dir_all(root).unwrap();
+        fs::remove_dir_all(outside).unwrap();
+    }
+
+    #[test]
+    fn creates_entries_and_replaces_project_text_without_interpreting_dollar_signs() {
+        let root = std::env::temp_dir().join(format!(
+            "fpga-explorer-actions-test-{}",
+            uuid::Uuid::new_v4()
+        ));
+        fs::create_dir_all(root.join("project/rtl")).unwrap();
+        fs::write(root.join("fpga.ps1"), "# workspace marker\n").unwrap();
+        fs::write(root.join("project/fpga.config.psd1"), "@{ Top='top' }\n").unwrap();
+        fs::write(
+            root.join("project/rtl/top.sv"),
+            "logic signal; // SIGNAL signal\n",
+        )
+        .unwrap();
+
+        let created = create_entry(
+            &root.to_string_lossy(),
+            "project",
+            "rtl/new block.sv",
+            false,
+        )
+        .unwrap();
+        assert_eq!(created.replace('\\', "/"), "project/rtl/new block.sv");
+        assert!(root.join("project/rtl/new block.sv").is_file());
+        assert!(create_entry(&root.to_string_lossy(), "project", "../escape.sv", false).is_err());
+
+        let summary =
+            replace_text(&root.to_string_lossy(), "project", "signal", "$replacement").unwrap();
+        assert_eq!(summary.files_changed, 1);
+        assert_eq!(summary.replacements, 3);
+        assert_eq!(
+            fs::read_to_string(root.join("project/rtl/top.sv")).unwrap(),
+            "logic $replacement; // $replacement $replacement\n"
+        );
+
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn unicode_search_reports_original_character_columns_without_panicking() {
+        let root =
+            std::env::temp_dir().join(format!("fpga-unicode-search-test-{}", uuid::Uuid::new_v4()));
+        fs::create_dir_all(root.join("rtl")).unwrap();
+        fs::write(root.join("fpga.ps1"), "# marker\n").unwrap();
+        fs::write(root.join("fpga.config.psd1"), "@{ Top='top' }\n").unwrap();
+        fs::write(root.join("rtl/top.sv"), "İİneedle\n").unwrap();
+
+        let matches = search_text(&root.to_string_lossy(), ".", "needle").unwrap();
+        assert_eq!(matches.len(), 1);
+        assert_eq!(matches[0].column, 3);
+
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn external_project_reopens_and_keeps_file_operations_inside_its_root() {
+        let workspace = std::env::temp_dir().join(format!(
+            "fpga-external-workspace-test-{}",
+            uuid::Uuid::new_v4()
+        ));
+        let external_parent = std::env::temp_dir().join(format!(
+            "fpga-external-parent-test-{}",
+            uuid::Uuid::new_v4()
+        ));
+        let external = external_parent.join("Natural Project Name");
+        fs::create_dir_all(external.join("rtl")).unwrap();
+        fs::create_dir_all(&workspace).unwrap();
+        fs::write(workspace.join("fpga.ps1"), "# workspace marker\n").unwrap();
+        fs::write(external.join("fpga.config.psd1"), "@{ Top='top' }\n").unwrap();
+        fs::write(external.join("rtl/top.sv"), "module top; endmodule\n").unwrap();
+
+        let snapshot = open_project(&workspace.to_string_lossy(), &external.to_string_lossy())
+            .expect("external project should open");
+        assert!(Path::new(&snapshot.project_path).is_absolute());
+        assert!(snapshot
+            .tree
+            .iter()
+            .all(|node| Path::new(&node.path).is_absolute()));
+
+        let created = create_entry(
+            &workspace.to_string_lossy(),
+            &snapshot.project_path,
+            "rtl/new module.sv",
+            false,
+        )
+        .expect("external Explorer create");
+        write_text(
+            &workspace.to_string_lossy(),
+            &created,
+            "module new_module; endmodule\n",
+        )
+        .expect("external editor save");
+        assert_eq!(
+            read_text(&workspace.to_string_lossy(), &created).unwrap(),
+            "module new_module; endmodule\n"
+        );
+        assert_eq!(
+            search_text(
+                &workspace.to_string_lossy(),
+                &snapshot.project_path,
+                "new_module"
+            )
+            .unwrap()
+            .len(),
+            1
+        );
+
+        fs::remove_dir_all(workspace).unwrap();
+        fs::remove_dir_all(external_parent).unwrap();
+    }
+
+    #[test]
+    fn concurrent_saves_never_publish_partial_content() {
+        let root = std::env::temp_dir().join(format!(
+            "fpga-concurrent-save-test-{}",
+            uuid::Uuid::new_v4()
+        ));
+        fs::create_dir_all(root.join("rtl")).unwrap();
+        fs::write(root.join("fpga.ps1"), "# marker\n").unwrap();
+        fs::write(root.join("rtl/top.sv"), "original\n").unwrap();
+        let candidates = (0..8)
+            .map(|index| format!("payload-{index}-{}\n", "x".repeat(16_384)))
+            .collect::<Vec<_>>();
+        let handles = candidates
+            .iter()
+            .cloned()
+            .map(|content| {
+                let root = root.clone();
+                std::thread::spawn(move || {
+                    write_text(&root.to_string_lossy(), "rtl/top.sv", &content)
+                })
+            })
+            .collect::<Vec<_>>();
+        for handle in handles {
+            handle.join().unwrap().unwrap();
+        }
+
+        let saved = fs::read_to_string(root.join("rtl/top.sv")).unwrap();
+        assert!(candidates.contains(&saved));
+        assert!(fs::read_dir(root.join("rtl")).unwrap().all(|entry| {
+            !entry
+                .unwrap()
+                .file_name()
+                .to_string_lossy()
+                .contains("fpga-studio-backup")
+        }));
+
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn opening_a_file_recovers_an_interrupted_transaction() {
+        let root =
+            std::env::temp_dir().join(format!("fpga-save-recovery-test-{}", uuid::Uuid::new_v4()));
+        fs::create_dir_all(root.join("rtl")).unwrap();
+        fs::write(root.join("fpga.ps1"), "# marker\n").unwrap();
+        let file = root.join("rtl/top.sv");
+        fs::write(&file, "recover me\n").unwrap();
+        fs::rename(&file, save_backup_path(&file)).unwrap();
+
+        assert_eq!(
+            read_text(&root.to_string_lossy(), "rtl/top.sv").unwrap(),
+            "recover me\n"
+        );
+        assert!(file.is_file());
+
+        fs::remove_dir_all(root).unwrap();
+    }
 
     #[test]
     fn creates_transactional_project_from_catalog() {
@@ -1043,27 +1506,38 @@ mod tests {
         }"#,
         )
         .expect("catalog");
+        let chosen_location = root.join("Learning Labs");
+        fs::create_dir_all(&chosen_location).expect("chosen project location");
 
         let result = create_project(
             &root.to_string_lossy(),
-            "04_demo",
+            "My Demo Project",
+            &chosen_location.to_string_lossy(),
             "demo",
             "Demo project",
             "tang_primer_20k",
         )
         .expect("project creation should pass");
-        assert_eq!(result.project_path, "projects/04_demo");
-        assert!(root.join("projects/04_demo/fpga.project.json").is_file());
+        assert_eq!(result.project_path, "Learning Labs/My Demo Project");
+        assert!(root
+            .join("Learning Labs/My Demo Project/fpga.project.json")
+            .is_file());
+        let agent_guide = fs::read_to_string(root.join("Learning Labs/My Demo Project/AGENTS.md"))
+            .expect("generated AI guidance");
+        assert!(agent_guide.contains("Required verification order"));
+        assert!(agent_guide.contains("The user supplies the design requirements"));
         assert!(root.join(".fpga-studio/workspace-state.json").is_file());
         assert_eq!(result.project, "Demo project");
         assert_eq!(
-            fs::read_to_string(root.join("projects/04_demo/rtl/top.sv")).expect("created source"),
+            fs::read_to_string(root.join("Learning Labs/My Demo Project/rtl/top.sv"))
+                .expect("created source"),
             "module top; endmodule\n"
         );
-        assert!(!root.join("projects/04_demo/build").exists());
+        assert!(!root.join("Learning Labs/My Demo Project/build").exists());
         assert!(create_project(
             &root.to_string_lossy(),
             "../escape",
+            "",
             "demo",
             "",
             "tang_primer_20k"
@@ -1071,7 +1545,8 @@ mod tests {
         .is_err());
         assert!(create_project(
             &root.to_string_lossy(),
-            "04_demo",
+            "My Demo Project",
+            &chosen_location.to_string_lossy(),
             "demo",
             "",
             "tang_primer_20k"
@@ -1213,6 +1688,7 @@ mod tests {
             create_project(
                 &root.to_string_lossy(),
                 folder,
+                "",
                 "console",
                 "Console project",
                 board,
@@ -1269,12 +1745,17 @@ mod tests {
             source_roots: vec!["rtl".into()],
             test_roots: vec!["sim".into()],
         };
-        let created =
-            create_custom_project(&root.to_string_lossy(), "04_portable_lab", request.clone())
-                .expect("custom project creation");
+        let created = create_custom_project(
+            &root.to_string_lossy(),
+            "04_portable_lab",
+            "",
+            request.clone(),
+        )
+        .expect("custom project creation");
         assert_eq!(created.project, "Portable Nano laboratory");
         let directory = root.join("projects/04_portable_lab");
         let manifest_text = fs::read_to_string(directory.join("fpga.project.json")).unwrap();
+        assert!(directory.join("AGENTS.md").is_file());
         let manifest: serde_json::Value = serde_json::from_str(&manifest_text).unwrap();
         assert_eq!(manifest["schemaVersion"], 2);
         assert_eq!(manifest["mode"], "custom");
@@ -1303,7 +1784,8 @@ mod tests {
         let mut invalid = request;
         invalid.target.device = "unsupported-device".into();
         assert!(
-            create_custom_project(&root.to_string_lossy(), "05_invalid_target", invalid).is_err()
+            create_custom_project(&root.to_string_lossy(), "05_invalid_target", "", invalid)
+                .is_err()
         );
         assert!(!root.join("projects/05_invalid_target").exists());
         fs::remove_dir_all(root).unwrap();

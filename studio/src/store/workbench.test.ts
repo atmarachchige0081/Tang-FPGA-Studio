@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { useWorkbench } from "./workbench";
+import { readStoredTheme, useWorkbench, writeStoredTheme } from "./workbench";
 
 const source = {
   path: "rtl/top.sv",
@@ -31,6 +31,17 @@ describe("workbench document state", () => {
     expect(tab?.content).toBe(tab?.savedContent);
   });
 
+  it("does not mark edits made during an asynchronous save as persisted", () => {
+    useWorkbench.getState().openFile(source);
+    const submitted = "module submitted; endmodule\n";
+    useWorkbench.getState().updateFile(source.path, submitted);
+    useWorkbench.getState().updateFile(source.path, "module newer_edit; endmodule\n");
+    useWorkbench.getState().markSaved(source.path, submitted);
+    const tab = useWorkbench.getState().tabs[0];
+    expect(tab?.savedContent).toBe(submitted);
+    expect(tab?.content).not.toBe(tab?.savedContent);
+  });
+
   it("bounds streamed output to 2,000 entries", () => {
     for (let index = 0; index < 2_050; index += 1) {
       useWorkbench.getState().appendOutput({ jobId: "test", phase: "sim", stream: "stdout", message: String(index), timestamp: new Date(0).toISOString() });
@@ -44,5 +55,13 @@ describe("workbench document state", () => {
     useWorkbench.getState().appendOutput(event);
     useWorkbench.getState().appendOutput({ ...event, timestamp: new Date(1).toISOString() });
     expect(useWorkbench.getState().output).toEqual([event]);
+  });
+});
+
+describe("workbench theme persistence", () => {
+  it("rejects corrupt theme values and tolerates blocked storage", () => {
+    expect(readStoredTheme({ getItem: () => "corrupt" })).toBe("dark");
+    expect(readStoredTheme({ getItem: () => { throw new Error("blocked"); } })).toBe("dark");
+    expect(() => writeStoredTheme("light", { setItem: () => { throw new Error("blocked"); } })).not.toThrow();
   });
 });

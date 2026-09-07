@@ -1,6 +1,6 @@
 use crate::models::{BuildAction, BuildEvent, CommandResult, Diagnostic, DiagnosticSeverity};
 use crate::reports;
-use crate::security::{canonical_workspace, child_process_path, safe_existing_path};
+use crate::security::{canonical_workspace, child_process_path, resolve_project_path};
 use chrono::Utc;
 use regex::Regex;
 use std::collections::HashMap;
@@ -97,7 +97,7 @@ fn run_blocking(
 ) -> Result<CommandResult, String> {
     let workspace = canonical_workspace(&root)?;
     let process_workspace = child_process_path(&workspace);
-    let project_dir = safe_existing_path(&workspace, &project)?;
+    let project_dir = resolve_project_path(&workspace, &project)?;
     if !project_dir.is_dir() || !project_dir.join("fpga.config.psd1").is_file() {
         return Err("The active project has no fpga.config.psd1".into());
     }

@@ -1,7 +1,9 @@
 # FPGA learning-project template
 
-Copy this directory to a numbered folder such as `02_uart_terminal`, then
-replace the starter RTL and testbench with the new project.
+Create a project with any safe, descriptive name, then replace the starter RTL
+and testbench with the new design. FPGA Studio can place the project in any
+writable folder; source, constraint, and build paths stay relative to that
+project.
 
 Before considering a project complete, provide:
 

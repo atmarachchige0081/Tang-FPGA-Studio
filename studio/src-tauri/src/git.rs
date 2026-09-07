@@ -1,11 +1,14 @@
 use crate::models::{GitChange, GitStatus};
-use crate::security::canonical_workspace;
+use crate::security::{canonical_workspace, resolve_project_path};
 use regex::Regex;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-pub fn status(root: &str) -> Result<GitStatus, String> {
+const MAX_GIT_CHANGES: usize = 2_000;
+
+pub fn status(root: &str, project: &str) -> Result<GitStatus, String> {
     let workspace = canonical_workspace(root)?;
+    let project = resolve_project_path(&workspace, project)?;
     let Some(executable) = find_git() else {
         return Ok(GitStatus {
             available: false,
@@ -20,19 +23,22 @@ pub fn status(root: &str) -> Result<GitStatus, String> {
             message: "Git was not found. Install Git for Windows, then press Refresh.".into(),
         });
     };
-    let version = run(&executable, &workspace, &["--version"])
+    let version = run(&executable, &project, &["--version"])
         .ok()
         .map(|value| value.trim().to_owned());
     let output = match run(
         &executable,
-        &workspace,
+        &project,
         &[
             "-c",
             "core.quotepath=false",
             "status",
             "--porcelain=v1",
             "--branch",
-            "--untracked-files=all",
+            "--untracked-files=normal",
+            "--ignore-submodules=all",
+            "--",
+            ".",
         ],
     ) {
         Ok(value) => value,
@@ -47,13 +53,15 @@ pub fn status(root: &str) -> Result<GitStatus, String> {
                 ahead: 0,
                 behind: 0,
                 changes: Vec::new(),
-                message: "The workspace is not a Git repository.".into(),
+                message: "The active project is not a Git repository.".into(),
             });
         }
         Err(error) => return Err(error),
     };
-    let (branch, upstream, ahead, behind, changes) = parse_status(&output);
-    let message = if changes.is_empty() {
+    let (branch, upstream, ahead, behind, changes, truncated) = parse_status(&output);
+    let message = if truncated {
+        "More than 2,000 changes exist; showing the first 2,000"
+    } else if changes.is_empty() {
         "Working tree clean"
     } else {
         "Local changes detected"
@@ -110,7 +118,16 @@ fn run(executable: &Path, directory: &Path, arguments: &[&str]) -> Result<String
     Ok(String::from_utf8_lossy(&output.stdout).into_owned())
 }
 
-fn parse_status(output: &str) -> (Option<String>, Option<String>, u32, u32, Vec<GitChange>) {
+fn parse_status(
+    output: &str,
+) -> (
+    Option<String>,
+    Option<String>,
+    u32,
+    u32,
+    Vec<GitChange>,
+    bool,
+) {
     let tracking =
         Regex::new(r"^(?P<branch>.+?)(?:\.\.\.(?P<upstream>[^ ]+))?(?: \[(?P<tracking>.+)\])?$")
             .unwrap();
@@ -120,6 +137,7 @@ fn parse_status(output: &str) -> (Option<String>, Option<String>, u32, u32, Vec<
     let mut ahead = 0;
     let mut behind = 0;
     let mut changes = Vec::new();
+    let mut truncated = false;
     for line in output.lines() {
         if let Some(header) = line.strip_prefix("## ") {
             if let Some(captures) = tracking.captures(header) {
@@ -141,6 +159,10 @@ fn parse_status(output: &str) -> (Option<String>, Option<String>, u32, u32, Vec<
                 }
             }
         } else if line.len() >= 3 {
+            if changes.len() >= MAX_GIT_CHANGES {
+                truncated = true;
+                continue;
+            }
             let bytes = line.as_bytes();
             let path = line[3..].split(" -> ").last().unwrap_or("").to_owned();
             changes.push(GitChange {
@@ -150,21 +172,32 @@ fn parse_status(output: &str) -> (Option<String>, Option<String>, u32, u32, Vec<
             });
         }
     }
-    (branch, upstream, ahead, behind, changes)
+    (branch, upstream, ahead, behind, changes, truncated)
 }
 
 #[cfg(test)]
 mod tests {
-    use super::parse_status;
+    use super::{parse_status, MAX_GIT_CHANGES};
 
     #[test]
     fn parses_branch_tracking_and_changes() {
-        let (branch, upstream, ahead, behind, changes) = parse_status(
+        let (branch, upstream, ahead, behind, changes, truncated) = parse_status(
             "## develop/v2.0.0...origin/develop/v2.0.0 [ahead 2, behind 1]\n M studio/src/App.tsx\n?? new.sv\n",
         );
         assert_eq!(branch.as_deref(), Some("develop/v2.0.0"));
         assert_eq!(upstream.as_deref(), Some("origin/develop/v2.0.0"));
         assert_eq!((ahead, behind), (2, 1));
         assert_eq!(changes.len(), 2);
+        assert!(!truncated);
+    }
+
+    #[test]
+    fn bounds_large_change_sets_before_they_reach_the_ui() {
+        let output = (0..2_100)
+            .map(|index| format!("?? generated/{index}.sv\n"))
+            .collect::<String>();
+        let (_, _, _, _, changes, truncated) = parse_status(&output);
+        assert_eq!(changes.len(), MAX_GIT_CHANGES);
+        assert!(truncated);
     }
 }

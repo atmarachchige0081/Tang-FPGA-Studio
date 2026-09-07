@@ -3,7 +3,7 @@
 [![Quality gates](https://github.com/atmarachchige0081/Tang-FPGA-Studio/actions/workflows/quality-gates.yml/badge.svg)](https://github.com/atmarachchige0081/Tang-FPGA-Studio/actions/workflows/quality-gates.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-6c63ff.svg)](LICENSE)
 [![Desktop: Tauri + Rust](https://img.shields.io/badge/desktop-Tauri%20%2B%20Rust-4f9cff.svg)](studio/)
-[![Release: v3.2.2](https://img.shields.io/badge/release-v3.2.2-2d91b8.svg)](CHANGELOG.md)
+[![Release: v3.3.0](https://img.shields.io/badge/release-v3.3.0-2d91b8.svg)](CHANGELOG.md)
 
 An open-source, beginner-friendly FPGA IDE and development environment for
 Sipeed Tang Nano, Tang Primer, and Tang Console boards. Simulate, inspect waveforms, lint,
@@ -78,6 +78,11 @@ Interface 0 access failures. See the
 warning is waived only for the pinned Windows Verilator executable. Older Linux
 Verilator releases no longer have to parse a warning name they do not support.
 See the [v3.2.2 hotfix notes](docs/RELEASE_3.2.2.md).
+
+**v3.3 project workflow release:** projects may use natural names and a chosen
+workspace location; Explorer file/folder creation, refresh, project-wide
+find/replace, durable saves, and generated `AGENTS.md` guidance now form one
+complete workflow. See the [v3.3 release notes](docs/RELEASE_3.3.0.md).
 
 ## Beginner desktop IDE
 

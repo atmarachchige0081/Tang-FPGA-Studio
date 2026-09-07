@@ -5,7 +5,7 @@ use crate::models::{
     OptimizationRecommendation, OptimizationSummary, PerformanceRegression, ResourceUsage,
     SnapshotComparison, SnapshotMetricDelta, VerificationStageStatus,
 };
-use crate::security::{canonical_workspace, safe_existing_path};
+use crate::security::{canonical_workspace, resolve_project_path};
 use crate::verification;
 use chrono::Utc;
 use regex::Regex;
@@ -37,7 +37,7 @@ struct ExperimentFile {
 
 pub fn summary(root: &str, project: &str) -> Result<OptimizationSummary, String> {
     let workspace = canonical_workspace(root)?;
-    let project_path = safe_existing_path(&workspace, project)?;
+    let project_path = resolve_project_path(&workspace, project)?;
     let graph = design_graph::read(root, project)?;
     let verification = verification::summary(root, project)?;
     let hdl = hdl::index(root, project)?;
@@ -548,7 +548,7 @@ pub fn record_snapshot(
         return Err("Snapshot kind must be baseline, analyzer, or experiment".into());
     }
     let workspace = canonical_workspace(root)?;
-    let project_path = safe_existing_path(&workspace, project)?;
+    let project_path = resolve_project_path(&workspace, project)?;
     let report_path = match kind {
         "analyzer" => project_path.join("build/analyzer/timing.json"),
         "experiment" => project_path.join("build/experiment/timing.json"),
@@ -608,7 +608,7 @@ pub fn compare(
     candidate_id: u64,
 ) -> Result<SnapshotComparison, String> {
     let workspace = canonical_workspace(root)?;
-    let project_path = safe_existing_path(&workspace, project)?;
+    let project_path = resolve_project_path(&workspace, project)?;
     let snapshots = read_snapshots(&project_path)?.snapshots;
     let baseline = snapshots
         .iter()
@@ -627,7 +627,7 @@ pub fn prepare_experiment(
     recommendation_id: &str,
 ) -> Result<OptimizationExperiment, String> {
     let workspace = canonical_workspace(root)?;
-    let project_path = safe_existing_path(&workspace, project)?;
+    let project_path = resolve_project_path(&workspace, project)?;
     let (kind, title, synth_option, options) = match recommendation_id {
         "retime-critical-path" => (
             "retime",
@@ -695,7 +695,7 @@ pub fn finish_experiment(
     success: bool,
 ) -> Result<OptimizationExperiment, String> {
     let workspace = canonical_workspace(root)?;
-    let project_path = safe_existing_path(&workspace, project)?;
+    let project_path = resolve_project_path(&workspace, project)?;
     let snapshot = if success {
         Some(record_snapshot(
             root,

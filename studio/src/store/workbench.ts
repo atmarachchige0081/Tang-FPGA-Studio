@@ -34,6 +34,7 @@ interface WorkbenchState {
   git: GitStatus | null;
   projectWizardOpen: boolean;
   setWorkspace: (root: string, project: string, projectPath: string, tree: ProjectNode[], recentProjects?: string[]) => void;
+  refreshProjectTree: (tree: ProjectNode[]) => void;
   setActivity: (activity: Activity) => void;
   setView: (view: WorkbenchView) => void;
   setBottomPanel: (panel: BottomPanel) => void;
@@ -43,7 +44,8 @@ interface WorkbenchState {
   openFile: (file: OpenFile) => void;
   closeFile: (path: string) => void;
   updateFile: (path: string, content: string) => void;
-  markSaved: (path: string) => void;
+  markSaved: (path: string, persistedContent?: string) => void;
+  reloadFile: (path: string, content: string) => void;
   appendOutput: (event: BuildEvent) => void;
   clearOutput: () => void;
   setDiagnostics: (items: Diagnostic[]) => void;
@@ -58,7 +60,24 @@ interface WorkbenchState {
   closeProjectWizard: () => void;
 }
 
-const storedTheme = (localStorage.getItem("fpga-studio.theme") as ThemeMode | null) ?? "dark";
+export function readStoredTheme(storage?: Pick<Storage, "getItem">): ThemeMode {
+  try {
+    const value = (storage ?? globalThis.localStorage).getItem("fpga-studio.theme");
+    return value === "dark" || value === "light" || value === "system" ? value : "dark";
+  } catch {
+    return "dark";
+  }
+}
+
+export function writeStoredTheme(theme: ThemeMode, storage?: Pick<Storage, "setItem">): void {
+  try {
+    (storage ?? globalThis.localStorage).setItem("fpga-studio.theme", theme);
+  } catch {
+    // Restricted WebViews may disable persistent storage; the in-memory theme still works.
+  }
+}
+
+const storedTheme = readStoredTheme();
 
 export const useWorkbench = create<WorkbenchState>((set) => ({
   ready: false,
@@ -86,13 +105,14 @@ export const useWorkbench = create<WorkbenchState>((set) => ({
   git: null,
   projectWizardOpen: false,
   setWorkspace: (root, project, projectPath, tree, recentProjects = []) => set({ root, project, projectPath, tree, recentProjects, ready: true, tabs: [], activePath: null, view: "welcome", hdlIndex: null, intelligenceStatus: "idle", navigation: null }),
+  refreshProjectTree: (tree) => set({ tree, hdlIndex: null, intelligenceStatus: "idle" }),
   setActivity: (activity) => set({ activity, sidebarOpen: true }),
   setView: (view) => set({ view }),
   setBottomPanel: (bottomPanel) => set({ bottomPanel, bottomOpen: true }),
   toggleBottom: () => set((state) => ({ bottomOpen: !state.bottomOpen })),
   toggleSidebar: () => set((state) => ({ sidebarOpen: !state.sidebarOpen })),
   setTheme: (theme) => {
-    localStorage.setItem("fpga-studio.theme", theme);
+    writeStoredTheme(theme);
     set({ theme });
   },
   openFile: (file) => set((state) => ({
@@ -107,7 +127,8 @@ export const useWorkbench = create<WorkbenchState>((set) => ({
     return { tabs, activePath: state.activePath === path ? fallback : state.activePath, view: tabs.length ? state.view : "welcome" };
   }),
   updateFile: (path, content) => set((state) => ({ tabs: state.tabs.map((tab) => tab.path === path ? { ...tab, content } : tab) })),
-  markSaved: (path) => set((state) => ({ tabs: state.tabs.map((tab) => tab.path === path ? { ...tab, savedContent: tab.content } : tab) })),
+  markSaved: (path, persistedContent) => set((state) => ({ tabs: state.tabs.map((tab) => tab.path === path ? { ...tab, savedContent: persistedContent ?? tab.content } : tab) })),
+  reloadFile: (path, content) => set((state) => ({ tabs: state.tabs.map((tab) => tab.path === path ? { ...tab, content, savedContent: content } : tab) })),
   appendOutput: (event) => set((state) => {
     const previous = state.output.at(-1);
     if (previous && previous.jobId === event.jobId && previous.phase === event.phase && previous.stream === event.stream && previous.message === event.message) return state;

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { AlertCircle, ArrowLeft, Braces, CaseSensitive, CheckCircle2, ChevronDown, ChevronRight, CirclePlus, FileCode2, Files, Folder, FolderOpen, GitBranch, MoreHorizontal, PackageCheck, RefreshCw, Search, Sparkles } from "lucide-react";
+import { AlertCircle, ArrowLeft, Braces, CaseSensitive, CheckCircle2, ChevronDown, ChevronRight, CirclePlus, FileCode2, FilePlus2, Files, Folder, FolderOpen, FolderPlus, GitBranch, MoreHorizontal, PackageCheck, RefreshCw, ReplaceAll, Search, Sparkles, X } from "lucide-react";
 import { bridge } from "../lib/bridge";
 import { searchableSymbols } from "../lib/hdl-intelligence";
 import { fileName, languageForPath } from "../lib/language";
@@ -26,9 +26,49 @@ function TreeNode({ node, depth = 0 }: { node: ProjectNode; depth?: number }): R
 }
 
 function Explorer(): React.JSX.Element {
-  const { project, tree, hdlIndex, intelligenceStatus } = useWorkbench();
+  const { root, project, projectPath, tree, hdlIndex, intelligenceStatus, openFile, refreshProjectTree, setActivity, appendOutput } = useWorkbench();
   const [outlineOpen, setOutlineOpen] = useState(true);
-  return <><div className="sidebar-heading"><span>EXPLORER</span><div><button title="New file"><CirclePlus size={14}/></button><button title="Refresh"><RefreshCw size={14}/></button><button title="More"><MoreHorizontal size={14}/></button></div></div><div className="project-heading"><ChevronDown size={13}/><strong>{project.toUpperCase()}</strong></div><div className="tree-scroll">{tree.map((node) => <TreeNode node={node} key={node.path}/>)}</div><button className="outline-section" onClick={() => setOutlineOpen((value) => !value)}>{outlineOpen ? <ChevronDown size={13}/> : <ChevronRight size={13}/>}<strong>HDL OUTLINE</strong><span>{hdlIndex?.symbols.length ?? 0} symbols</span></button>{outlineOpen && <div className="outline-tree">{hdlIndex?.modules.map((module) => <div key={`${module.file}:${module.name}`}><button onClick={() => void openWorkspaceLocation(module.file, module.line, 1)}><Braces size={12}/><strong>{module.name}</strong>{module.name === hdlIndex.top && <small>TOP</small>}</button>{hdlIndex.instances.filter((instance) => instance.parentModule === module.name).map((instance) => <button className="outline-instance" key={`${instance.file}:${instance.line}:${instance.instanceName}`} onClick={() => void openWorkspaceLocation(instance.file, instance.line, 1)}><span>└</span><code>{instance.instanceName}</code><small>{instance.moduleName}</small></button>)}</div>)}{intelligenceStatus === "indexing" && <div className="outline-state"><RefreshCw className="spin" size={12}/> Indexing project…</div>}{intelligenceStatus === "degraded" && <div className="outline-state warning"><AlertCircle size={12}/> Syntax highlighting remains available.</div>}</div>}<div className="outline-section"><ChevronRight size={13}/><strong>DEPENDENCIES</strong><span>{hdlIndex?.instances.length ?? 0} instances</span></div></>;
+  const [createKind, setCreateKind] = useState<"file" | "folder" | null>(null);
+  const [entryPath, setEntryPath] = useState("");
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const refresh = useCallback(async () => {
+    if (!root || busy) return;
+    setBusy(true); setError("");
+    try {
+      const snapshot = await bridge.openProject(root, projectPath);
+      refreshProjectTree(snapshot.tree);
+      appendOutput({ jobId: "explorer", phase: "refresh", stream: "system", message: `Refreshed ${snapshot.project}.`, timestamp: new Date().toISOString() });
+    } catch (reason) {
+      const message = reason instanceof Error ? reason.message : String(reason);
+      setError(message);
+      appendOutput({ jobId: "explorer", phase: "refresh", stream: "stderr", message, timestamp: new Date().toISOString() });
+    } finally { setBusy(false); }
+  }, [appendOutput, busy, projectPath, refreshProjectTree, root]);
+  const beginCreate = (kind: "file" | "folder") => { setCreateKind(kind); setEntryPath(""); setError(""); setMenuOpen(false); };
+  const createEntry = async (event: React.FormEvent) => {
+    event.preventDefault();
+    const requested = entryPath.trim();
+    if (!requested || !createKind || busy) return;
+    setBusy(true); setError("");
+    try {
+      const created = await bridge.createProjectEntry(root, projectPath, requested, createKind === "folder");
+      const snapshot = await bridge.openProject(root, projectPath);
+      refreshProjectTree(snapshot.tree);
+      if (createKind === "file") {
+        const content = await bridge.readText(root, created);
+        openFile({ path: created, name: fileName(created), language: languageForPath(created), content, savedContent: content });
+      }
+      appendOutput({ jobId: "explorer", phase: "create", stream: "system", message: `Created ${createKind} ${requested}.`, timestamp: new Date().toISOString() });
+      setCreateKind(null); setEntryPath("");
+    } catch (reason) {
+      const message = reason instanceof Error ? reason.message : String(reason);
+      setError(message);
+      appendOutput({ jobId: "explorer", phase: "create", stream: "stderr", message, timestamp: new Date().toISOString() });
+    } finally { setBusy(false); }
+  };
+  return <><div className="sidebar-heading"><span>EXPLORER</span><div><button title="New file" aria-label="New file" onClick={() => beginCreate("file")}><CirclePlus size={14}/></button><button title="Refresh Explorer" aria-label="Refresh Explorer" onClick={() => void refresh()} disabled={busy}><RefreshCw className={busy ? "spin" : ""} size={14}/></button><button title="More Explorer actions" aria-label="More Explorer actions" onClick={() => setMenuOpen((value) => !value)}><MoreHorizontal size={14}/></button></div></div>{menuOpen && <div className="explorer-actions"><button onClick={() => beginCreate("file")}><FilePlus2 size={13}/> New file</button><button onClick={() => beginCreate("folder")}><FolderPlus size={13}/> New folder</button><button onClick={() => setActivity("search")}><Search size={13}/> Find in project</button></div>}{createKind && <form className="explorer-create" onSubmit={(event) => void createEntry(event)}><div><span>{createKind === "file" ? <FilePlus2 size={13}/> : <FolderPlus size={13}/>} New {createKind}</span><button type="button" aria-label="Cancel new entry" onClick={() => setCreateKind(null)}><X size={12}/></button></div><input autoFocus aria-label={`New ${createKind} path`} value={entryPath} onChange={(event) => setEntryPath(event.target.value)} placeholder={createKind === "file" ? "rtl/new_module.sv" : "rtl/components"}/><small>Path is relative to the active project.</small><button className="primary-button" disabled={!entryPath.trim() || busy}>Create</button></form>}{error && <div className="sidebar-message error compact"><AlertCircle size={14}/><span>{error}</span></div>}<div className="project-heading"><ChevronDown size={13}/><strong>{project.toUpperCase()}</strong></div><div className="tree-scroll">{tree.map((node) => <TreeNode node={node} key={node.path}/>)}</div><button className="outline-section" onClick={() => setOutlineOpen((value) => !value)}>{outlineOpen ? <ChevronDown size={13}/> : <ChevronRight size={13}/>}<strong>HDL OUTLINE</strong><span>{hdlIndex?.symbols.length ?? 0} symbols</span></button>{outlineOpen && <div className="outline-tree">{hdlIndex?.modules.map((module) => <div key={`${module.file}:${module.name}`}><button onClick={() => void openWorkspaceLocation(module.file, module.line, 1)}><Braces size={12}/><strong>{module.name}</strong>{module.name === hdlIndex.top && <small>TOP</small>}</button>{hdlIndex.instances.filter((instance) => instance.parentModule === module.name).map((instance) => <button className="outline-instance" key={`${instance.file}:${instance.line}:${instance.instanceName}`} onClick={() => void openWorkspaceLocation(instance.file, instance.line, 1)}><span>└</span><code>{instance.instanceName}</code><small>{instance.moduleName}</small></button>)}</div>)}{intelligenceStatus === "indexing" && <div className="outline-state"><RefreshCw className="spin" size={12}/> Indexing project…</div>}{intelligenceStatus === "degraded" && <div className="outline-state warning"><AlertCircle size={12}/> Syntax highlighting remains available.</div>}</div>}<div className="outline-section"><ChevronRight size={13}/><strong>DEPENDENCIES</strong><span>{hdlIndex?.instances.length ?? 0} instances</span></div></>;
 }
 
 type SearchMode = "text" | "files" | "symbols";
@@ -38,11 +78,14 @@ function flattenFiles(nodes: ProjectNode[]): ProjectNode[] {
 }
 
 function WorkspaceSearch(): React.JSX.Element {
-  const { root, projectPath, tree, hdlIndex, setHdlIndex, appendOutput } = useWorkbench();
+  const { root, projectPath, tree, tabs, hdlIndex, setHdlIndex, reloadFile, appendOutput } = useWorkbench();
   const [mode, setMode] = useState<SearchMode>("text");
   const [query, setQuery] = useState("");
+  const [replacement, setReplacement] = useState("");
+  const [replaceVisible, setReplaceVisible] = useState(false);
   const [textResults, setTextResults] = useState<Array<{ file: string; line: number; column: number; preview: string }>>([]);
   const [loading, setLoading] = useState(false);
+  const [replacing, setReplacing] = useState(false);
   const [error, setError] = useState("");
   const files = useMemo(() => flattenFiles(tree), [tree]);
 
@@ -63,7 +106,7 @@ function WorkspaceSearch(): React.JSX.Element {
   }, [hdlIndex, root, projectPath, setHdlIndex]);
 
   useEffect(() => {
-    if (mode !== "text" || query.trim().length < 2) {
+    if (mode !== "text" || !query.trim()) {
       setTextResults([]);
       setLoading(false);
       return;
@@ -82,12 +125,36 @@ function WorkspaceSearch(): React.JSX.Element {
   const symbolResults = mode === "symbols" && hdlIndex ? searchableSymbols(hdlIndex, query) : [];
   const open = (file: string, line = 1, column = 1) => void openWorkspaceLocation(file, line, column).catch((reason: unknown) => appendOutput({ jobId: "search", phase: "open", stream: "stderr", message: reason instanceof Error ? reason.message : String(reason), timestamp: new Date().toISOString() }));
   const resultCount = mode === "text" ? textResults.length : mode === "files" ? fileResults.length : symbolResults.length;
+  const replaceAll = async () => {
+    const needle = query.trim();
+    if (!needle || replacing || !textResults.length) return;
+    const matchedFiles = new Set(textResults.map((result) => result.file));
+    if (tabs.some((tab) => matchedFiles.has(tab.path) && tab.content !== tab.savedContent)) {
+      setError("Save modified matching files before Replace all, so unsaved editor work is never overwritten.");
+      return;
+    }
+    if (!window.confirm(`Replace every occurrence of “${needle}” across the active project?`)) return;
+    setReplacing(true); setError("");
+    try {
+      const summary = await bridge.replaceProject(root, projectPath, needle, replacement);
+      for (const path of summary.files) {
+        if (tabs.some((tab) => tab.path === path)) reloadFile(path, await bridge.readText(root, path));
+      }
+      setHdlIndex(null, "idle");
+      setTextResults(await bridge.searchProject(root, projectPath, needle));
+      appendOutput({ jobId: "search", phase: "replace", stream: "system", message: `Replaced ${summary.replacements} match${summary.replacements === 1 ? "" : "es"} in ${summary.filesChanged} file${summary.filesChanged === 1 ? "" : "s"}.`, timestamp: new Date().toISOString() });
+    } catch (reason) {
+      const message = reason instanceof Error ? reason.message : String(reason);
+      setError(message);
+      appendOutput({ jobId: "search", phase: "replace", stream: "stderr", message, timestamp: new Date().toISOString() });
+    } finally { setReplacing(false); }
+  };
 
-  return <div className="workspace-search"><div className="sidebar-heading"><span>PROJECT SEARCH</span><strong>{resultCount}</strong></div><div className="search-modes" role="tablist"><button role="tab" aria-selected={mode === "text"} className={mode === "text" ? "active" : ""} onClick={() => setMode("text")}><CaseSensitive size={13}/> Text</button><button role="tab" aria-selected={mode === "files"} className={mode === "files" ? "active" : ""} onClick={() => setMode("files")}><Files size={13}/> Files</button><button role="tab" aria-selected={mode === "symbols"} className={mode === "symbols" ? "active" : ""} onClick={() => setMode("symbols")}><Braces size={13}/> Symbols</button></div><label className="workspace-search-input"><Search size={14}/><input autoFocus value={query} onChange={(event) => setQuery(event.target.value)} placeholder={mode === "text" ? "Search project text" : mode === "files" ? "Go to file" : "Go to symbol"}/>{loading && <RefreshCw className="spin" size={13}/>}</label>{error && <div className="search-state error"><AlertCircle size={14}/>{error}</div>}<div className="search-results">{mode === "text" && textResults.map((result) => <button key={`${result.file}:${result.line}:${result.column}`} onClick={() => open(result.file, result.line, result.column)}><div><strong>{fileName(result.file)}</strong><code>{result.line}:{result.column}</code></div><span>{result.preview}</span><small>{result.file}</small></button>)}{mode === "files" && fileResults.map((file) => <button key={file.path} onClick={() => open(file.path)}><div><FileCode2 size={13}/><strong>{file.name}</strong></div><small>{file.path}</small></button>)}{mode === "symbols" && symbolResults.map((symbol) => <button key={`${symbol.file}:${symbol.line}:${symbol.name}`} onClick={() => open(symbol.file, symbol.line, symbol.column)}><div><Braces size={13}/><strong>{symbol.name}</strong><code>{symbol.kind}</code></div><span>{symbol.detail}</span><small>{symbol.file}:{symbol.line}</small></button>)}{!loading && normalized && !resultCount && <div className="search-state">No {mode} matches in the active project.</div>}{!normalized && <div className="search-state">{mode === "text" ? "Type at least two characters. Search skips generated build files." : mode === "files" ? "Type a filename, or browse every project file." : "Search modules, ports, signals, parameters, functions, and tasks."}</div>}</div></div>;
+  return <div className="workspace-search"><div className="sidebar-heading"><span>PROJECT SEARCH</span><strong>{resultCount}</strong></div><div className="search-modes" role="tablist"><button role="tab" aria-selected={mode === "text"} className={mode === "text" ? "active" : ""} onClick={() => setMode("text")}><CaseSensitive size={13}/> Text</button><button role="tab" aria-selected={mode === "files"} className={mode === "files" ? "active" : ""} onClick={() => setMode("files")}><Files size={13}/> Files</button><button role="tab" aria-selected={mode === "symbols"} className={mode === "symbols" ? "active" : ""} onClick={() => setMode("symbols")}><Braces size={13}/> Symbols</button></div><div className="workspace-search-input">{mode === "text" && <button className="replace-toggle" aria-label="Toggle Replace" title="Toggle Replace" onClick={() => setReplaceVisible((value) => !value)}>{replaceVisible ? <ChevronDown size={13}/> : <ChevronRight size={13}/>}</button>}<Search size={14}/><input aria-label="Find in project" autoFocus value={query} onChange={(event) => setQuery(event.target.value)} placeholder={mode === "text" ? "Search project text" : mode === "files" ? "Go to file" : "Go to symbol"}/>{loading && <RefreshCw className="spin" size={13}/>}</div>{mode === "text" && replaceVisible && <div className="search-replace-row"><input aria-label="Replace in project" value={replacement} onChange={(event) => setReplacement(event.target.value)} placeholder="Replace with"/><button title="Replace all matches" aria-label="Replace all matches" disabled={!textResults.length || replacing} onClick={() => void replaceAll()}><ReplaceAll className={replacing ? "spin" : ""} size={14}/></button></div>}{error && <div className="search-state error"><AlertCircle size={14}/>{error}</div>}<div className="search-results">{mode === "text" && textResults.map((result) => <button key={`${result.file}:${result.line}:${result.column}`} onClick={() => open(result.file, result.line, result.column)}><div><strong>{fileName(result.file)}</strong><code>{result.line}:{result.column}</code></div><span>{result.preview}</span><small>{result.file}</small></button>)}{mode === "files" && fileResults.map((file) => <button key={file.path} onClick={() => open(file.path)}><div><FileCode2 size={13}/><strong>{file.name}</strong></div><small>{file.path}</small></button>)}{mode === "symbols" && symbolResults.map((symbol) => <button key={`${symbol.file}:${symbol.line}:${symbol.name}`} onClick={() => open(symbol.file, symbol.line, symbol.column)}><div><Braces size={13}/><strong>{symbol.name}</strong><code>{symbol.kind}</code></div><span>{symbol.detail}</span><small>{symbol.file}:{symbol.line}</small></button>)}{!loading && normalized && !resultCount && <div className="search-state">No {mode} matches in the active project.</div>}{!normalized && <div className="search-state">{mode === "text" ? "Type to search every source file. Generated build files are skipped." : mode === "files" ? "Type a filename, or browse every project file." : "Search modules, ports, signals, parameters, functions, and tasks."}</div>}</div></div>;
 }
 
-function Placeholder({ title, text, action }: { title: string; text: string; action: string }): React.JSX.Element {
-  return <div className="sidebar-placeholder"><div className="sidebar-heading"><span>{title}</span></div><Sparkles size={28}/><p>{text}</p><button className="secondary-button">{action}</button></div>;
+function Placeholder({ title, text, action, onAction }: { title: string; text: string; action: string; onAction: () => void }): React.JSX.Element {
+  return <div className="sidebar-placeholder"><div className="sidebar-heading"><span>{title}</span></div><Sparkles size={28}/><p>{text}</p><button className="secondary-button" onClick={onAction}>{action}</button></div>;
 }
 
 function IpLibrary(): React.JSX.Element {
@@ -119,22 +186,21 @@ function IpLibrary(): React.JSX.Element {
 }
 
 function SourceControl(): React.JSX.Element {
-  const { root, openFile, appendOutput } = useWorkbench();
+  const { root, projectPath, appendOutput } = useWorkbench();
   const [status, setStatus] = useState<GitStatus | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const load = useCallback(async () => {
     if (!root) return;
     setLoading(true); setError("");
-    try { setStatus(await bridge.gitStatus(root)); }
+    try { setStatus(await bridge.gitStatus(root, projectPath)); }
     catch (reason) { setError(reason instanceof Error ? reason.message : String(reason)); }
     finally { setLoading(false); }
-  }, [root]);
+  }, [projectPath, root]);
   useEffect(() => { void load(); }, [load]);
   const openChange = async (path: string) => {
     try {
-      const content = await bridge.readText(root, path);
-      openFile({ path, name: fileName(path), language: languageForPath(path), content, savedContent: content });
+      await openWorkspaceLocation(path);
     } catch (reason) {
       appendOutput({ jobId: "git", phase: "open", stream: "stderr", message: reason instanceof Error ? reason.message : String(reason), timestamp: new Date().toISOString() });
     }
@@ -159,12 +225,12 @@ function Extensions(): React.JSX.Element {
 }
 
 export function Sidebar(): React.JSX.Element {
-  const activity = useWorkbench((state) => state.activity);
+  const { activity, setView } = useWorkbench();
   const panels: Record<typeof activity, React.JSX.Element> = {
     explorer: <Explorer/>,
     search: <WorkspaceSearch/>,
     source: <SourceControl/>,
-    hardware: <Placeholder title="HARDWARE" text="Programmers, boards, and serial connections are managed here." action="Scan devices"/>,
+    hardware: <Placeholder title="HARDWARE" text="Programmers, boards, and serial connections are managed here." action="Open hardware manager" onAction={() => setView("hardware")}/>,
     ip: <IpLibrary/>,
     extensions: <Extensions/>,
   };

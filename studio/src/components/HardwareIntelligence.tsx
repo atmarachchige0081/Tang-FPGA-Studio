@@ -7,6 +7,7 @@ import {
   Sparkles, Target, TimerReset, Upload, Waves, Zap, ZoomIn, ZoomOut,
 } from "lucide-react";
 import { bridge } from "../lib/bridge";
+import { workspacePath } from "../lib/navigation";
 import { useWorkbench } from "../store/workbench";
 import type {
   AnalyzerCapture, AnalyzerConfig, AnalyzerSignal, AnalyzerWorkspace, BuildAction,
@@ -58,7 +59,7 @@ export function TraceabilityView(): React.JSX.Element {
 
   const openSource = async (file?: string, line?: number) => {
     if (!file) return;
-    const path = file.startsWith("projects/") ? file : `${projectPath.replace(/\/$/, "")}/${file}`;
+    const path = workspacePath(root, projectPath, file);
     try {
       const content = await bridge.readText(root, path);
       openFile({ path, name: path.split("/").at(-1) ?? path, language: path.endsWith(".sv") ? "systemverilog" : "verilog", content, savedContent: content });

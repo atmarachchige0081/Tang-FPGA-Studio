@@ -12,14 +12,14 @@ const activities: Array<{ id: Activity; label: string; icon: React.ComponentType
 ];
 
 export function ActivityBar(): React.JSX.Element {
-  const { activity, setActivity, board } = useWorkbench();
+  const { activity, setActivity, setView, board } = useWorkbench();
   return (
     <nav className="activitybar" aria-label="Primary navigation">
       {activities.map(({ id, label, icon: Icon }) => (
         <button key={id} className={activity === id ? "active" : ""} onClick={() => setActivity(id)} title={label} aria-label={label}><Icon size={21} /></button>
       ))}
       <span className="activity-spacer" />
-      <button title={`Board package: ${board?.name ?? "loading"}`} aria-label="Selected board"><span className="board-dot" /></button>
+      <button title={`Open hardware manager · ${board?.name ?? "board loading"}`} aria-label="Open hardware manager" onClick={() => setView("hardware")}><span className="board-dot" /></button>
     </nav>
   );
 }

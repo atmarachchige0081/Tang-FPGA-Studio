@@ -1,5 +1,5 @@
 use crate::models::{WaveSample, WaveSignal, WaveformData};
-use crate::security::{canonical_workspace, safe_existing_path};
+use crate::security::{canonical_workspace, resolve_project_path, workspace_path_reference};
 use std::collections::HashMap;
 use std::fs;
 
@@ -9,7 +9,7 @@ const MAX_SAMPLES: usize = 100_000;
 
 pub fn read(root: &str, project: &str) -> Result<WaveformData, String> {
     let root = canonical_workspace(root)?;
-    let project = safe_existing_path(&root, project)?;
+    let project = resolve_project_path(&root, project)?;
     let path = project.join("build/waves.vcd");
     let metadata = fs::metadata(&path)
         .map_err(|_| "No waveform exists yet. Run simulation first.".to_owned())?;
@@ -18,13 +18,7 @@ pub fn read(root: &str, project: &str) -> Result<WaveformData, String> {
     }
     let content =
         fs::read_to_string(&path).map_err(|error| format!("Cannot read waveform: {error}"))?;
-    parse(
-        &content,
-        path.strip_prefix(&root)
-            .unwrap_or(&path)
-            .to_string_lossy()
-            .replace('\\', "/"),
-    )
+    parse(&content, workspace_path_reference(&root, &path))
 }
 
 fn parse(content: &str, path: String) -> Result<WaveformData, String> {

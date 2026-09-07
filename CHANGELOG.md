@@ -2,6 +2,39 @@
 
 All notable user-facing changes are recorded here.
 
+## 3.3.0 — 2026-09-07
+
+### Project workflow
+
+- Removed the forced numbered/snake-case project-name convention. Safe names
+  may now contain spaces, mixed case, and Unicode, with a native Windows folder
+  picker for choosing any writable location. The command runner resolves the
+  selected project root and keeps source, constraint, and build paths portable.
+- Completed the Explorer actions for creating files and folders and refreshing
+  the tree while preserving open editor state.
+- Added project-wide file, symbol, and text search plus guarded transactional
+  Replace All with dirty-buffer and rollback protection.
+- Added an `AGENTS.md` development guide to every built-in, template, and
+  custom project so coding agents understand the Studio layout, commands,
+  supported tool flow, and hardware safety boundary.
+
+### Reliability and security
+
+- Serialized native saves, preserved exact saved snapshots, guarded unsaved
+  project switches and exits, and added interrupted-save recovery.
+- Correctly routed Monaco language workers and hardened project traversal,
+  manifests, reports, Git status, HDL indexing, and JSON parsing against
+  symlink escapes, oversized input, and unbounded output.
+- Extended Windows and Ubuntu quality gates and installer dependency-contract
+  checks for the new workflows.
+
+### Installer
+
+- Kept OSS CAD Suite and the signed Zadig helper as verified first-install
+  downloads rather than bundling opaque third-party executables into the IDE.
+- Made that recommended installer task explicit and added a warning before a
+  user continues with an editor-only installation.
+
 ## 3.2.2 — 2026-08-30
 
 ### Fixed

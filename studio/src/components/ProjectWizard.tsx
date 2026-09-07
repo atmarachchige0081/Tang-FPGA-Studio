@@ -1,13 +1,30 @@
 import { useEffect, useMemo, useState } from "react";
-import { Check, CircuitBoard, Cpu, FolderPlus, LoaderCircle, ShieldCheck, SlidersHorizontal, X } from "lucide-react";
+import { open } from "@tauri-apps/plugin-dialog";
+import { Check, CircuitBoard, Cpu, FolderOpen, FolderPlus, LoaderCircle, ShieldCheck, SlidersHorizontal, X } from "lucide-react";
 import { bridge } from "../lib/bridge";
+import { confirmDiscardUnsaved } from "../lib/documents";
 import { fpgaTargetFromBoard } from "../lib/hdl-intelligence";
 import { useWorkbench } from "../store/workbench";
 import type { BoardProfile, ProjectTemplate } from "../types";
 
-const validProjectName = /^\d{2}_[a-z][a-z0-9_]*$/;
 const validIdentifier = /^[A-Za-z_]\w*$/;
 type ProjectMode = "template" | "custom";
+
+const projectNameProblem = (name: string): string => {
+  const trimmed = name.trim();
+  if (!trimmed || [...trimmed].length > 80) return "Enter a project name using 1–80 characters.";
+  if (trimmed.startsWith(".") || /[. ]$/.test(trimmed) || /[<>:"/\\|?*\u0000-\u001f]/.test(trimmed)) {
+    return 'Avoid leading dots, trailing dots/spaces, and these characters: < > : " / \\ | ? *';
+  }
+  const stem = trimmed.split(".")[0]?.toUpperCase() ?? "";
+  if (/^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])$/.test(stem)) return "That name is reserved by Windows.";
+  return "";
+};
+
+const defaultProjectLocation = (root: string): string => {
+  if (!root || root === "Browser preview") return "projects";
+  return `${root.replace(/[\\/]$/, "")}\\projects`;
+};
 
 const packagedPath = (path: string | undefined, fallback: string): string => {
   const name = path?.replaceAll("\\", "/").split("/").at(-1);
@@ -22,8 +39,8 @@ export function ProjectWizard(): React.JSX.Element | null {
   const [templateId, setTemplateId] = useState("serial_commands");
   const [boardId, setBoardId] = useState("tang_primer_20k");
   const [targetDevice, setTargetDevice] = useState("GW2A-LV18PG256C8/I7");
-  const [folderName, setFolderName] = useState("06_my_fpga_project");
-  const [displayName, setDisplayName] = useState("My FPGA project");
+  const [projectName, setProjectName] = useState("My FPGA Project");
+  const [location, setLocation] = useState("");
   const [top, setTop] = useState("top");
   const [clockMhz, setClockMhz] = useState("27");
   const [constraintPath, setConstraintPath] = useState("constraints/primer20k_dock.cst");
@@ -45,6 +62,10 @@ export function ProjectWizard(): React.JSX.Element | null {
     return () => { disposed = true; };
   }, [projectWizardOpen, root]);
 
+  useEffect(() => {
+    if (projectWizardOpen && root) setLocation(defaultProjectLocation(root));
+  }, [projectWizardOpen, root]);
+
   const selectedTemplate = useMemo(() => templates.find((item) => item.id === templateId), [templates, templateId]);
   const targets = useMemo(() => boards.filter((board, index) => boards.findIndex((candidate) => candidate.device === board.device) === index), [boards]);
   const compatibleBoards = useMemo(() => {
@@ -54,7 +75,8 @@ export function ProjectWizard(): React.JSX.Element | null {
   }, [boards, mode, selectedTemplate, targetDevice]);
   const selectedBoard = compatibleBoards.find((board) => board.id === boardId) ?? compatibleBoards[0];
   const selectedTarget = selectedBoard ? fpgaTargetFromBoard(selectedBoard) : null;
-  const nameValid = validProjectName.test(folderName);
+  const nameProblem = projectNameProblem(projectName);
+  const nameValid = !nameProblem;
   const customValid = Boolean(selectedBoard && selectedTarget && validIdentifier.test(top) && Number(clockMhz) >= 0.1 && Number(clockMhz) <= 1000 && /^constraints\/(?!.*\.\.)[^/].*\.cst$/i.test(constraintPath) && (!timingPath || /^constraints\/(?!.*\.\.)[^/].*\.sdc$/i.test(timingPath)));
 
   useEffect(() => {
@@ -68,16 +90,32 @@ export function ProjectWizard(): React.JSX.Element | null {
     setTimingPath(selectedBoard.timingConstraints?.[0] ? packagedPath(selectedBoard.timingConstraints[0], `${selectedBoard.id}.sdc`) : "");
   }, [selectedBoard?.id, mode]);
 
+  const chooseLocation = async () => {
+    setError("");
+    try {
+      const selected = await open({
+        directory: true,
+        multiple: false,
+        defaultPath: location || defaultProjectLocation(root),
+        title: "Choose where to create the FPGA project",
+      });
+      if (typeof selected === "string") setLocation(selected);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : String(reason));
+    }
+  };
+
   const create = async (event: React.FormEvent) => {
     event.preventDefault();
     if (!nameValid || !selectedBoard || loading || (mode === "template" ? !selectedTemplate : !customValid || !selectedTarget)) return;
+    if (!confirmDiscardUnsaved(useWorkbench.getState().tabs)) return;
     setLoading(true);
     setError("");
     try {
       const snapshot = mode === "template"
-        ? await bridge.createProject(root, folderName, templateId, displayName, selectedBoard.id)
-        : await bridge.createCustomProject(root, folderName, {
-          displayName: displayName.trim() || folderName,
+        ? await bridge.createProject(root, projectName.trim(), location, templateId, projectName.trim(), selectedBoard.id)
+        : await bridge.createCustomProject(root, projectName.trim(), location, {
+          displayName: projectName.trim(),
           boardId: selectedBoard.id,
           target: selectedTarget!,
           top,
@@ -121,7 +159,8 @@ export function ProjectWizard(): React.JSX.Element | null {
           </section>
           <section className="wizard-pane project-options">
             <div className="wizard-pane-title"><strong>Project and board</strong><small>Only settings supported by the selected build route are editable</small></div>
-            <div className="project-identity-fields"><label className="field-label">Display name<input value={displayName} maxLength={80} onChange={(event) => setDisplayName(event.target.value)} placeholder="SPI sensor interface"/></label><label className="field-label">Folder name<input className={!nameValid ? "invalid" : ""} value={folderName} maxLength={60} onChange={(event) => setFolderName(event.target.value)} spellCheck={false}/><small>{nameValid ? `projects/${folderName}` : "Use 06_lowercase_words format."}</small></label></div>
+            <label className="field-label">Project name<input className={!nameValid ? "invalid" : ""} value={projectName} maxLength={80} onChange={(event) => setProjectName(event.target.value)} placeholder="My UART Controller"/><small>{nameProblem || "Use spaces, mixed case, Unicode, hyphens, or underscores—no numbering convention required."}</small></label>
+            <label className="field-label">Save location<div className="location-picker"><input value={location} readOnly title={location}/><button type="button" className="secondary-button" onClick={() => void chooseLocation()} disabled={loading}><FolderOpen size={14}/> Browse…</button></div><small>Choose any writable folder. “{projectName.trim() || "Project name"}” owns its source, constraints, and build/ output there.</small></label>
             <label className="field-label board-select">Physical board<select value={selectedBoard?.id ?? ""} onChange={(event) => setBoardId(event.target.value)}>{compatibleBoards.map((board) => <option key={board.id} value={board.id}>{board.name}</option>)}</select></label>
             {selectedBoard && <div className="board-choice"><CircuitBoard size={19}/><div><strong>{selectedBoard.name}</strong><span>Sipeed board · {selectedBoard.programmer.transport}</span></div><span className="status-good"><ShieldCheck size={12}/> registered</span></div>}
             {mode === "custom" && selectedBoard && selectedTarget ? <div className="custom-project-fields">
@@ -130,7 +169,7 @@ export function ProjectWizard(): React.JSX.Element | null {
               <label className="field-label">Clock signal<input value={selectedBoard.clocks[0]?.name ?? ""} readOnly/><small>Pin identity comes from the registered board package.</small></label>
               <label className="field-label">Constraint path<input value={constraintPath} onChange={(event) => setConstraintPath(event.target.value)} spellCheck={false}/></label>
               {selectedBoard.timingConstraints?.length ? <label className="field-label">Timing constraint path<input value={timingPath} onChange={(event) => setTimingPath(event.target.value)} spellCheck={false}/></label> : null}
-              <div className="source-structure"><span>Portable source structure</span><code>rtl/</code><code>sim/</code><code>constraints/</code></div>
+              <div className="source-structure"><span>Portable paths follow this project automatically</span><code>rtl/</code><code>sim/</code><code>constraints/</code><code>build/</code></div>
             </div> : <ul className="creation-list"><li><Check size={13}/> RTL, simulation, constraints, and documentation</li><li><Check size={13}/> Board-specific build and programmer settings</li><li><Check size={13}/> Generated build files excluded</li></ul>}
           </section>
         </div>

@@ -3,5 +3,5 @@
   "identifier": "default",
   "description": "Minimal permissions for the local FPGA Studio window. Files, tools, and hardware are exposed only through audited application commands.",
   "windows": ["main"],
-  "permissions": ["core:default"]
+  "permissions": ["core:default", "dialog:allow-open"]
 }

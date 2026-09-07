@@ -20,6 +20,7 @@ import type {
   OptimizationExperiment,
   OptimizationSummary,
   ProjectNode,
+  ProjectReplaceSummary,
   ProjectSearchMatch,
   ProjectTemplate,
   PluginInfo,
@@ -129,6 +130,18 @@ export const bridge = {
     });
   },
 
+  async replaceProject(root: string, project: string, query: string, replacement: string): Promise<ProjectReplaceSummary> {
+    if (isDesktop()) return invoke<ProjectReplaceSummary>("replace_project_text", { root, project, query, replacement });
+    const matches = await this.searchProject(root, project, query);
+    return { filesChanged: new Set(matches.map((match) => match.file)).size, replacements: matches.length, files: [...new Set(matches.map((match) => match.file))] };
+  },
+
+  async createProjectEntry(root: string, project: string, path: string, directory: boolean): Promise<string> {
+    if (isDesktop()) return invoke<string>("create_project_entry", { root, project, path, directory });
+    const base = project === "." ? "" : `${project.replace(/\/$/, "")}/`;
+    return `${base}${path.replaceAll("\\", "/")}`;
+  },
+
   async projectTemplates(root: string): Promise<ProjectTemplate[]> {
     return isDesktop() ? invoke<ProjectTemplate[]>("list_project_templates", { root }) : demoTemplates;
   },
@@ -150,8 +163,8 @@ export const bridge = {
     return isDesktop() ? invoke<BoardProfile>("active_board", { root, project }) : demoBoard;
   },
 
-  async gitStatus(root: string): Promise<GitStatus> {
-    if (isDesktop()) return invoke<GitStatus>("read_git_status", { root });
+  async gitStatus(root: string, project: string): Promise<GitStatus> {
+    if (isDesktop()) return invoke<GitStatus>("read_git_status", { root, project });
     return { available: true, repository: true, executable: "git", version: "git version (preview)", branch: "main", upstream: "origin/main", ahead: 0, behind: 0, changes: [], message: "Working tree clean" };
   },
 
@@ -265,13 +278,13 @@ export const bridge = {
     return { id: experimentId, kind: "retime", title: "Preview experiment", status: success ? "complete" : "failed", createdAt: new Date().toISOString(), options: [], accepted: false };
   },
 
-  async createProject(root: string, name: string, templateId: string, displayName: string, boardId: string): Promise<WorkspaceSnapshot> {
-    if (isDesktop()) return invoke<WorkspaceSnapshot>("create_project", { root, name, templateId, displayName, boardId });
+  async createProject(root: string, name: string, location: string, templateId: string, displayName: string, boardId: string): Promise<WorkspaceSnapshot> {
+    if (isDesktop()) return invoke<WorkspaceSnapshot>("create_project", { root, name, location, templateId, displayName, boardId });
     return { root, project: displayName || name, projectPath: `projects/${name}`, tree: demoTree, recentProjects: [`projects/${name}`] };
   },
 
-  async createCustomProject(root: string, name: string, request: CustomProjectRequest): Promise<WorkspaceSnapshot> {
-    if (isDesktop()) return invoke<WorkspaceSnapshot>("create_custom_project", { root, name, request });
+  async createCustomProject(root: string, name: string, location: string, request: CustomProjectRequest): Promise<WorkspaceSnapshot> {
+    if (isDesktop()) return invoke<WorkspaceSnapshot>("create_custom_project", { root, name, location, request });
     return { root, project: request.displayName || name, projectPath: `projects/${name}`, tree: demoTree, recentProjects: [`projects/${name}`] };
   },
 

@@ -4,6 +4,8 @@ use serde::Deserialize;
 use std::collections::HashSet;
 use std::fs;
 
+const MAX_PLUGIN_MANIFEST_BYTES: u64 = 1024 * 1024;
+
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct PluginManifest {
@@ -24,6 +26,12 @@ pub fn list(root: &str) -> Result<Vec<PluginInfo>, String> {
         fs::read_dir(plugin_root).map_err(|error| format!("Cannot inspect plugins: {error}"))?
     {
         let entry = entry.map_err(|error| format!("Cannot read a plugin folder: {error}"))?;
+        let file_type = entry
+            .file_type()
+            .map_err(|error| format!("Cannot inspect a plugin folder: {error}"))?;
+        if file_type.is_symlink() || !file_type.is_dir() {
+            continue;
+        }
         let manifest_path = entry.path().join("plugin.json");
         if !manifest_path.is_file() {
             continue;
@@ -31,8 +39,22 @@ pub fn list(root: &str) -> Result<Vec<PluginInfo>, String> {
         if plugins.len() >= 100 {
             return Err("More than 100 plugin manifests were found".into());
         }
-        let parsed = fs::read(&manifest_path)
-            .map_err(|error| format!("Cannot read {}: {error}", manifest_path.display()))
+        let parsed = fs::metadata(&manifest_path)
+            .map_err(|error| format!("Cannot inspect {}: {error}", manifest_path.display()))
+            .and_then(|metadata| {
+                if metadata.len() > MAX_PLUGIN_MANIFEST_BYTES {
+                    Err(format!(
+                        "Plugin manifest {} exceeds the 1 MiB safety limit",
+                        manifest_path.display()
+                    ))
+                } else {
+                    Ok(())
+                }
+            })
+            .and_then(|()| {
+                fs::read(&manifest_path)
+                    .map_err(|error| format!("Cannot read {}: {error}", manifest_path.display()))
+            })
             .and_then(|content| {
                 serde_json::from_slice::<PluginManifest>(&content).map_err(|error| {
                     format!(
@@ -137,5 +159,22 @@ mod tests {
         assert!(items
             .iter()
             .any(|item| item.id == "fpga-studio.hdl-patterns" && item.valid));
+    }
+
+    #[test]
+    fn oversized_plugin_manifests_are_rejected_without_being_parsed() {
+        let root =
+            std::env::temp_dir().join(format!("fpga-plugin-size-test-{}", uuid::Uuid::new_v4()));
+        let plugin = root.join("plugins/oversized");
+        std::fs::create_dir_all(&plugin).unwrap();
+        std::fs::write(root.join("fpga.ps1"), "# marker\n").unwrap();
+        std::fs::write(plugin.join("plugin.json"), vec![b' '; 1024 * 1024 + 1]).unwrap();
+
+        let items = list(&root.to_string_lossy()).unwrap();
+        assert_eq!(items.len(), 1);
+        assert!(!items[0].valid);
+        assert!(items[0].message.contains("1 MiB safety limit"));
+
+        std::fs::remove_dir_all(root).unwrap();
     }
 }

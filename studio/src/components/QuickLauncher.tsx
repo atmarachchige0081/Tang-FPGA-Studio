@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Activity, Bug, CircuitBoard, FilePlus2, ListChecks, Moon, Network, Play, Radio, Save, ScanSearch, Search, Sun, Waves, X } from "lucide-react";
+import { confirmDiscardUnsaved } from "../lib/documents";
 import { useWorkbench } from "../store/workbench";
 import type { BuildAction, WorkbenchView } from "../types";
 
@@ -59,7 +60,11 @@ export function QuickLauncher({ onRun, onSave }: Props): React.JSX.Element | nul
       else if (key === "p" && !event.shiftKey) { event.preventDefault(); search("files"); }
       else if (key === "t" && !event.shiftKey) { event.preventDefault(); search("symbols"); }
       else if (key === "f" && event.shiftKey) { event.preventDefault(); search("text"); }
-      else if (key === "w" && state.activePath) { event.preventDefault(); state.closeFile(state.activePath); }
+      else if (key === "w" && state.activePath) {
+        event.preventDefault();
+        const active = state.tabs.find((tab) => tab.path === state.activePath);
+        if (!active || confirmDiscardUnsaved([active])) state.closeFile(state.activePath);
+      }
       else if (event.key === "Tab" && state.tabs.length > 1) {
         event.preventDefault();
         const current = state.tabs.findIndex((tab) => tab.path === state.activePath);

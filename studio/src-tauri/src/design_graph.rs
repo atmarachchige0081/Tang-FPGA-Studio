@@ -2,7 +2,7 @@ use crate::models::{
     AnalyzerConfig, DesignEvidence, DesignGraphEdge, DesignGraphNode, DesignIntelligenceGraph,
     EvidenceClass, PhysicalLocation, ResourceUsage, TimingTrace, TimingTraceSegment,
 };
-use crate::security::{canonical_workspace, safe_existing_path};
+use crate::security::{canonical_workspace, resolve_project_path};
 use chrono::Utc;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
@@ -27,7 +27,7 @@ struct GraphCache {
 
 pub fn read(root: &str, project: &str) -> Result<DesignIntelligenceGraph, String> {
     let workspace = canonical_workspace(root)?;
-    let project_path = safe_existing_path(&workspace, project)?;
+    let project_path = resolve_project_path(&workspace, project)?;
     let fingerprint = fingerprint(&project_path)?;
     let cache_path = project_path.join(".fpga-studio/design-graph.json");
     if let Ok(payload) = fs::read(&cache_path) {

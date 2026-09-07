@@ -1,5 +1,5 @@
 use crate::models::{NetlistEdge, NetlistGraph, NetlistNode};
-use crate::security::{canonical_workspace, safe_existing_path};
+use crate::security::{canonical_workspace, resolve_project_path, workspace_path_reference};
 use regex::Regex;
 use serde_json::Value;
 use std::collections::{BTreeSet, HashMap};
@@ -13,7 +13,7 @@ const MAX_VISIBLE_EDGES: usize = 5_000;
 
 pub fn read(root: &str, project: &str) -> Result<NetlistGraph, String> {
     let root = canonical_workspace(root)?;
-    let project = safe_existing_path(&root, project)?;
+    let project = resolve_project_path(&root, project)?;
     let path = project.join("build/top.json");
     let metadata = fs::metadata(&path)
         .map_err(|_| "No synthesized netlist exists yet. Run Build first.".to_owned())?;
@@ -27,14 +27,7 @@ pub fn read(root: &str, project: &str) -> Result<NetlistGraph, String> {
         &fs::read(&path).map_err(|error| format!("Cannot read netlist: {error}"))?,
     )
     .map_err(|error| format!("Synthesized netlist is invalid JSON: {error}"))?;
-    parse(
-        &payload,
-        &project,
-        path.strip_prefix(&root)
-            .unwrap_or(&path)
-            .to_string_lossy()
-            .replace('\\', "/"),
-    )
+    parse(&payload, &project, workspace_path_reference(&root, &path))
 }
 
 fn parse(payload: &Value, project: &Path, path: String) -> Result<NetlistGraph, String> {

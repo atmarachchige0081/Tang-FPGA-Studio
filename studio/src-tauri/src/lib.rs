@@ -21,8 +21,8 @@ use models::{
     AnalyzerCapture, AnalyzerConfig, AnalyzerWorkspace, BoardProfile, BuildAction,
     BuildHistoryEntry, BuildSummary, CommandResult, CustomProjectRequest, DesignIntelligenceGraph,
     DesignSnapshot, GitStatus, HdlIndex, HdlPattern, NetlistGraph, OptimizationExperiment,
-    OptimizationSummary, PluginInfo, ProjectSearchMatch, ProjectTemplate, SerialDevice,
-    SnapshotComparison, VerificationSummary, WaveformData, WorkspaceSnapshot,
+    OptimizationSummary, PluginInfo, ProjectReplaceSummary, ProjectSearchMatch, ProjectTemplate,
+    SerialDevice, SnapshotComparison, VerificationSummary, WaveformData, WorkspaceSnapshot,
 };
 use runner::JobRegistry;
 use tauri::{AppHandle, State};
@@ -76,6 +76,32 @@ async fn search_project_text(
 }
 
 #[tauri::command]
+async fn replace_project_text(
+    root: String,
+    project: String,
+    query: String,
+    replacement: String,
+) -> Result<ProjectReplaceSummary, String> {
+    blocking("Project replacement", move || {
+        project::replace_text(&root, &project, &query, &replacement)
+    })
+    .await
+}
+
+#[tauri::command]
+async fn create_project_entry(
+    root: String,
+    project: String,
+    path: String,
+    directory: bool,
+) -> Result<String, String> {
+    blocking("Project entry creation", move || {
+        project::create_entry(&root, &project, &path, directory)
+    })
+    .await
+}
+
+#[tauri::command]
 async fn list_project_templates(root: String) -> Result<Vec<ProjectTemplate>, String> {
     blocking("Template scan", move || project::templates(&root)).await
 }
@@ -96,8 +122,8 @@ async fn active_board(root: String, project: String) -> Result<BoardProfile, Str
 }
 
 #[tauri::command]
-async fn read_git_status(root: String) -> Result<GitStatus, String> {
-    blocking("Git status", move || git::status(&root)).await
+async fn read_git_status(root: String, project: String) -> Result<GitStatus, String> {
+    blocking("Git status", move || git::status(&root, &project)).await
 }
 
 #[tauri::command]
@@ -239,12 +265,20 @@ async fn finish_optimization_experiment(
 async fn create_project(
     root: String,
     name: String,
+    location: String,
     template_id: String,
     display_name: String,
     board_id: String,
 ) -> Result<WorkspaceSnapshot, String> {
     blocking("Project creation", move || {
-        project::create_project(&root, &name, &template_id, &display_name, &board_id)
+        project::create_project(
+            &root,
+            &name,
+            &location,
+            &template_id,
+            &display_name,
+            &board_id,
+        )
     })
     .await
 }
@@ -253,10 +287,11 @@ async fn create_project(
 async fn create_custom_project(
     root: String,
     name: String,
+    location: String,
     request: CustomProjectRequest,
 ) -> Result<WorkspaceSnapshot, String> {
     blocking("Custom project creation", move || {
-        project::create_custom_project(&root, &name, request)
+        project::create_custom_project(&root, &name, &location, request)
     })
     .await
 }
@@ -387,6 +422,7 @@ async fn read_netlist(root: String, project: String) -> Result<NetlistGraph, Str
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() -> Result<(), String> {
     tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
         .manage(JobRegistry::default())
         .manage(SerialRegistry::default())
         .invoke_handler(tauri::generate_handler![
@@ -395,6 +431,8 @@ pub fn run() -> Result<(), String> {
             read_text_file,
             write_text_file,
             search_project_text,
+            replace_project_text,
+            create_project_entry,
             list_project_templates,
             list_hdl_patterns,
             list_boards,
@@ -454,7 +492,7 @@ pub fn smoke_test() -> Result<(), String> {
     if providers.iter().any(|provider| !provider.valid) {
         return Err("At least one bundled plugin provider is invalid".into());
     }
-    let _git = git::status(&snapshot.root)?;
+    let _git = git::status(&snapshot.root, &snapshot.project_path)?;
     let _hdl = hdl::index(&snapshot.root, &snapshot.project_path)?;
     Ok(())
 }

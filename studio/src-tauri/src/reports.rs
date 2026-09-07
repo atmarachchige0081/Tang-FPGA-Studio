@@ -2,19 +2,26 @@ use crate::models::{
     BuildAction, BuildHistoryEntry, BuildHistoryFile, BuildSummary, ClockTiming, CriticalPath,
     ResourceUsage,
 };
-use crate::security::{canonical_workspace, safe_existing_path};
+use crate::security::{canonical_workspace, resolve_project_path};
 use chrono::{DateTime, Utc};
 use serde_json::Value;
 use std::fs;
 use std::path::Path;
 
+const MAX_TIMING_REPORT_BYTES: u64 = 64 * 1024 * 1024;
+const MAX_HISTORY_BYTES: u64 = 4 * 1024 * 1024;
+
 pub fn build_summary(root: &str, project: &str) -> Result<BuildSummary, String> {
     let root = canonical_workspace(root)?;
-    let project = safe_existing_path(&root, project)?;
+    let project = resolve_project_path(&root, project)?;
     let report_path = project.join("build/timing.json");
     let bitstream_path = project.join("build/top.fs");
     if !report_path.is_file() {
         return Ok(empty_summary(file_size(&bitstream_path)));
+    }
+    let report_bytes = file_size(&report_path).unwrap_or(0);
+    if report_bytes > MAX_TIMING_REPORT_BYTES {
+        return Err("Timing report exceeds the 64 MiB safety limit".into());
     }
     let data: Value = serde_json::from_slice(
         &fs::read(&report_path).map_err(|error| format!("Cannot read timing report: {error}"))?,
@@ -233,7 +240,7 @@ fn file_size(path: &Path) -> Option<u64> {
 
 pub fn build_history(root: &str, project: &str) -> Result<Vec<BuildHistoryEntry>, String> {
     let root = canonical_workspace(root)?;
-    let project = safe_existing_path(&root, project)?;
+    let project = resolve_project_path(&root, project)?;
     read_history_file(&project)
 }
 
@@ -246,7 +253,7 @@ pub fn record_history(
 ) -> Result<(), String> {
     let summary = build_summary(root, project)?;
     let root = canonical_workspace(root)?;
-    let project = safe_existing_path(&root, project)?;
+    let project = resolve_project_path(&root, project)?;
     let mut entries = read_history_file(&project)?;
     let build_number = entries.last().map_or(1, |entry| entry.build_number + 1);
     entries.push(BuildHistoryEntry {
@@ -296,6 +303,9 @@ pub(crate) fn read_history_file(project: &Path) -> Result<Vec<BuildHistoryEntry>
     let path = project.join(".fpga-studio/build-history.json");
     if !path.is_file() {
         return Ok(Vec::new());
+    }
+    if file_size(&path).unwrap_or(0) > MAX_HISTORY_BYTES {
+        return Err("Build history exceeds the 4 MiB safety limit".into());
     }
     let history: BuildHistoryFile = serde_json::from_slice(
         &fs::read(&path).map_err(|error| format!("Cannot read build history: {error}"))?,

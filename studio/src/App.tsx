@@ -15,6 +15,7 @@ import { AnalysisView } from "./components/AnalysisView";
 import { VerificationView } from "./components/VerificationView";
 import { DesignHealthView, LogicAnalyzerView, TraceabilityView } from "./components/HardwareIntelligence";
 import { bridge } from "./lib/bridge";
+import { hasUnsavedChanges } from "./lib/documents";
 import { useWorkbench } from "./store/workbench";
 import type { BuildAction, BuildEvent, WorkbenchView } from "./types";
 
@@ -32,7 +33,18 @@ const viewComponents: Record<Exclude<WorkbenchView, "editor" | "verification" | 
 function Workbench(): React.JSX.Element {
   const store = useWorkbench();
   const runLock = useRef(false);
+  const saveLock = useRef(false);
   const documentationCaptureApplied = useRef(false);
+
+  useEffect(() => {
+    const protectUnsaved = (event: BeforeUnloadEvent) => {
+      if (!hasUnsavedChanges(useWorkbench.getState().tabs)) return;
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", protectUnsaved);
+    return () => window.removeEventListener("beforeunload", protectUnsaved);
+  }, []);
 
   useEffect(() => {
     const media = window.matchMedia("(prefers-color-scheme: light)");
@@ -70,7 +82,7 @@ function Workbench(): React.JSX.Element {
         bridge.activeBoard(snapshot.root, snapshot.projectPath),
       ]);
       if (!disposed) { store.setBuild(summary); store.setBoard(board); }
-      void bridge.gitStatus(snapshot.root).then((status) => { if (!disposed) store.setGit(status); }).catch(() => undefined);
+      void bridge.gitStatus(snapshot.root, snapshot.projectPath).then((status) => { if (!disposed) store.setGit(status); }).catch(() => undefined);
     })().catch((error: unknown) => {
       store.appendOutput({ jobId: "startup", phase: "workspace", stream: "stderr", message: error instanceof Error ? error.message : String(error), timestamp: new Date().toISOString() });
     });
@@ -156,14 +168,23 @@ function Workbench(): React.JSX.Element {
   }, [store]);
 
   const save = useCallback(async () => {
+    if (saveLock.current) return;
     const active = store.tabs.find((tab) => tab.path === store.activePath);
     if (!active) return;
-    await bridge.writeText(store.root, active.path, active.content);
-    store.markSaved(active.path);
-    store.appendOutput({ jobId: "editor", phase: "save", stream: "system", message: `Saved ${active.path}`, timestamp: new Date().toISOString() });
-    window.dispatchEvent(new Event("fpga-studio:analysis-refresh"));
-    window.dispatchEvent(new Event("fpga-studio:verification-refresh"));
-    window.dispatchEvent(new Event("fpga-studio:intelligence-refresh"));
+    saveLock.current = true;
+    try {
+      await bridge.writeText(store.root, active.path, active.content);
+      store.markSaved(active.path, active.content);
+      store.appendOutput({ jobId: "editor", phase: "save", stream: "system", message: `Saved ${active.path}`, timestamp: new Date().toISOString() });
+      window.dispatchEvent(new Event("fpga-studio:analysis-refresh"));
+      window.dispatchEvent(new Event("fpga-studio:verification-refresh"));
+      window.dispatchEvent(new Event("fpga-studio:intelligence-refresh"));
+    } catch (error) {
+      store.setBottomPanel("output");
+      store.appendOutput({ jobId: "editor", phase: "save", stream: "stderr", message: `Could not save ${active.path}: ${error instanceof Error ? error.message : String(error)}`, timestamp: new Date().toISOString() });
+    } finally {
+      saveLock.current = false;
+    }
   }, [store]);
 
   const stop = useCallback(async () => {

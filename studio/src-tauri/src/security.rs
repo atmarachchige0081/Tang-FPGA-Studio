@@ -47,6 +47,33 @@ pub fn safe_existing_path(root: &Path, relative: &str) -> Result<PathBuf, String
     Ok(candidate)
 }
 
+/// Resolve a user-selected FPGA project. Relative paths stay confined to the
+/// Studio workspace; absolute paths are accepted only when they identify an
+/// existing project directory with its own configuration file.
+pub fn resolve_project_path(workspace: &Path, project: &str) -> Result<PathBuf, String> {
+    let path = Path::new(project);
+    let candidate = if path.is_absolute() {
+        std::fs::canonicalize(path)
+            .map_err(|error| format!("Project path is unavailable: {error}"))?
+    } else {
+        safe_existing_path(workspace, project)?
+    };
+    if !candidate.is_dir() || !candidate.join("fpga.config.psd1").is_file() {
+        return Err("Select a project folder containing fpga.config.psd1".into());
+    }
+    Ok(candidate)
+}
+
+pub fn workspace_path_reference(workspace: &Path, path: &Path) -> String {
+    if let Ok(relative) = path.strip_prefix(workspace) {
+        let value = relative.to_string_lossy().replace('\\', "/");
+        return if value.is_empty() { ".".into() } else { value };
+    }
+    child_process_path(path)
+        .to_string_lossy()
+        .replace('\\', "/")
+}
+
 pub fn safe_file_path(root: &Path, relative: &str) -> Result<PathBuf, String> {
     validate_relative(relative)?;
     let candidate = root.join(relative);

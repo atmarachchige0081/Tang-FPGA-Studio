@@ -86,6 +86,12 @@ export interface ProjectSearchMatch {
   preview: string;
 }
 
+export interface ProjectReplaceSummary {
+  filesChanged: number;
+  replacements: number;
+  files: string[];
+}
+
 export interface BuildSummary {
   status: "ready" | "passed" | "failed" | "running";
   fmaxMHz: number | null;

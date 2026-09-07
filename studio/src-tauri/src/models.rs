@@ -136,6 +136,14 @@ pub struct ProjectSearchMatch {
     pub preview: String,
 }
 
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectReplaceSummary {
+    pub files_changed: usize,
+    pub replacements: usize,
+    pub files: Vec<String>,
+}
+
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct BoardBuild {

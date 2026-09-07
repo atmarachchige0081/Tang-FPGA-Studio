@@ -2,7 +2,7 @@ use crate::models::{
     ClockDomain, Diagnostic, DiagnosticSeverity, HdlIndex, HdlInstance, HdlModule, HdlPort,
     HdlReference, HdlSignal, HdlSymbol,
 };
-use crate::security::{canonical_workspace, safe_existing_path};
+use crate::security::{canonical_workspace, resolve_project_path, workspace_path_reference};
 use regex::Regex;
 use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
@@ -25,7 +25,7 @@ thread_local! {
 
 pub fn index(root: &str, project: &str) -> Result<HdlIndex, String> {
     let root = canonical_workspace(root)?;
-    let project = safe_existing_path(&root, project)?;
+    let project = resolve_project_path(&root, project)?;
     let mut source_paths = Vec::new();
     collect_sources(&project.join("rtl"), &mut source_paths)?;
     source_paths.sort();
@@ -49,11 +49,7 @@ pub fn index(root: &str, project: &str) -> Result<HdlIndex, String> {
     let mut source_contents = Vec::<(String, String)>::new();
 
     for path in source_paths {
-        let relative = path
-            .strip_prefix(&root)
-            .map_err(|_| "HDL source escaped the workspace")?
-            .to_string_lossy()
-            .replace('\\', "/");
+        let relative = workspace_path_reference(&root, &path);
         files.push(relative.clone());
         let metadata = fs::metadata(&path)
             .map_err(|error| format!("Cannot inspect {}: {error}", path.display()))?;
@@ -161,14 +157,10 @@ pub fn index(root: &str, project: &str) -> Result<HdlIndex, String> {
             "HDL003",
             &format!("Configured top module '{top}' was not found"),
             "Set Top in fpga.config.psd1 to an existing module, or add the missing module.",
-            Some(
-                project
-                    .join("fpga.config.psd1")
-                    .strip_prefix(&root)
-                    .unwrap_or(Path::new("fpga.config.psd1"))
-                    .to_string_lossy()
-                    .replace('\\', "/"),
-            ),
+            Some(workspace_path_reference(
+                &root,
+                &project.join("fpga.config.psd1"),
+            )),
             Some(1),
             Some(1),
         ));
@@ -282,7 +274,7 @@ fn analyze_source(content: &str, file: &str) -> Vec<Diagnostic> {
             Some(1),
         ));
     }
-    let word = Regex::new(r"[A-Za-z_]\w*").expect("identifier regex");
+    let word = Regex::new(r"[A-Za-z_][A-Za-z0-9_]*").expect("identifier regex");
     let mut use_counts = HashMap::<String, usize>::new();
     for identifier in word.find_iter(content) {
         *use_counts.entry(identifier.as_str().into()).or_default() += 1;
@@ -330,7 +322,7 @@ fn analyze_source(content: &str, file: &str) -> Vec<Diagnostic> {
         }
     }
 
-    let assign = Regex::new(r"(?m)\bassign\s+([A-Za-z_]\w*)\s*=\s*([^;]+);")
+    let assign = Regex::new(r"(?m)\bassign\s+([A-Za-z_][A-Za-z0-9_]*)\s*=\s*([^;]+);")
         .expect("continuous assignment regex");
     let literal =
         Regex::new(r"(?i)^\s*(\d+)'s?[bodh][0-9a-f_xz?]+\s*$").expect("sized literal regex");
@@ -408,7 +400,7 @@ fn analyze_source(content: &str, file: &str) -> Vec<Diagnostic> {
 
     result.extend(reset_polarity_diagnostics(content, file));
     let generated = Regex::new(
-        r"(?m)\b([A-Za-z_]\w*(?:clk|clock)[A-Za-z_0-9]*)\s*(?:<=|=)\s*~\s*([A-Za-z_]\w*)\b",
+        r"(?m)\b([A-Za-z_][A-Za-z0-9_]*(?:clk|clock)[A-Za-z_0-9]*)\s*(?:<=|=)\s*~\s*([A-Za-z_][A-Za-z0-9_]*)\b",
     )
     .expect("generated clock regex");
     for captures in generated.captures_iter(content) {
@@ -435,7 +427,7 @@ fn analyze_source(content: &str, file: &str) -> Vec<Diagnostic> {
 fn reset_polarity_diagnostics(content: &str, file: &str) -> Vec<Diagnostic> {
     let block =
         Regex::new(r"(?s)always_(?:ff|latch)\s*@\s*\(([^)]*)\)").expect("always sensitivity regex");
-    let event = Regex::new(r"\b(posedge|negedge)\s+([A-Za-z_]\w*)").expect("event regex");
+    let event = Regex::new(r"\b(posedge|negedge)\s+([A-Za-z_][A-Za-z0-9_]*)").expect("event regex");
     let mut result = Vec::new();
     for captures in block.captures_iter(content) {
         let Some(sensitivity) = captures.get(1) else {
@@ -485,10 +477,10 @@ fn reset_polarity_diagnostics(content: &str, file: &str) -> Vec<Diagnostic> {
 }
 
 fn parse_modules(content: &str, file: &str) -> Vec<HdlModule> {
-    let module = Regex::new(r"(?m)^\s*module\s+([A-Za-z_]\w*)").expect("module regex");
+    let module = Regex::new(r"(?m)^\s*module\s+([A-Za-z_][A-Za-z0-9_]*)").expect("module regex");
     let endmodule = Regex::new(r"(?m)^\s*endmodule\b").expect("endmodule regex");
     let port = Regex::new(
-        r"\b(input|output|inout)\b\s*((?:(?:wire|reg|logic|signed|unsigned|integer)\s+)*(?:\[[^\]]+\]\s*)?)([A-Za-z_]\w*)",
+        r"\b(input|output|inout)\b\s*((?:(?:wire|reg|logic|signed|unsigned|integer)\s+)*(?:\[[^\]]+\]\s*)?)([A-Za-z_][A-Za-z0-9_]*)",
     )
     .expect("port regex");
     let starts: Vec<_> = module.captures_iter(content).collect();
@@ -544,9 +536,10 @@ fn parse_modules(content: &str, file: &str) -> Vec<HdlModule> {
 }
 
 fn parse_instances(content: &str, file: &str, modules: &[HdlModule]) -> Vec<HdlInstance> {
-    let instance =
-        Regex::new(r"(?m)^\s*([A-Za-z_]\w*)\s+(?:#\s*\([^;]*?\)\s*)?([A-Za-z_]\w*)\s*\(")
-            .expect("instance regex");
+    let instance = Regex::new(
+        r"(?m)^\s*([A-Za-z_][A-Za-z0-9_]*)\s+(?:#\s*\([^;]*?\)\s*)?([A-Za-z_][A-Za-z0-9_]*)\s*\(",
+    )
+    .expect("instance regex");
     let keywords: HashSet<&str> = [
         "module",
         "begin",
@@ -606,7 +599,8 @@ fn parse_instances(content: &str, file: &str, modules: &[HdlModule]) -> Vec<HdlI
 fn parse_clock_domains(content: &str, file: &str, modules: &[HdlModule]) -> Vec<ClockDomain> {
     let block =
         Regex::new(r"(?s)\b(?:always_ff|always)\s*@\s*\(([^)]*)\)").expect("clock block regex");
-    let event = Regex::new(r"\b(posedge|negedge)\s+([A-Za-z_]\w*)").expect("clock event regex");
+    let event =
+        Regex::new(r"\b(posedge|negedge)\s+([A-Za-z_][A-Za-z0-9_]*)").expect("clock event regex");
     let module_pattern = Regex::new(r"(?m)^\s*module\s+").expect("module keyword regex");
     let module_offsets: Vec<(usize, String)> = module_pattern
         .find_iter(content)
@@ -650,7 +644,7 @@ fn parse_declaration_symbols(content: &str, file: &str) -> Vec<HdlSymbol> {
         r"(?m)^\s*(input|output|inout|logic|wire|reg|parameter|localparam)\b([^;\n]*)(?:;|,|\))",
     )
     .expect("declaration regex");
-    let identifier = Regex::new(r"[A-Za-z_]\w*").expect("identifier regex");
+    let identifier = Regex::new(r"[A-Za-z_][A-Za-z0-9_]*").expect("identifier regex");
     let ignored = [
         "logic",
         "wire",
@@ -690,7 +684,7 @@ fn parse_declaration_symbols(content: &str, file: &str) -> Vec<HdlSymbol> {
 
 fn parse_named_symbols(content: &str, file: &str) -> Vec<HdlSymbol> {
     let declaration = Regex::new(
-        r"(?m)^\s*(function|task|package|typedef)\b(?:\s+(?:automatic|logic|integer|enum|struct|signed|unsigned))*\s+([A-Za-z_]\w*)|^\s*`define\s+([A-Za-z_]\w*)",
+        r"(?m)^\s*(function|task|package|typedef)\b(?:\s+(?:automatic|logic|integer|enum|struct|signed|unsigned))*\s+([A-Za-z_][A-Za-z0-9_]*)|^\s*`define\s+([A-Za-z_][A-Za-z0-9_]*)",
     )
     .expect("named HDL declaration regex");
     declaration
@@ -720,7 +714,7 @@ fn parse_references(
     indexed_names: &HashSet<String>,
     symbols: &[HdlSymbol],
 ) -> Vec<HdlReference> {
-    let identifier = Regex::new(r"[A-Za-z_]\w*").expect("reference identifier regex");
+    let identifier = Regex::new(r"[A-Za-z_][A-Za-z0-9_]*").expect("reference identifier regex");
     let declarations: HashSet<(String, u32, u32)> = symbols
         .iter()
         .filter(|symbol| symbol.file == file)
@@ -748,7 +742,7 @@ fn parse_hdl_signals(content: &str, file: &str, modules: &[HdlModule]) -> Vec<Hd
         r"(?m)^\s*(input|output|inout|logic|wire|reg)\b\s*(?:(?:logic|wire|reg|signed|unsigned)\b\s*)*(?:\[\s*(\d+)\s*:\s*(\d+)\s*\])?\s*([^;\n\)]+)(?:;|\)|$)",
     )
     .expect("signal declaration regex");
-    let identifier = Regex::new(r"^([A-Za-z_]\w*)").expect("signal identifier regex");
+    let identifier = Regex::new(r"^([A-Za-z_][A-Za-z0-9_]*)").expect("signal identifier regex");
     let mut result = Vec::new();
     for captures in declaration.captures_iter(content) {
         let Some(full) = captures.get(0) else {
@@ -885,7 +879,7 @@ fn collect_sources(directory: &Path, result: &mut Vec<PathBuf>) -> Result<(), St
 
 fn configured_top(project: &Path) -> String {
     let content = fs::read_to_string(project.join("fpga.config.psd1")).unwrap_or_default();
-    Regex::new(r#"(?m)^\s*Top\s*=\s*['\"]([A-Za-z_]\w*)['\"]"#)
+    Regex::new(r#"(?m)^\s*Top\s*=\s*['\"]([A-Za-z_][A-Za-z0-9_]*)['\"]"#)
         .expect("top regex")
         .captures(&content)
         .and_then(|captures| captures.get(1))
@@ -1067,6 +1061,7 @@ mod tests {
             std::env::temp_dir().join(format!("fpga-studio-empty-hdl-{}", uuid::Uuid::new_v4()));
         fs::create_dir_all(&empty).expect("empty project");
         fs::write(empty.join("fpga.ps1"), "# marker").expect("marker");
+        fs::write(empty.join("fpga.config.psd1"), "@{ Top='top' }\n").expect("config");
         let empty_result = index(&empty.to_string_lossy(), ".").expect("empty index");
         assert!(empty_result
             .diagnostics

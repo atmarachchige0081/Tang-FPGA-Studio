@@ -101,6 +101,17 @@ kbd { padding: 1px 5px; border: 1px solid var(--line); border-radius: 4px; backg
 .sidebar-heading div { display: flex; }
 .sidebar-heading button { display: grid; place-items: center; width: 24px; height: 24px; padding: 0; border: 0; background: transparent; color: var(--text-muted); border-radius: 4px; }
 .sidebar-heading button:hover { background: var(--surface-hover); color: var(--text); }
+.explorer-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; padding: 6px 7px; border-top: 1px solid var(--line-subtle); background: var(--surface-2); }
+.explorer-actions button { min-width: 0; height: 27px; display: flex; align-items: center; gap: 5px; padding: 0 7px; border: 1px solid var(--line); background: var(--surface); color: var(--text-soft); font-size: 9px; text-align: left; }
+.explorer-actions button:last-child { grid-column: 1 / -1; }
+.explorer-actions button:hover { border-color: var(--accent); background: var(--surface-hover); color: var(--text); }
+.explorer-create { display: grid; gap: 6px; padding: 8px; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); background: var(--surface-2); }
+.explorer-create > div { display: flex; align-items: center; justify-content: space-between; color: var(--text-soft); font-size: 9px; text-transform: uppercase; letter-spacing: .05em; }
+.explorer-create > div span { display: flex; align-items: center; gap: 5px; }
+.explorer-create > div button { display: grid; place-items: center; width: 21px; height: 21px; padding: 0; border: 0; background: transparent; color: var(--text-muted); }
+.explorer-create input { min-width: 0; height: 28px; padding: 0 7px; border: 1px solid var(--accent); outline: 0; background: var(--surface); color: var(--text); font: 9px "JetBrains Mono", monospace; }
+.explorer-create small { color: var(--text-muted); font-size: 8px; }
+.explorer-create > .primary-button { height: 27px; justify-self: end; padding: 0 12px; }
 .project-heading { height: 28px; display: flex; align-items: center; gap: 5px; padding: 0 8px; background: var(--surface-2); border-top: 1px solid var(--line-subtle); border-bottom: 1px solid var(--line-subtle); font-size: 10px; letter-spacing: .04em; }
 .tree-scroll { flex: 1; min-height: 50px; padding: 4px 0; overflow: auto; }
 .tree-row { width: 100%; min-width: 0; height: 25px; display: flex; align-items: center; gap: 5px; padding-right: 6px; border: 0; background: transparent; color: var(--text-soft); text-align: left; white-space: nowrap; }
@@ -475,6 +486,8 @@ kbd { padding: 1px 5px; border: 1px solid var(--line); border-radius: 4px; backg
 .field-label select { width: 100%; height: 33px; padding: 0 9px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); color: var(--text); text-transform: none; letter-spacing: normal; }
 .board-select { margin-bottom: 8px; }
 .field-label small { color: var(--text-muted); font-weight: 400; letter-spacing: normal; text-transform: none; }
+.location-picker { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 7px; }
+.location-picker .secondary-button { min-width: 96px; justify-content: center; white-space: nowrap; }
 .board-choice { display: grid; grid-template-columns: 35px 1fr auto; align-items: center; gap: 9px; padding: 11px; border: 1px solid color-mix(in srgb, var(--green) 30%, var(--line)); border-radius: 8px; background: rgb(67 215 160 / 5%); }
 .board-choice > svg { color: var(--purple); }
 .board-choice > div { display: flex; flex-direction: column; }
@@ -1235,6 +1248,12 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline-width:
 .workspace-search-input { height: 35px; display: flex; align-items: center; gap: 5px; margin: 7px; padding: 0 7px; border: 1px solid var(--line); background: var(--surface-2); color: var(--text-muted); }
 .workspace-search-input:focus-within { border-color: var(--accent); }
 .workspace-search-input input { min-width: 0; flex: 1; border: 0; outline: 0; background: transparent; color: var(--text); font-size: 10px; }
+.workspace-search-input .replace-toggle { display: grid; place-items: center; width: 18px; height: 22px; padding: 0; border: 0; background: transparent; color: var(--text-muted); }
+.search-replace-row { height: 35px; display: flex; align-items: center; gap: 5px; margin: -3px 7px 7px; padding: 0 5px 0 7px; border: 1px solid var(--line); background: var(--surface-2); }
+.search-replace-row:focus-within { border-color: var(--accent); }
+.search-replace-row input { min-width: 0; flex: 1; border: 0; outline: 0; background: transparent; color: var(--text); font-size: 10px; }
+.search-replace-row button { display: grid; place-items: center; width: 25px; height: 25px; padding: 0; border: 0; background: transparent; color: var(--text-muted); }
+.search-replace-row button:hover:not(:disabled) { background: var(--surface-hover); color: var(--accent-strong); }
 .search-results { min-height: 0; flex: 1; overflow: auto; border-top: 1px solid var(--line-subtle); }
 .search-results > button { width: 100%; min-height: 48px; display: flex; flex-direction: column; justify-content: center; gap: 2px; padding: 5px 8px; border: 0; border-bottom: 1px solid var(--line-subtle); background: transparent; color: var(--text-soft); text-align: left; }
 .search-results > button:hover { background: var(--surface-hover); }
