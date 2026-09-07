@@ -2,6 +2,16 @@
 
 All notable user-facing changes are recorded here.
 
+## 3.3.1 — 2026-09-07
+
+### Packaging hotfix
+
+- Preserved the immutable v3.3.0 release and corrected the synchronized
+  one-file installer layout so Rust can embed the shared project `AGENTS.md`
+  guide during its native build.
+- Added an installer contract regression requiring the compile-time and
+  packaged project guides to both exist and remain byte-identical.
+
 ## 3.3.0 — 2026-09-07
 
 ### Project workflow

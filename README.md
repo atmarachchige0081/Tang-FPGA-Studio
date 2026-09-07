@@ -3,7 +3,7 @@
 [![Quality gates](https://github.com/atmarachchige0081/Tang-FPGA-Studio/actions/workflows/quality-gates.yml/badge.svg)](https://github.com/atmarachchige0081/Tang-FPGA-Studio/actions/workflows/quality-gates.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-6c63ff.svg)](LICENSE)
 [![Desktop: Tauri + Rust](https://img.shields.io/badge/desktop-Tauri%20%2B%20Rust-4f9cff.svg)](studio/)
-[![Release: v3.3.0](https://img.shields.io/badge/release-v3.3.0-2d91b8.svg)](CHANGELOG.md)
+[![Release: v3.3.1](https://img.shields.io/badge/release-v3.3.1-2d91b8.svg)](CHANGELOG.md)
 
 An open-source, beginner-friendly FPGA IDE and development environment for
 Sipeed Tang Nano, Tang Primer, and Tang Console boards. Simulate, inspect waveforms, lint,
@@ -82,7 +82,7 @@ See the [v3.2.2 hotfix notes](docs/RELEASE_3.2.2.md).
 **v3.3 project workflow release:** projects may use natural names and a chosen
 workspace location; Explorer file/folder creation, refresh, project-wide
 find/replace, durable saves, and generated `AGENTS.md` guidance now form one
-complete workflow. See the [v3.3 release notes](docs/RELEASE_3.3.0.md).
+complete workflow. See the [v3.3.1 release notes](docs/RELEASE_3.3.1.md).
 
 ## Beginner desktop IDE
 
