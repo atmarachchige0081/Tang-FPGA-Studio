@@ -1645,10 +1645,7 @@ mod tests {
     fn identifiers_and_secrets_are_safely_handled() {
         assert!(id_key(&json!({ "bad": true })).is_err());
         let sample = format!("token sk-{} end", "x".repeat(20));
-        assert_eq!(
-            redact_text(&sample),
-            "token [REDACTED] end"
-        );
+        assert_eq!(redact_text(&sample), "token [REDACTED] end");
     }
 
     #[test]
