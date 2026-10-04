@@ -189,7 +189,7 @@ const configureMonaco: BeforeMount = (monaco) => {
 export function EditorWorkspace(): React.JSX.Element {
   const {
     root, projectPath, tree, tabs, activePath, theme, updateFile, closeFile, openFile, setDiagnostics,
-    setHdlIndex, navigation, clearNavigation, navigateTo, appendOutput,
+    setHdlIndex, navigation, clearNavigation, navigateTo, appendOutput, setEditorSelection, setEditorCursor,
   } = useWorkbench();
   const [index, setIndex] = useState<HdlIndex>(liveIndex);
   const editorRef = useRef<MonacoEditor | null>(null);
@@ -250,6 +250,10 @@ export function EditorWorkspace(): React.JSX.Element {
     monacoApi = monaco;
     editorRef.current = editor;
     editor.addCommand(monaco.KeyCode.F12, () => void openSymbol(editor));
+    editor.onDidChangeCursorSelection(({ selection }) => {
+      setEditorSelection((editor.getModel()?.getValueInRange(selection) ?? "").slice(0, 12_000));
+      setEditorCursor(selection.positionLineNumber, selection.positionColumn);
+    });
     applyHdlMarkers();
   };
 

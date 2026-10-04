@@ -14,6 +14,7 @@ import { DashboardView, HardwareView, NetlistView, UartView, WaveformView, Welco
 import { AnalysisView } from "./components/AnalysisView";
 import { VerificationView } from "./components/VerificationView";
 import { DesignHealthView, LogicAnalyzerView, TraceabilityView } from "./components/HardwareIntelligence";
+import { AiPanel } from "./ai/AiPanel";
 import { bridge } from "./lib/bridge";
 import { hasUnsavedChanges } from "./lib/documents";
 import { useWorkbench } from "./store/workbench";
@@ -65,6 +66,10 @@ function Workbench(): React.JSX.Element {
       if (event.ctrlKey && event.shiftKey && event.key.toLowerCase() === "l") {
         event.preventDefault();
         store.setTheme(store.theme === "light" ? "dark" : "light");
+      }
+      if (event.ctrlKey && event.shiftKey && event.key.toLowerCase() === "a") {
+        event.preventDefault();
+        store.toggleAiPanel();
       }
     };
     window.addEventListener("keydown", shortcuts);
@@ -209,6 +214,7 @@ function Workbench(): React.JSX.Element {
         <CommandBar onRun={(action) => void run(action)} onSave={() => void save()} onStop={() => void stop()} />
         <div className="content-and-dock"><div className="content-surface">{content}</div><BottomDock /></div>
       </main>
+      {store.aiPanelOpen && <AiPanel />}
     </div>
     <StatusBar />
   </div><ProjectWizard /><ReleaseNotes /><QuickLauncher onRun={(action) => void run(action)} onSave={() => void save()} /></>;

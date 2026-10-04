@@ -1,4 +1,4 @@
-import { Blocks, Boxes, CircuitBoard, Files, GitBranch, Search } from "lucide-react";
+import { Blocks, Bot, Boxes, CircuitBoard, Files, GitBranch, Search } from "lucide-react";
 import type { Activity } from "../types";
 import { useWorkbench } from "../store/workbench";
 
@@ -12,12 +12,13 @@ const activities: Array<{ id: Activity; label: string; icon: React.ComponentType
 ];
 
 export function ActivityBar(): React.JSX.Element {
-  const { activity, setActivity, setView, board } = useWorkbench();
+  const { activity, setActivity, setView, board, aiPanelOpen, toggleAiPanel } = useWorkbench();
   return (
     <nav className="activitybar" aria-label="Primary navigation">
       {activities.map(({ id, label, icon: Icon }) => (
         <button key={id} className={activity === id ? "active" : ""} onClick={() => setActivity(id)} title={label} aria-label={label}><Icon size={21} /></button>
       ))}
+      <button className={aiPanelOpen ? "active" : ""} onClick={toggleAiPanel} title="AI Assistant" aria-label="Toggle AI Assistant"><Bot size={21}/></button>
       <span className="activity-spacer" />
       <button title={`Open hardware manager · ${board?.name ?? "board loading"}`} aria-label="Open hardware manager" onClick={() => setView("hardware")}><span className="board-dot" /></button>
     </nav>

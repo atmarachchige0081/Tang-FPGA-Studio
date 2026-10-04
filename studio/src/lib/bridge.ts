@@ -1,6 +1,12 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import type {
+  AiAccountStatus,
+  AiApprovalDecision,
+  AiEvent,
+  AiIdeContext,
+  AiLoginResult,
+  AiProviderStatus,
   AnalyzerCapture,
   AnalyzerConfig,
   AnalyzerWorkspace,
@@ -33,6 +39,8 @@ import type {
 } from "../types";
 
 const isDesktop = (): boolean => typeof window !== "undefined" && Boolean(window.__TAURI_INTERNALS__);
+let demoAiConnected = false;
+let demoAiAuthenticated = false;
 
 const demoSource = `module top (
   input  logic clk,
@@ -417,6 +425,127 @@ export const bridge = {
         { id: "edge:2", source: "reduce", target: "port:led", nets: ["led"] },
       ],
     };
+  },
+
+  async aiProviderStatus(): Promise<AiProviderStatus> {
+    if (isDesktop()) return invoke<AiProviderStatus>("ai_provider_status");
+    return { provider: "codex-app-server", available: true, connected: demoAiConnected, version: "browser-preview", message: demoAiConnected ? "Preview provider connected." : "Connect the preview provider to explore the AI panel." };
+  },
+
+  async aiConnect(root: string, project: string): Promise<AiProviderStatus> {
+    if (isDesktop()) return invoke<AiProviderStatus>("ai_connect", { root, project });
+    demoAiConnected = true;
+    return { provider: "codex-app-server", available: true, connected: true, version: "browser-preview", projectRoot: project, message: "Preview provider connected." };
+  },
+
+  async aiDisconnect(): Promise<boolean> {
+    if (isDesktop()) return invoke<boolean>("ai_disconnect");
+    demoAiConnected = false;
+    return true;
+  },
+
+  async aiAccount(refresh = false): Promise<AiAccountStatus> {
+    if (isDesktop()) return invoke<AiAccountStatus>("ai_account_read", { refresh });
+    return { account: demoAiAuthenticated ? { type: "chatgpt", email: "preview@example.com", planType: "preview" } : null, requiresOpenaiAuth: true };
+  },
+
+  async aiLoginChatgpt(deviceCode = false): Promise<AiLoginResult> {
+    if (isDesktop()) return invoke<AiLoginResult>("ai_login_chatgpt", { deviceCode });
+    demoAiAuthenticated = true;
+    return deviceCode
+      ? { kind: "chatgptDeviceCode", verificationUrl: "https://auth.openai.com/codex/device", userCode: "DEMO-CODE" }
+      : { kind: "chatgpt", authUrl: "https://chatgpt.com/" };
+  },
+
+  async aiLoginApiKey(apiKey: string): Promise<AiLoginResult> {
+    if (isDesktop()) return invoke<AiLoginResult>("ai_login_api_key", { apiKey });
+    demoAiAuthenticated = Boolean(apiKey);
+    return { kind: "apiKey" };
+  },
+
+  async aiCancelLogin(loginId: string): Promise<Record<string, unknown>> {
+    if (isDesktop()) return invoke<Record<string, unknown>>("ai_cancel_login", { loginId });
+    return {};
+  },
+
+  async aiLogout(): Promise<Record<string, unknown>> {
+    if (isDesktop()) return invoke<Record<string, unknown>>("ai_logout");
+    demoAiAuthenticated = false;
+    return {};
+  },
+
+  async aiOpenAuthUrl(url: string): Promise<void> {
+    if (isDesktop()) await invoke("ai_open_auth_url", { url });
+  },
+
+  async aiThreadList(): Promise<Record<string, unknown>> {
+    if (isDesktop()) return invoke<Record<string, unknown>>("ai_thread_list");
+    return { data: [] };
+  },
+
+  async aiThreadRead(threadId: string): Promise<Record<string, unknown>> {
+    if (isDesktop()) return invoke<Record<string, unknown>>("ai_thread_read", { threadId });
+    return { thread: { id: threadId, turns: [] } };
+  },
+
+  async aiThreadStart(model?: string): Promise<Record<string, unknown>> {
+    if (isDesktop()) return invoke<Record<string, unknown>>("ai_thread_start", { model });
+    return { thread: { id: "preview-thread", model: model ?? "default" } };
+  },
+
+  async aiModelList(): Promise<Record<string, unknown>> {
+    if (isDesktop()) return invoke<Record<string, unknown>>("ai_model_list");
+    return { data: [
+      { id: "preview-fast", model: "preview-fast", displayName: "Preview Fast", isDefault: true, defaultReasoningEffort: "low", supportedReasoningEfforts: [{ reasoningEffort: "low", description: "Quick answers" }, { reasoningEffort: "medium", description: "Balanced" }] },
+      { id: "preview-deep", model: "preview-deep", displayName: "Preview Deep", defaultReasoningEffort: "medium", supportedReasoningEfforts: [{ reasoningEffort: "medium", description: "Balanced" }, { reasoningEffort: "high", description: "Deeper analysis" }] },
+    ] };
+  },
+
+  async aiThreadResume(threadId: string): Promise<Record<string, unknown>> {
+    if (isDesktop()) return invoke<Record<string, unknown>>("ai_thread_resume", { threadId });
+    return { thread: { id: threadId } };
+  },
+
+  async aiTurnStart(threadId: string, prompt: string, context: AiIdeContext, model?: string, effort?: string): Promise<Record<string, unknown>> {
+    if (isDesktop()) return invoke<Record<string, unknown>>("ai_turn_start", { threadId, prompt, context, model, effort });
+    const turnId = `preview-turn-${Date.now()}`;
+    window.setTimeout(() => {
+      window.dispatchEvent(new CustomEvent<AiEvent>("fpga-ai-demo", { detail: { method: "item/agentMessage/delta", params: { threadId, turnId, itemId: "preview-message", delta: "Preview mode is ready. In the desktop app, Codex can inspect this FPGA project, propose reviewable patches, and run approved toolchain commands." }, timestamp: new Date().toISOString() } }));
+      window.dispatchEvent(new CustomEvent<AiEvent>("fpga-ai-demo", { detail: { method: "turn/completed", params: { threadId, turn: { id: turnId, status: "completed" } }, timestamp: new Date().toISOString() } }));
+    }, 80);
+    return { turn: { id: turnId, status: "inProgress" } };
+  },
+
+  async aiTurnInterrupt(threadId: string, turnId: string): Promise<Record<string, unknown>> {
+    if (isDesktop()) return invoke<Record<string, unknown>>("ai_turn_interrupt", { threadId, turnId });
+    return {};
+  },
+
+  async aiExecuteTangTool(requestId: string | number): Promise<CommandResult> {
+    if (isDesktop()) return invoke<CommandResult>("ai_execute_tang_tool", { requestId });
+    return {
+      jobId: `preview-ai-${Date.now()}`,
+      action: "lint",
+      success: true,
+      exitCode: 0,
+      durationMs: 25,
+      diagnostics: [],
+    };
+  },
+
+  async aiRespondApproval(requestId: string | number, decision: AiApprovalDecision, dirtyPaths: string[]): Promise<void> {
+    if (isDesktop()) await invoke("ai_respond_approval", { requestId, decision, dirtyPaths });
+  },
+
+  async aiRespondUserInput(requestId: string | number, answers: Record<string, string[]>): Promise<void> {
+    if (isDesktop()) await invoke("ai_respond_user_input", { requestId, answers });
+  },
+
+  async onAiEvent(handler: (event: AiEvent) => void): Promise<UnlistenFn> {
+    if (isDesktop()) return listen<AiEvent>("fpga-ai-event", ({ payload }) => handler(payload));
+    const listener = (event: Event) => handler((event as CustomEvent<AiEvent>).detail);
+    window.addEventListener("fpga-ai-demo", listener);
+    return () => window.removeEventListener("fpga-ai-demo", listener);
   },
 
   async onBuildEvent(handler: (event: BuildEvent) => void): Promise<UnlistenFn> {

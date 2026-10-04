@@ -1,3 +1,4 @@
+mod ai;
 mod analyzer;
 mod boards;
 mod design_graph;
@@ -16,6 +17,7 @@ mod security;
 mod verification;
 mod waveform;
 
+use ai::{AiApprovalDecision, AiIdeContext, AiLoginResult, AiProviderStatus, AiRegistry};
 use hardware::SerialRegistry;
 use models::{
     AnalyzerCapture, AnalyzerConfig, AnalyzerWorkspace, BoardProfile, BuildAction,
@@ -25,6 +27,7 @@ use models::{
     SerialDevice, SnapshotComparison, VerificationSummary, WaveformData, WorkspaceSnapshot,
 };
 use runner::JobRegistry;
+use serde_json::Value;
 use tauri::{AppHandle, State};
 
 async fn blocking<T, F>(label: &'static str, operation: F) -> Result<T, String>
@@ -419,12 +422,212 @@ async fn read_netlist(root: String, project: String) -> Result<NetlistGraph, Str
     blocking("Netlist parser", move || netlist::read(&root, &project)).await
 }
 
+#[tauri::command]
+async fn ai_provider_status(registry: State<'_, AiRegistry>) -> Result<AiProviderStatus, String> {
+    let registry = registry.inner().clone();
+    blocking("AI provider status", move || Ok(registry.status())).await
+}
+
+#[tauri::command]
+async fn ai_connect(
+    app: AppHandle,
+    registry: State<'_, AiRegistry>,
+    root: String,
+    project: String,
+) -> Result<AiProviderStatus, String> {
+    let registry = registry.inner().clone();
+    blocking("AI provider connection", move || {
+        registry.connect(app, &root, &project)
+    })
+    .await
+}
+
+#[tauri::command]
+async fn ai_disconnect(registry: State<'_, AiRegistry>) -> Result<bool, String> {
+    let registry = registry.inner().clone();
+    blocking("AI provider disconnect", move || registry.disconnect()).await
+}
+
+#[tauri::command]
+async fn ai_account_read(registry: State<'_, AiRegistry>, refresh: bool) -> Result<Value, String> {
+    let registry = registry.inner().clone();
+    blocking("AI account status", move || registry.account(refresh)).await
+}
+
+#[tauri::command]
+async fn ai_login_chatgpt(
+    registry: State<'_, AiRegistry>,
+    device_code: bool,
+) -> Result<AiLoginResult, String> {
+    let registry = registry.inner().clone();
+    blocking("ChatGPT sign in", move || {
+        registry.login_chatgpt(device_code)
+    })
+    .await
+}
+
+#[tauri::command]
+async fn ai_login_api_key(
+    registry: State<'_, AiRegistry>,
+    api_key: String,
+) -> Result<AiLoginResult, String> {
+    let registry = registry.inner().clone();
+    blocking("OpenAI API key sign in", move || {
+        registry.login_api_key(&api_key)
+    })
+    .await
+}
+
+#[tauri::command]
+async fn ai_cancel_login(
+    registry: State<'_, AiRegistry>,
+    login_id: String,
+) -> Result<Value, String> {
+    let registry = registry.inner().clone();
+    blocking("AI login cancellation", move || {
+        registry.cancel_login(&login_id)
+    })
+    .await
+}
+
+#[tauri::command]
+async fn ai_logout(registry: State<'_, AiRegistry>) -> Result<Value, String> {
+    let registry = registry.inner().clone();
+    blocking("AI logout", move || registry.logout()).await
+}
+
+#[tauri::command]
+async fn ai_open_auth_url(url: String) -> Result<(), String> {
+    blocking("AI sign-in page", move || ai::open_auth_url(&url)).await
+}
+
+#[tauri::command]
+async fn ai_thread_list(registry: State<'_, AiRegistry>) -> Result<Value, String> {
+    let registry = registry.inner().clone();
+    blocking("AI conversation list", move || registry.list_threads()).await
+}
+
+#[tauri::command]
+async fn ai_thread_read(
+    registry: State<'_, AiRegistry>,
+    thread_id: String,
+) -> Result<Value, String> {
+    let registry = registry.inner().clone();
+    blocking("AI conversation read", move || {
+        registry.read_thread(&thread_id)
+    })
+    .await
+}
+
+#[tauri::command]
+async fn ai_thread_start(
+    registry: State<'_, AiRegistry>,
+    model: Option<String>,
+) -> Result<Value, String> {
+    let registry = registry.inner().clone();
+    blocking("AI conversation start", move || {
+        registry.start_thread(model)
+    })
+    .await
+}
+
+#[tauri::command]
+async fn ai_model_list(registry: State<'_, AiRegistry>) -> Result<Value, String> {
+    let registry = registry.inner().clone();
+    blocking("AI model catalog", move || registry.list_models()).await
+}
+
+#[tauri::command]
+async fn ai_thread_resume(
+    registry: State<'_, AiRegistry>,
+    thread_id: String,
+) -> Result<Value, String> {
+    let registry = registry.inner().clone();
+    blocking("AI conversation resume", move || {
+        registry.resume_thread(&thread_id)
+    })
+    .await
+}
+
+#[tauri::command]
+async fn ai_turn_start(
+    registry: State<'_, AiRegistry>,
+    thread_id: String,
+    prompt: String,
+    context: AiIdeContext,
+    model: Option<String>,
+    effort: Option<String>,
+) -> Result<Value, String> {
+    let registry = registry.inner().clone();
+    blocking("AI turn start", move || {
+        registry.start_turn(&thread_id, &prompt, context, model, effort)
+    })
+    .await
+}
+
+#[tauri::command]
+async fn ai_turn_interrupt(
+    registry: State<'_, AiRegistry>,
+    jobs: State<'_, JobRegistry>,
+    thread_id: String,
+    turn_id: String,
+) -> Result<Value, String> {
+    let _ = registry.cancel_tang_job(&turn_id, jobs.inner());
+    let registry = registry.inner().clone();
+    blocking("AI turn cancellation", move || {
+        registry.interrupt_turn(&thread_id, &turn_id)
+    })
+    .await
+}
+
+#[tauri::command]
+async fn ai_execute_tang_tool(
+    app: AppHandle,
+    jobs: State<'_, JobRegistry>,
+    registry: State<'_, AiRegistry>,
+    request_id: Value,
+) -> Result<CommandResult, String> {
+    registry
+        .inner()
+        .clone()
+        .execute_tang_tool(app, jobs.inner().clone(), request_id)
+        .await
+}
+
+#[tauri::command]
+async fn ai_respond_approval(
+    registry: State<'_, AiRegistry>,
+    request_id: Value,
+    decision: AiApprovalDecision,
+    dirty_paths: Vec<String>,
+) -> Result<(), String> {
+    let registry = registry.inner().clone();
+    blocking("AI approval response", move || {
+        registry.respond_to_approval(request_id, decision, dirty_paths)
+    })
+    .await
+}
+
+#[tauri::command]
+async fn ai_respond_user_input(
+    registry: State<'_, AiRegistry>,
+    request_id: Value,
+    answers: Value,
+) -> Result<(), String> {
+    let registry = registry.inner().clone();
+    blocking("AI user input", move || {
+        registry.respond_to_user_input(request_id, answers)
+    })
+    .await
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() -> Result<(), String> {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .manage(JobRegistry::default())
         .manage(SerialRegistry::default())
+        .manage(AiRegistry::default())
         .invoke_handler(tauri::generate_handler![
             workspace_snapshot,
             open_project,
@@ -466,12 +669,34 @@ pub fn run() -> Result<(), String> {
             disconnect_serial,
             read_waveform,
             read_netlist,
+            ai_provider_status,
+            ai_connect,
+            ai_disconnect,
+            ai_account_read,
+            ai_login_chatgpt,
+            ai_login_api_key,
+            ai_cancel_login,
+            ai_logout,
+            ai_open_auth_url,
+            ai_thread_list,
+            ai_thread_read,
+            ai_thread_start,
+            ai_model_list,
+            ai_thread_resume,
+            ai_turn_start,
+            ai_turn_interrupt,
+            ai_execute_tang_tool,
+            ai_respond_approval,
+            ai_respond_user_input,
         ])
         .run(tauri::generate_context!())
         .map_err(|error| format!("FPGA Studio could not start: {error}"))
 }
 
 pub fn smoke_test() -> Result<(), String> {
+    if !cfg!(debug_assertions) && tauri::is_dev() {
+        return Err("This release binary uses Tauri development mode and would require a local frontend server.".into());
+    }
     let snapshot = project::snapshot()?;
     let boards = boards::list(&snapshot.root)?;
     if boards.len() < 7 {

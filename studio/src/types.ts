@@ -4,6 +4,65 @@ export type BottomPanel = "problems" | "output" | "terminal" | "waveform";
 export type WorkbenchView = "editor" | "dashboard" | "analysis" | "verification" | "traceability" | "analyzer" | "health" | "netlist" | "waveform" | "hardware" | "uart" | "welcome";
 export type BuildAction = "doctor" | "lint" | "sim" | "build" | "upload" | "flash" | "detect" | "analyzer-build" | "analyzer-upload" | "experiment";
 
+export interface AiProviderStatus {
+  provider: "codex-app-server" | string;
+  available: boolean;
+  connected: boolean;
+  executable?: string;
+  version?: string;
+  projectRoot?: string;
+  message: string;
+}
+
+export interface AiAccount {
+  type: "chatgpt" | "apiKey" | "amazonBedrock" | string;
+  email?: string | null;
+  planType?: string | null;
+  credentialSource?: string;
+}
+
+export interface AiAccountStatus {
+  account: AiAccount | null;
+  requiresOpenaiAuth: boolean;
+}
+
+export interface AiModel {
+  id: string;
+  model: string;
+  displayName: string;
+  isDefault?: boolean;
+  defaultReasoningEffort?: string;
+  supportedReasoningEfforts?: Array<{ reasoningEffort: string; description?: string }>;
+}
+
+export interface AiLoginResult {
+  kind: string;
+  loginId?: string;
+  authUrl?: string;
+  verificationUrl?: string;
+  userCode?: string;
+}
+
+export interface AiEvent {
+  method: string;
+  params: Record<string, unknown>;
+  requestId?: string | number;
+  timestamp: string;
+}
+
+export interface AiIdeContext {
+  activeFile?: string;
+  selectedText?: string;
+  cursorLine?: number;
+  cursorColumn?: number;
+  openFiles: string[];
+  diagnostics: string[];
+  terminalExcerpt?: string;
+  gitSummary?: string;
+}
+
+export type AiApprovalDecision = "allowOnce" | "allowSession" | "alwaysAllow" | "deny" | "cancel";
+
 export interface ProjectNode {
   name: string;
   path: string;

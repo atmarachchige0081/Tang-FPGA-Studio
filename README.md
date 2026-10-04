@@ -3,7 +3,7 @@
 [![Quality gates](https://github.com/atmarachchige0081/Tang-FPGA-Studio/actions/workflows/quality-gates.yml/badge.svg)](https://github.com/atmarachchige0081/Tang-FPGA-Studio/actions/workflows/quality-gates.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-6c63ff.svg)](LICENSE)
 [![Desktop: Tauri + Rust](https://img.shields.io/badge/desktop-Tauri%20%2B%20Rust-4f9cff.svg)](studio/)
-[![Release: v3.3.1](https://img.shields.io/badge/release-v3.3.1-2d91b8.svg)](CHANGELOG.md)
+[![Release: v3.4.0](https://img.shields.io/badge/release-v3.4.0-2d91b8.svg)](CHANGELOG.md)
 
 An open-source, beginner-friendly FPGA IDE and development environment for
 Sipeed Tang Nano, Tang Primer, and Tang Console boards. Simulate, inspect waveforms, lint,
@@ -83,6 +83,23 @@ See the [v3.2.2 hotfix notes](docs/RELEASE_3.2.2.md).
 workspace location; Explorer file/folder creation, refresh, project-wide
 find/replace, durable saves, and generated `AGENTS.md` guidance now form one
 complete workflow. See the [v3.3.1 release notes](docs/RELEASE_3.3.1.md).
+
+**v3.4 AI coding agent:** the project-scoped Codex App Server integration adds
+conversation history, streaming responses, guarded tool approvals, model and
+reasoning-level selection, and explicit local sign-in for each user. The
+production installer no longer depends on a development web server. See the
+[v3.4.0 release notes](docs/RELEASE_3.4.0.md).
+
+## Native AI coding agent
+
+Open **AI Assistant** from the robot icon or press `Ctrl+Shift+A` to connect the
+official local Codex App Server. Users authenticate with their own ChatGPT
+account, device code, or OpenAI API key; no developer credential is embedded.
+The project-scoped agent streams responses, uses current editor/build context,
+keeps conversation history, shows tool activity and diffs, asks for command and
+file approvals, rejects stale or out-of-workspace changes, and supports stop and
+retry. See the [AI Assistant guide](docs/AI_ASSISTANT.md) for setup, security,
+usage, and troubleshooting.
 
 ## Beginner desktop IDE
 

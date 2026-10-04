@@ -2,6 +2,34 @@
 
 All notable user-facing changes are recorded here.
 
+## 3.4.0 — 2026-10-04
+
+### Native AI coding agent
+
+- Added an optional project-scoped Codex App Server assistant with local user
+  sign-in, streaming chat, history, IDE context, file references, guarded file
+  edits, FPGA workflow tools, and stop/retry controls.
+- Added model and supported reasoning-effort selectors populated from the
+  connected Codex provider. A model listing is not an account entitlement check.
+- Corrected App Server permission-profile compatibility and streaming whitespace.
+- Rendered emphasis, lists, code, and file references in replies; kept tool
+  activity in chronological order and collapsed completed work.
+- Made Stop recover from an unresponsive provider and cleared stale activity
+  spinners when a turn ends.
+- Prevented duplicate FPGA tool execution, answered malformed tool requests
+  explicitly, and limited generic shell command approvals to one request.
+- Updated the pinned Markdown sanitizer and affected test dependencies to
+  versions with no reported npm audit vulnerabilities at release time.
+
+### Production packaging
+
+- Replaced the installer's raw Cargo build with Tauri's production build path,
+  embedding the frontend instead of depending on a local development server.
+- Added a packaged-executable smoke test that blocks installer creation when
+  the native application or bundled workspace fails to start safely.
+- No OpenAI credential is bundled; each user signs in locally with their own
+  ChatGPT account or supplies their own API key.
+
 ## 3.3.1 — 2026-09-07
 
 ### Packaging hotfix

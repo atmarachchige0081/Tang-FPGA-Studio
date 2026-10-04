@@ -47,6 +47,7 @@ export function TitleBar({ onRun, onSave }: Props): React.JSX.Element {
     ],
     edit: [
       { label: "Open action center…", shortcut: "Ctrl+K", run: openQuickLauncher },
+      { label: store.aiPanelOpen ? "Close AI Assistant" : "Open AI Assistant", shortcut: "Ctrl+Shift+A", run: store.toggleAiPanel },
       { label: "Toggle sidebar", run: store.toggleSidebar },
       { label: "Toggle output panel", run: store.toggleBottom },
       { label: store.theme === "light" ? "Use dark theme" : "Use light theme", shortcut: "Ctrl+Shift+L", run: toggleTheme },

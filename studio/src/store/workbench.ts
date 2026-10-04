@@ -20,9 +20,12 @@ interface WorkbenchState {
   bottomPanel: BottomPanel;
   bottomOpen: boolean;
   sidebarOpen: boolean;
+  aiPanelOpen: boolean;
   theme: ThemeMode;
   tabs: OpenFile[];
   activePath: string | null;
+  editorSelection: string;
+  editorCursor: { line: number; column: number } | null;
   output: BuildEvent[];
   diagnostics: Diagnostic[];
   hdlIndex: HdlIndex | null;
@@ -40,6 +43,8 @@ interface WorkbenchState {
   setBottomPanel: (panel: BottomPanel) => void;
   toggleBottom: () => void;
   toggleSidebar: () => void;
+  toggleAiPanel: () => void;
+  setAiPanelOpen: (open: boolean) => void;
   setTheme: (theme: ThemeMode) => void;
   openFile: (file: OpenFile) => void;
   closeFile: (path: string) => void;
@@ -52,6 +57,8 @@ interface WorkbenchState {
   setHdlIndex: (index: HdlIndex | null, status?: WorkbenchState["intelligenceStatus"]) => void;
   navigateTo: (path: string, line?: number, column?: number) => void;
   clearNavigation: () => void;
+  setEditorSelection: (selection: string) => void;
+  setEditorCursor: (line: number, column: number) => void;
   setBuild: (summary: BuildSummary) => void;
   setRunningJob: (jobId: string | null) => void;
   setBoard: (board: BoardProfile) => void;
@@ -91,9 +98,12 @@ export const useWorkbench = create<WorkbenchState>((set) => ({
   bottomPanel: "output",
   bottomOpen: true,
   sidebarOpen: true,
+  aiPanelOpen: false,
   theme: storedTheme,
   tabs: [],
   activePath: null,
+  editorSelection: "",
+  editorCursor: null,
   output: [],
   diagnostics: [],
   hdlIndex: null,
@@ -104,13 +114,15 @@ export const useWorkbench = create<WorkbenchState>((set) => ({
   board: null,
   git: null,
   projectWizardOpen: false,
-  setWorkspace: (root, project, projectPath, tree, recentProjects = []) => set({ root, project, projectPath, tree, recentProjects, ready: true, tabs: [], activePath: null, view: "welcome", hdlIndex: null, intelligenceStatus: "idle", navigation: null }),
+  setWorkspace: (root, project, projectPath, tree, recentProjects = []) => set({ root, project, projectPath, tree, recentProjects, ready: true, tabs: [], activePath: null, editorSelection: "", editorCursor: null, view: "welcome", hdlIndex: null, intelligenceStatus: "idle", navigation: null }),
   refreshProjectTree: (tree) => set({ tree, hdlIndex: null, intelligenceStatus: "idle" }),
   setActivity: (activity) => set({ activity, sidebarOpen: true }),
   setView: (view) => set({ view }),
   setBottomPanel: (bottomPanel) => set({ bottomPanel, bottomOpen: true }),
   toggleBottom: () => set((state) => ({ bottomOpen: !state.bottomOpen })),
   toggleSidebar: () => set((state) => ({ sidebarOpen: !state.sidebarOpen })),
+  toggleAiPanel: () => set((state) => ({ aiPanelOpen: !state.aiPanelOpen })),
+  setAiPanelOpen: (aiPanelOpen) => set({ aiPanelOpen }),
   setTheme: (theme) => {
     writeStoredTheme(theme);
     set({ theme });
@@ -139,6 +151,8 @@ export const useWorkbench = create<WorkbenchState>((set) => ({
   setHdlIndex: (hdlIndex, intelligenceStatus = hdlIndex ? "ready" : "degraded") => set({ hdlIndex, intelligenceStatus }),
   navigateTo: (path, line = 1, column = 1) => set({ navigation: { path, line, column, nonce: Date.now() } }),
   clearNavigation: () => set({ navigation: null }),
+  setEditorSelection: (editorSelection) => set({ editorSelection: editorSelection.slice(0, 12_000) }),
+  setEditorCursor: (line, column) => set({ editorCursor: { line: Math.max(1, line), column: Math.max(1, column) } }),
   setBuild: (build) => set({ build }),
   setRunningJob: (runningJob) => set({ runningJob }),
   setBoard: (board) => set({ board }),
