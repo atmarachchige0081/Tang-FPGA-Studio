@@ -55,4 +55,10 @@ describe("AI conversation protocol reducer", () => {
     const failed = reduceAiEvent(running, event("provider/stopped", { message: "Provider exited" }));
     expect(failed).toMatchObject({ running: false, error: "Provider exited" });
   });
+
+  it("ignores a delayed completion from a different turn", () => {
+    const running = { ...initialAiConversation, running: true, turnId: "current-turn" };
+    const result = reduceAiEvent(running, event("turn/completed", { turn: { id: "old-turn", status: "completed" } }));
+    expect(result).toBe(running);
+  });
 });

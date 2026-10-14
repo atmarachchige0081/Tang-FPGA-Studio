@@ -74,6 +74,18 @@ describe("native AI Assistant panel", () => {
     expect(await screen.findByRole("button", { name: /Connect agent/i })).toBeTruthy();
   });
 
+  it("recovers when the interrupt request itself never resolves", async () => {
+    vi.spyOn(bridge, "aiTurnStart").mockResolvedValue({ turn: { id: "stuck-turn", status: "inProgress" } });
+    vi.spyOn(bridge, "aiTurnInterrupt").mockImplementation(() => new Promise(() => undefined));
+    render(<AiPanel/>);
+    fireEvent.click(await screen.findByRole("button", { name: /Connect agent/i }));
+    fireEvent.click(await screen.findByRole("button", { name: /Sign in with ChatGPT/i }));
+    fireEvent.change(await screen.findByRole("textbox", { name: "Ask AI about this project" }), { target: { value: "Check timing" } });
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Stop" }));
+    expect(await screen.findByRole("button", { name: /Connect agent/i }, { timeout: 7_000 })).toBeTruthy();
+  }, 9_000);
+
   it("renders an agent follow-up question and returns the selected answer", async () => {
     render(<AiPanel/>);
     fireEvent.click(await screen.findByRole("button", { name: /Connect agent/i }));

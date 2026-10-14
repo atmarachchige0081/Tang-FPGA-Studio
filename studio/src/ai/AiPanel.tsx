@@ -272,7 +272,10 @@ export function AiPanel(): React.JSX.Element {
     void bridge.onAiEvent((event) => {
       if (disposed) return;
       setConversation((current) => reduceAiEvent(current, event));
-      if (event.method === "turn/completed" || event.method === "provider/stopped") {
+      const completedTurnId = event.method === "turn/completed" ? valueString(record(event.params.turn).id) : null;
+      const isCurrentCompletion = event.method === "turn/completed"
+        && (!completedTurnId || !conversationRef.current.turnId || completedTurnId === conversationRef.current.turnId);
+      if (isCurrentCompletion || event.method === "provider/stopped") {
         setStopping(false);
         if (stopWatchdog.current !== null) window.clearTimeout(stopWatchdog.current);
         stopWatchdog.current = null;
@@ -473,8 +476,13 @@ export function AiPanel(): React.JSX.Element {
   const stop = async () => {
     if (!threadId || !conversation.turnId || stopping) return;
     const activeTurn = conversation.turnId;
+    let recoveryStarted = false;
     const forceStop = async () => {
-      if (conversationRef.current.turnId !== activeTurn) return;
+      if (recoveryStarted) return;
+      recoveryStarted = true;
+      if (stopWatchdog.current !== null) window.clearTimeout(stopWatchdog.current);
+      stopWatchdog.current = null;
+      if (conversationRef.current.turnId !== activeTurn) { setStopping(false); return; }
       try { await bridge.aiDisconnect(); } catch { /* Keep the composer recoverable. */ }
       setStatus(await bridge.aiProviderStatus().catch(() => null));
       setConversation((current) => current.turnId === activeTurn ? {
@@ -486,11 +494,14 @@ export function AiPanel(): React.JSX.Element {
       setStopping(false);
     };
     setStopping(true);
+    stopWatchdog.current = window.setTimeout(() => { void forceStop(); }, 5_000);
     try {
       await bridge.aiTurnInterrupt(threadId, activeTurn);
-      if (conversationRef.current.turnId === activeTurn) {
-        stopWatchdog.current = window.setTimeout(() => { void forceStop(); }, 5_000);
-      } else setStopping(false);
+      if (conversationRef.current.turnId !== activeTurn) {
+        if (stopWatchdog.current !== null) window.clearTimeout(stopWatchdog.current);
+        stopWatchdog.current = null;
+        setStopping(false);
+      }
     } catch { await forceStop(); }
   };
 

@@ -259,6 +259,8 @@ export function reduceAiEvent(state: AiConversationState, event: AiEvent): AiCon
   }
   if (event.method === "turn/completed") {
     const turn = record(event.params.turn);
+    const completedTurnId = string(turn.id);
+    if (state.turnId && completedTurnId && completedTurnId !== state.turnId) return state;
     const error = record(turn.error);
     const message = string(error.message);
     const outcome = string(turn.status);
