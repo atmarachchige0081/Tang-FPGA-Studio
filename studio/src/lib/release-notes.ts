@@ -1,4 +1,6 @@
-export const RELEASE_NOTES_VERSION = "3.4.0";
+import { version } from "../../package.json";
+
+export const RELEASE_NOTES_VERSION = version;
 const STORAGE_KEY = "fpga-studio.release-notes.seen";
 
 export function releaseNotesPending(storage: Pick<Storage, "getItem"> = localStorage): boolean {

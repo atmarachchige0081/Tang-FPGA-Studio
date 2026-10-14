@@ -3,7 +3,7 @@
 [![Quality gates](https://github.com/atmarachchige0081/Tang-FPGA-Studio/actions/workflows/quality-gates.yml/badge.svg)](https://github.com/atmarachchige0081/Tang-FPGA-Studio/actions/workflows/quality-gates.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-6c63ff.svg)](LICENSE)
 [![Desktop: Tauri + Rust](https://img.shields.io/badge/desktop-Tauri%20%2B%20Rust-4f9cff.svg)](studio/)
-[![Release: v3.4.0](https://img.shields.io/badge/release-v3.4.0-2d91b8.svg)](CHANGELOG.md)
+[![Release: v3.4.1](https://img.shields.io/badge/release-v3.4.1-2d91b8.svg)](CHANGELOG.md)
 
 An open-source, beginner-friendly FPGA IDE and development environment for
 Sipeed Tang Nano, Tang Primer, and Tang Console boards. Simulate, inspect waveforms, lint,
@@ -88,7 +88,7 @@ complete workflow. See the [v3.3.1 release notes](docs/RELEASE_3.3.1.md).
 conversation history, streaming responses, guarded tool approvals, model and
 reasoning-level selection, and explicit local sign-in for each user. The
 production installer no longer depends on a development web server. See the
-[v3.4.0 release notes](docs/RELEASE_3.4.0.md).
+[v3.4.1 release notes](docs/RELEASE_3.4.1.md).
 
 ## Native AI coding agent
 

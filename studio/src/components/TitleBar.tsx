@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Box, ChevronDown, Command, Cpu, Moon, PanelBottom, PanelLeft, Search, Sun } from "lucide-react";
 import { useWorkbench } from "../store/workbench";
+import { RELEASE_NOTES_VERSION } from "../lib/release-notes";
 import type { BuildAction } from "../types";
 import { openQuickLauncher } from "./QuickLauncher";
 
@@ -88,7 +89,7 @@ export function TitleBar({ onRun, onSave }: Props): React.JSX.Element {
 
   return (
     <header className="titlebar" ref={menuRoot}>
-      <div className="brand-mark" aria-label="FPGA Studio"><Cpu size={17} /><span>FPGA Studio</span><span className="version-chip">3.3</span></div>
+      <div className="brand-mark" aria-label="FPGA Studio"><Cpu size={17} /><span>FPGA Studio</span><span className="version-chip">{RELEASE_NOTES_VERSION}</span></div>
       <nav className="menu-strip" aria-label="Application menu">
         {renderMenu("file", "File")}{renderMenu("edit", "Edit")}{renderMenu("project", "Project")}{renderMenu("build", "Build")}{renderMenu("hardware", "Hardware")}{renderMenu("help", "Help")}
       </nav>

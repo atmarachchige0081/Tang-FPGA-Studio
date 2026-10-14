@@ -2,6 +2,15 @@
 
 All notable user-facing changes are recorded here.
 
+## 3.4.1 — 2026-10-14
+
+- Fixed the title-bar version badge that incorrectly displayed 3.3 in the
+  v3.4.0 application. The badge and first-launch labels now derive from the
+  package version to avoid future release drift.
+- Preserved the v3.4.0 AI Stop and stalled-provider recovery fixes. The
+  v3.4.0 installer build was stopped before publication; v3.4.1 is the
+  corrected one-file Windows installer release.
+
 ## 3.4.0 — 2026-10-14
 
 ### Native AI coding agent
