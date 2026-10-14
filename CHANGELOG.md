@@ -2,7 +2,7 @@
 
 All notable user-facing changes are recorded here.
 
-## 3.4.0 — 2026-10-04
+## 3.4.0 — 2026-10-14
 
 ### Native AI coding agent
 
