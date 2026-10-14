@@ -1,0 +1,39 @@
+[
+  {
+    "check": "Packaged React UI rendered inside native WebKit; no Vite server",
+    "status": "passed",
+    "detail": {
+      "url": "tauri://localhost"
+    }
+  },
+  {
+    "check": "Installed resources seeded a writable per-user workspace",
+    "status": "passed",
+    "detail": "/tmp/tang-linux-desktop-7gy6qpy5/data/dev.fpgastudio.desktop/workspace-3.4.1"
+  },
+  {
+    "check": "Bundled boards, HDL patterns and plugins loaded",
+    "status": "passed",
+    "detail": null
+  },
+  {
+    "check": "Project creation with spaces, native save/read, HDL indexing, search and Git discovery",
+    "status": "passed",
+    "detail": null
+  },
+  {
+    "check": "Packaged Monaco editor opened actual RTL source offline",
+    "status": "passed",
+    "detail": null
+  },
+  {
+    "check": "Native desktop screenshot captured",
+    "status": "passed",
+    "detail": null
+  },
+  {
+    "check": "Native Linux hardware guidance screenshot captured",
+    "status": "passed",
+    "detail": null
+  }
+]

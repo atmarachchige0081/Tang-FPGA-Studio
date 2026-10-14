@@ -1,0 +1,110 @@
+name: Ubuntu native application
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: linux-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ubuntu:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-22.04, ubuntu-24.04, ubuntu-26.04]
+    runs-on: ${{ matrix.os }}
+    env:
+      CARGO_BUILD_JOBS: 4
+      CARGO_PROFILE_RELEASE_DEBUG: 0
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: studio/package-lock.json
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - name: Install Linux prerequisites
+        run: |
+          bash scripts/setup-ubuntu.sh
+          driver=webkit2gtk-driver
+          if [[ '${{ matrix.os }}' == ubuntu-26.04 ]]; then driver=webkitgtk-webdriver; fi
+          sudo apt-get install -y --no-install-recommends xvfb xauth dbus-x11 "$driver" scrot
+      - name: Install pinned, checksum-verified FPGA tools
+        run: bash scripts/setup-toolchain-linux.sh
+      - name: Install locked frontend dependencies
+        working-directory: studio
+        run: npm ci
+      - name: Frontend and Python regressions
+        run: |
+          npm --prefix studio run check
+          npm --prefix studio audit --audit-level=high
+          python3 -m unittest discover -s ide/tests -v
+      - name: Shared FPGA runner and board implementation matrix
+        run: |
+          bash scripts/test-linux-workflows.sh
+          pwsh -NoProfile -File scripts/test-board-profiles.ps1 -KeepArtifacts
+      - name: Rust formatting and native regression tests
+        working-directory: studio/src-tauri
+        run: |
+          cargo fmt --check
+          cargo test --locked --release
+          cargo clippy --locked --release --all-targets -- -D warnings
+      - name: Build native Linux distribution
+        working-directory: studio
+        run: npm run desktop:build
+      - name: Validate installed package and native WebKit UI
+        run: |
+          sudo apt-get install -y ./studio/src-tauri/target/release/bundle/deb/*.deb
+          cargo install tauri-driver --locked --version 2.0.4
+          /usr/bin/fpga-studio --smoke-test --workspace "$GITHUB_WORKSPACE"
+          for image in studio/src-tauri/target/release/bundle/appimage/*.AppImage; do
+            APPIMAGE_EXTRACT_AND_RUN=1 "$image" --smoke-test --workspace "$GITHUB_WORKSPACE"
+          done
+          xvfb-run -a -s "-screen 0 1600x1200x24" dbus-run-session -- python3 scripts/test-linux-desktop.py /usr/bin/fpga-studio --output build/linux-evidence
+          for image in studio/src-tauri/target/release/bundle/appimage/*.AppImage; do
+            APPIMAGE_EXTRACT_AND_RUN=1 xvfb-run -a -s "-screen 0 1600x1200x24" dbus-run-session -- python3 scripts/test-linux-desktop.py "$image" --ui-only --output build/linux-evidence/appimage
+          done
+      - uses: actions/upload-artifact@v6
+        if: always()
+        with:
+          name: linux-${{ matrix.os }}-evidence-and-packages
+          path: |
+            studio/src-tauri/target/release/bundle/deb/*.deb
+            studio/src-tauri/target/release/bundle/appimage/*.AppImage
+            build/linux-evidence/
+            .fpga-studio/board-smoke/
+            projects/01_button_led_pwm/build/timing.json
+
+  publish-linux:
+    if: github.event_name == 'release'
+    needs: ubuntu
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+      actions: read
+    steps:
+      - uses: actions/download-artifact@v7
+        with:
+          name: linux-ubuntu-22.04-evidence-and-packages
+          path: verified-build
+      - name: Attach Ubuntu 22.04 baseline packages after all Ubuntu checks pass
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          mkdir release-assets
+          find verified-build -type f \( -name '*.deb' -o -name '*.AppImage' \) -exec cp -- {} release-assets/ \;
+          cd release-assets
+          sha256sum -- *.deb *.AppImage > SHA256SUMS
+          gh release upload "$RELEASE_TAG" ./*.deb ./*.AppImage SHA256SUMS --repo "$GITHUB_REPOSITORY"

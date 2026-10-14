@@ -1,0 +1,90 @@
+   Compiling fpga-studio v3.4.1 (/workspace/Tang-FPGA-Studio/studio/src-tauri)
+    Finished `release` profile [optimized] target(s) in 42.15s
+     Running unittests src/lib.rs (/workspace/.tang-linux/target/release/deps/fpga_studio_lib-139a81830725aa09)
+
+running 74 tests
+test ai::tests::approval_decisions_match_the_official_protocol ... ok
+test ai::tests::installed_permission_profile_is_used_without_legacy_read_access_fields ... ok
+test ai::tests::identifiers_and_secrets_are_safely_handled ... ok
+test ai::tests::commands_require_individual_approval ... ok
+test ai::tests::proposals_reject_files_outside_the_project ... ok
+test analyzer::tests::generates_maintained_uart_analyzer_fixture ... ignored, uses maintained project build artifacts and is run by the release validation job
+test ai::tests::proposals_reject_sensitive_files_and_stale_or_dirty_targets ... ok
+test ai::tests::workspace_guard_rejects_symlink_escape_when_supported ... ok
+test analyzer::tests::trigger_values_are_bounded_by_channel_width ... ok
+test ai::tests::workspace_guard_rejects_traversal_and_absolute_escape ... ok
+test ai::tests::proposals_capture_stale_file_state ... ok
+test analyzer::tests::sample_decoder_preserves_channel_order_and_transitions ... ok
+test boards::tests::repository_contains_every_supported_tang_profile ... ok
+test design_graph::tests::partial_graph_never_invents_missing_artifacts ... ok
+test analyzer::tests::resource_estimator_is_explicit_until_reports_exist ... ok
+test boards::tests::reads_board_from_manifest ... ok
+test design_graph::tests::physical_bel_coordinates_are_evidence_backed ... ok
+test git::tests::bounds_large_change_sets_before_they_reach_the_ui ... ok
+test git::tests::parses_branch_tracking_and_changes ... ok
+test hardware::linux_tests::serial_registry_writes_exact_bytes_to_a_real_pty ... ok
+test git::tests::discovers_and_runs_linux_git ... ok
+test hdl::tests::ignores_problem_like_text_in_comments_and_strings ... ok
+test hdl::tests::indexes_hierarchy_clocks_and_clean_design ... ok
+test hdl::tests::reports_duplicate_modules ... ok
+test hdl::tests::reports_definite_static_design_problems ... ok
+test hdl::tests::reports_empty_and_oversized_projects_without_panicking ... ok
+test netlist::tests::parses_ports_cells_and_connections ... ok
+test optimizer::tests::fmax_decline_is_flagged_as_regression ... ok
+test optimizer::tests::metric_percent_is_evidence_preserving ... ok
+test optimizer::tests::prepares_maintained_retiming_experiment ... ignored, uses maintained project reports and is run by the release validation job
+test optimizer::tests::verification_and_negative_slack_declines_are_regressions ... ok
+test plugins::tests::bundled_plugins_are_discovered_and_valid ... ok
+test git::tests::reads_a_real_linux_repository_and_dirty_project ... ok
+test project::tests::accepts_friendly_project_names_and_rejects_unsafe_folder_names ... ok
+test plugins::tests::oversized_plugin_manifests_are_rejected_without_being_parsed ... ok
+test project::tests::applies_a_non_default_board_package_to_generated_configuration ... ok
+test hdl::tests::reports_missing_modules_and_unclosed_module_syntax ... ok
+test project::tests::creates_entries_and_replaces_project_text_without_interpreting_dollar_signs ... ok
+test project::tests::applies_independent_console_device_and_constraint_packages ... ok
+test project::tests::concurrent_saves_never_publish_partial_content ... ok
+test project::tests::external_project_reopens_and_keeps_file_operations_inside_its_root ... ok
+test project::tests::opening_a_file_recovers_an_interrupted_transaction ... ok
+test project::tests::creates_transactional_project_from_catalog ... ok
+test project::tests::packaged_workspace_is_writable_and_preserves_user_edits ... ok
+test project::tests::selected_project_location_can_be_outside_the_workspace ... ok
+test project::tests::unicode_search_reports_original_character_columns_without_panicking ... ok
+test project::tests::creates_validates_searches_and_reopens_portable_custom_project ... ok
+test reports::tests::missing_history_is_empty ... ok
+test reports::tests::missing_optional_report_sections_are_honest ... ok
+test reports::tests::parses_all_clocks_resources_and_critical_paths ... ok
+test reports::tests::reads_utilization_pairs ... ok
+test reports::tests::rejects_non_object_reports_and_bounds_large_path_sets ... ok
+test runner::tests::cancellation_kills_the_owned_process_group ... ok
+test project::tests::persists_and_reopens_each_console_board_selection ... ok
+test runner::tests::explains_ftdi_reset_without_suggesting_driver_replacement ... ok
+test runner::tests::concurrent_starts_cannot_share_a_project ... ok
+test runner::tests::distinguishes_an_absent_programmer_from_a_driver_failure ... ok
+test runner::tests::explains_incompatible_compressed_gowin_bitstreams ... ok
+test runner::tests::explains_stalled_or_reset_jtag_interfaces ... ok
+test runner::tests::hides_powershell_stack_noise_and_explains_jtag_access ... ok
+test runner::tests::linux_usb_denial_reports_udev_instead_of_windows_drivers ... ok
+test runner::tests::extracts_hdl_diagnostics ... ok
+test security::tests::relative_paths_are_accepted ... ok
+test runner::tests::permits_only_one_job_per_project ... ok
+test security::tests::traversal_and_absolute_paths_are_rejected ... ok
+test verification::tests::failed_history_is_never_presented_as_passed ... ok
+test verification::tests::analyzer_capture_becomes_stale_after_rtl_changes ... ok
+test verification::tests::next_action_prioritizes_failures ... ok
+test waveform::tests::keeps_aliased_signals_in_each_scope_synchronized ... ok
+test waveform::tests::parses_scopes_vectors_and_scalar_changes ... ok
+test verification::tests::latest_action_selection_is_specific ... ok
+test hdl::tests::maintained_projects_have_no_blocking_live_findings ... ok
+test verification::tests::hardware_evidence_requires_a_note_and_is_persisted ... ok
+test hdl::tests::indexes_a_large_representative_source_without_interactive_delay ... ok
+
+test result: ok. 72 passed; 0 failed; 2 ignored; 0 measured; 0 filtered out; finished in 0.18s
+
+    Blocking waiting for file lock on build directory
+    Checking fpga-studio v3.4.1 (/workspace/Tang-FPGA-Studio/studio/src-tauri)
+    Finished `release` profile [optimized] target(s) in 20.88s
+   Compiling tauri v2.11.5
+   Compiling fpga-studio v3.4.1 (/workspace/Tang-FPGA-Studio/studio/src-tauri)
+   Compiling tauri-plugin-fs v2.5.2
+   Compiling tauri-plugin-dialog v2.7.3
+    Finished `release` profile [optimized] target(s) in 2m 36s

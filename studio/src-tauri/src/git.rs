@@ -20,7 +20,7 @@ pub fn status(root: &str, project: &str) -> Result<GitStatus, String> {
             ahead: 0,
             behind: 0,
             changes: Vec::new(),
-            message: "Git was not found. Install Git for Windows, then press Refresh.".into(),
+            message: "Git was not found. Install Git for your operating system, then restart FPGA Studio.".into(),
         });
     };
     let version = run(&executable, &project, &["--version"])
@@ -81,7 +81,7 @@ pub fn status(root: &str, project: &str) -> Result<GitStatus, String> {
 }
 
 fn find_git() -> Option<PathBuf> {
-    let mut candidates = vec![PathBuf::from("git.exe")];
+    let mut candidates = vec![PathBuf::from(if cfg!(windows) { "git.exe" } else { "git" })];
     if let Ok(program_files) = std::env::var("ProgramFiles") {
         candidates.push(PathBuf::from(program_files).join("Git/cmd/git.exe"));
     }
@@ -199,5 +199,31 @@ mod tests {
         let (_, _, _, _, changes, truncated) = parse_status(&output);
         assert_eq!(changes.len(), MAX_GIT_CHANGES);
         assert!(truncated);
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn discovers_and_runs_linux_git() {
+        let executable = super::find_git().expect("Linux development requires Git");
+        let output = super::run(&executable, std::path::Path::new("."), &["--version"]).unwrap();
+        assert!(output.starts_with("git version "));
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn reads_a_real_linux_repository_and_dirty_project() {
+        let root = std::env::temp_dir().join(format!("tang-git-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&root).unwrap();
+        std::fs::write(root.join("fpga.ps1"), "# marker").unwrap();
+        std::fs::write(root.join("fpga.config.psd1"), "@{}").unwrap();
+        let executable = super::find_git().unwrap();
+        super::run(&executable, &root, &["init", "-q"]).unwrap();
+        let status = super::status(&root.to_string_lossy(), ".").unwrap();
+        assert!(status.available && status.repository);
+        assert!(status
+            .changes
+            .iter()
+            .any(|change| change.path == "fpga.ps1"));
+        std::fs::remove_dir_all(root).unwrap();
     }
 }

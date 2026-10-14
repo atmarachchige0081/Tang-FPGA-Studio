@@ -105,8 +105,14 @@ fn validate_relative(relative: &str) -> Result<(), String> {
     if relative.trim().is_empty() {
         return Err("A relative path is required".into());
     }
-    let path = Path::new(relative);
-    if path.is_absolute()
+    // Validate portable project paths consistently, even when a Windows path
+    // is supplied on Linux (where backslashes and drive letters are ordinary text).
+    let normalized = relative.replace('\\', "/");
+    let bytes = normalized.as_bytes();
+    let windows_drive = bytes.len() >= 2 && bytes[0].is_ascii_alphabetic() && bytes[1] == b':';
+    let path = Path::new(&normalized);
+    if windows_drive
+        || path.is_absolute()
         || path
             .components()
             .any(|part| !matches!(part, Component::Normal(_) | Component::CurDir))
@@ -118,7 +124,10 @@ fn validate_relative(relative: &str) -> Result<(), String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{child_process_path, validate_relative};
+    #[cfg(windows)]
+    use super::child_process_path;
+    use super::validate_relative;
+    #[cfg(windows)]
     use std::path::Path;
 
     #[test]
@@ -132,6 +141,9 @@ mod tests {
         assert!(validate_relative("../outside.sv").is_err());
         assert!(validate_relative("C:\\outside.sv").is_err());
         assert!(validate_relative("/outside.sv").is_err());
+        assert!(validate_relative(r"..\outside.sv").is_err());
+        assert!(validate_relative(r"\server\share\outside.sv").is_err());
+        assert!(validate_relative("C:outside.sv").is_err());
     }
 
     #[cfg(windows)]

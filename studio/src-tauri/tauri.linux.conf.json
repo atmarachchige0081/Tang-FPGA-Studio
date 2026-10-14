@@ -1,0 +1,13 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "bundle": {
+    "targets": ["deb", "appimage"],
+    "resources": { "resources/workspace/": "workspace/" },
+    "linux": {
+      "deb": {
+        "depends": ["git", "python3", "libusb-1.0-0", "xdg-utils"],
+        "files": { "/usr/share/doc/tang-fpga-studio/60-tang-fpga-studio.rules": "../../scripts/60-tang-fpga-studio.rules" }
+      }
+    }
+  }
+}

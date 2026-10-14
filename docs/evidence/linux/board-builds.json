@@ -1,0 +1,62 @@
+[
+  {
+    "board": "tang_console_138k",
+    "bitstreamBytes": 34668145,
+    "fmax": {
+      "clk_50mhz_IBUF_I_O": {
+        "achieved": 458.5052795410156,
+        "constraint": 50
+      }
+    }
+  },
+  {
+    "board": "tang_nano_1k",
+    "bitstreamBytes": 351954,
+    "fmax": {
+      "clk_27mhz_IBUF_I_O": {
+        "achieved": 245.51927185058594,
+        "constraint": 27
+      }
+    }
+  },
+  {
+    "board": "tang_nano_20k",
+    "bitstreamBytes": 4618782,
+    "fmax": {
+      "clk_27mhz_IBUF_I_O": {
+        "achieved": 446.2293701171875,
+        "constraint": 27
+      }
+    }
+  },
+  {
+    "board": "tang_nano_4k",
+    "bitstreamBytes": 1167294,
+    "fmax": {
+      "clk_27mhz_IBUF_I_O": {
+        "achieved": 245.51927185058594,
+        "constraint": 27
+      }
+    }
+  },
+  {
+    "board": "tang_nano_9k",
+    "bitstreamBytes": 2069320,
+    "fmax": {
+      "clk_27mhz_IBUF_I_O": {
+        "achieved": 245.51927185058594,
+        "constraint": 27
+      }
+    }
+  },
+  {
+    "board": "tang_primer_20k",
+    "bitstreamBytes": 4618782,
+    "fmax": {
+      "clk_27mhz_IBUF_I_O": {
+        "achieved": 427.7159729003906,
+        "constraint": 27
+      }
+    }
+  }
+]

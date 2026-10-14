@@ -625,6 +625,25 @@ async fn ai_respond_user_input(
 pub fn run() -> Result<(), String> {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
+        .setup(|app| {
+            #[cfg(target_os = "linux")]
+            if std::env::var_os("FPGA_STUDIO_WORKSPACE").is_none() {
+                use tauri::Manager;
+                let bundled = app.path().resource_dir()?.join("workspace");
+                if bundled.join("fpga.ps1").is_file() {
+                    let writable = app
+                        .path()
+                        .app_data_dir()?
+                        .join(concat!("workspace-", env!("CARGO_PKG_VERSION")));
+                    project::copy_bundled_workspace(&bundled, &writable)
+                        .map_err(std::io::Error::other)?;
+                    std::env::set_var("FPGA_STUDIO_WORKSPACE", writable);
+                }
+            }
+            #[cfg(not(target_os = "linux"))]
+            let _ = app;
+            Ok(())
+        })
         .manage(JobRegistry::default())
         .manage(SerialRegistry::default())
         .manage(AiRegistry::default())

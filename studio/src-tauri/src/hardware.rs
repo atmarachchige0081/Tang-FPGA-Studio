@@ -1,9 +1,11 @@
 use crate::models::{SerialDevice, SerialEvent};
+#[cfg(windows)]
 use crate::security::{canonical_workspace, child_process_path, resolve_project_path};
 use chrono::Utc;
 use serialport::{DataBits, FlowControl, Parity, SerialPort, StopBits};
 use std::collections::HashMap;
 use std::io::{Read, Write};
+#[cfg(windows)]
 use std::process::{Command, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
@@ -14,7 +16,7 @@ pub fn launch_zadig(root: &str, project: &str) -> Result<String, String> {
     #[cfg(not(windows))]
     {
         let _ = (root, project);
-        return Err("Zadig is only required for the Windows JTAG driver".into());
+        Err("Linux uses udev permissions. Install the supplied udev rules, add your user to dialout, log out/in and reconnect the board. See docs/LINUX.md. No driver was changed.".into())
     }
 
     #[cfg(windows)]
@@ -248,4 +250,29 @@ fn emit_serial(
             timestamp: Utc::now().to_rfc3339(),
         },
     );
+}
+
+#[cfg(all(test, unix))]
+mod linux_tests {
+    use super::*;
+
+    #[test]
+    fn serial_registry_writes_exact_bytes_to_a_real_pty() {
+        let (transmit, mut receive) = serialport::TTYPort::pair().unwrap();
+        receive.set_timeout(Duration::from_secs(2)).unwrap();
+        let registry = SerialRegistry::default();
+        registry.sessions.lock().unwrap().insert(
+            "pty".into(),
+            SerialSession {
+                port: Arc::new(Mutex::new(Box::new(transmit))),
+                cancel: Arc::new(AtomicBool::new(false)),
+            },
+        );
+        write(&registry, "pty", vec![0x00, 0xff, b'\n', b'A']).unwrap();
+        let mut bytes = [0_u8; 4];
+        receive.read_exact(&mut bytes).unwrap();
+        assert_eq!(bytes, [0x00, 0xff, b'\n', b'A']);
+        assert!(disconnect(&registry, "pty").unwrap());
+        assert!(write(&registry, "pty", vec![1]).is_err());
+    }
 }

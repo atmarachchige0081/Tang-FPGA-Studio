@@ -5,6 +5,12 @@ use std::io::Write;
 use std::path::PathBuf;
 
 fn crash_log_path() -> PathBuf {
+    #[cfg(target_os = "linux")]
+    let base = std::env::var_os("XDG_STATE_HOME")
+        .map(PathBuf::from)
+        .or_else(|| std::env::var_os("HOME").map(|home| PathBuf::from(home).join(".local/state")))
+        .unwrap_or_else(std::env::temp_dir);
+    #[cfg(not(target_os = "linux"))]
     let base = std::env::var_os("LOCALAPPDATA")
         .map(PathBuf::from)
         .unwrap_or_else(std::env::temp_dir);

@@ -90,6 +90,13 @@ reasoning-level selection, and explicit local sign-in for each user. The
 production installer no longer depends on a development web server. See the
 [v3.4.1 release notes](docs/RELEASE_3.4.1.md).
 
+## Ubuntu Linux support in development
+
+Ubuntu 22.04+ x86_64 native development, packages, toolchain setup and validation
+are described in the [Linux guide](docs/LINUX.md). See the [validation evidence](docs/LINUX_VALIDATION.md)
+before treating a Linux build as release-qualified; hardware verification remains
+separate from software tests.
+
 ## Native AI coding agent
 
 Open **AI Assistant** from the robot icon or press `Ctrl+Shift+A` to connect the

@@ -1,0 +1,5 @@
+# FTDI programmers used by supported Tang boards; grants logged-in local users USB access.
+# UART /dev/ttyUSB* access also requires dialout membership on Ubuntu.
+SUBSYSTEM=="usb", ATTR{idVendor}=="0403", ATTR{idProduct}=="6010", MODE="0660", GROUP="plugdev", TAG+="uaccess"
+SUBSYSTEM=="usb", ATTR{idVendor}=="0403", ATTR{idProduct}=="6014", MODE="0660", GROUP="plugdev", TAG+="uaccess"
+SUBSYSTEM=="usb", ATTR{idVendor}=="0403", ATTR{idProduct}=="6015", MODE="0660", GROUP="plugdev", TAG+="uaccess"

@@ -102,7 +102,9 @@ fn run_blocking(
         return Err("The active project has no fpga.config.psd1".into());
     }
     let cancellation = Arc::new(AtomicBool::new(false));
-    let project_key = project_dir.to_string_lossy().to_ascii_lowercase();
+    let project_key = project_dir.to_string_lossy().into_owned();
+    #[cfg(windows)]
+    let project_key = project_key.to_ascii_lowercase();
     registry.insert(job_id.clone(), project_key, cancellation.clone())?;
     let started = Instant::now();
     emit(
@@ -113,7 +115,11 @@ fn run_blocking(
         "Starting FPGA toolchain job",
     );
 
-    let mut command = Command::new("powershell.exe");
+    let mut command = Command::new(if cfg!(windows) {
+        "powershell.exe"
+    } else {
+        "pwsh"
+    });
     command
         .arg("-NoLogo")
         .arg("-NoProfile")
@@ -133,11 +139,18 @@ fn run_blocking(
         use std::os::windows::process::CommandExt;
         command.creation_flags(0x0800_0000);
     }
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::CommandExt;
+        command.process_group(0);
+    }
     let mut child = match command.spawn() {
         Ok(child) => child,
         Err(error) => {
             registry.remove(&job_id);
-            return Err(format!("Cannot start PowerShell: {error}"));
+            return Err(format!(
+                "Cannot start PowerShell (Windows: powershell.exe; Linux: pwsh): {error}"
+            ));
         }
     };
     let process_id = child.id();
@@ -280,6 +293,15 @@ fn terminate_process_tree(process_id: u32, child: &mut std::process::Child) {
             .stderr(Stdio::null())
             .status();
     }
+    #[cfg(unix)]
+    {
+        // The runner owns this process group, including tool grandchildren.
+        let _ = Command::new("/bin/kill")
+            .args(["-KILL", "--", &format!("-{process_id}")])
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status();
+    }
     let _ = child.kill();
 }
 
@@ -344,6 +366,18 @@ fn friendly_failure(action: BuildAction, lines: &[String]) -> String {
     {
         return "No JTAG programmer is currently visible. Connect the board port marked JTAG/UART or MCU directly to the computer, confirm the FPGA/SOM is enabled, then run Detect JTAG again.".into();
     }
+    #[cfg(target_os = "linux")]
+    if combined.contains("libusb_error_access")
+        || combined.contains("permission denied")
+        || combined.contains("unable to open ftdi device")
+        || combined.contains("usb_open() failed")
+        || combined.contains("ftdi_usb_reset failed")
+        || combined.contains("ftdi reset failed")
+        || combined.contains("unable to configure bitbang mode")
+        || combined.contains("unable to config pins")
+    {
+        return "Linux cannot open JTAG Interface 0. Unplug and reconnect the board, install the supplied udev rules, and close other programmers. Do not replace USB drivers. UART requires dialout membership; log out/in after joining. See docs/LINUX.md.".into();
+    }
     if combined.contains("ftdi_usb_reset failed")
         || combined.contains("ftdi reset failed")
         || combined.contains("unable to configure bitbang mode")
@@ -358,7 +392,11 @@ fn friendly_failure(action: BuildAction, lines: &[String]) -> String {
         || combined.contains("low level ftdi init failed")
         || combined.contains("fpga programmer timed out")
     {
-        return "The JTAG USB interface stopped responding. Unplug the board USB cable, wait 3 seconds, reconnect it, then run Detect JTAG before retrying SRAM. Do not change the Zadig drivers.".into();
+        return if cfg!(windows) {
+            "The JTAG USB interface stopped responding. Unplug the board USB cable, wait 3 seconds, reconnect it, then run Detect JTAG before retrying SRAM. Do not change the Zadig drivers."
+        } else {
+            "The JTAG USB interface stopped responding. Unplug the board USB cable, wait 3 seconds, reconnect it, then run Detect JTAG before retrying SRAM. Do not replace USB drivers."
+        }.into();
     }
     if combined.contains("oss cad suite is not installed") || combined.contains("environment.ps1") {
         return "The FPGA toolchain is not ready. Run the setup command, then Hardware Doctor, before trying again.".into();
@@ -468,7 +506,11 @@ mod tests {
             &["mpsse_write: fail to write with error -1 (usb bulk write failed)".into()],
         );
         assert!(bulk.contains("Unplug"));
-        assert!(bulk.contains("Do not change the Zadig drivers"));
+        assert!(bulk.contains(if cfg!(windows) {
+            "Do not change the Zadig drivers"
+        } else {
+            "Do not replace USB drivers"
+        }));
 
         let timeout = friendly_failure(
             BuildAction::Upload,
@@ -518,5 +560,37 @@ mod tests {
             thread.join().unwrap();
         }
         assert_eq!(accepted.load(std::sync::atomic::Ordering::SeqCst), 1);
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn linux_usb_denial_reports_udev_instead_of_windows_drivers() {
+        for error in [
+            "LIBUSB_ERROR_ACCESS: permission denied",
+            "ftdi_usb_reset failed",
+            "FTDI reset failed",
+            "unable to configure bitbang mode",
+            "unable to config pins",
+        ] {
+            let message =
+                super::friendly_failure(crate::models::BuildAction::Detect, &[error.into()]);
+            assert!(message.contains("udev"));
+            assert!(!message.contains("WinUSB"));
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn cancellation_kills_the_owned_process_group() {
+        use std::os::unix::process::CommandExt;
+        use std::process::{Command, Stdio};
+        let mut child = Command::new("sh")
+            .args(["-c", "sleep 60 & wait"])
+            .process_group(0)
+            .stdout(Stdio::null())
+            .spawn()
+            .unwrap();
+        super::terminate_process_tree(child.id(), &mut child);
+        assert!(!child.wait().unwrap().success());
     }
 }

@@ -7,9 +7,12 @@ param(
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
-$workspace = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..')).TrimEnd('\')
-$testRoot = [IO.Path]::GetFullPath((Join-Path $workspace '.fpga-studio\board-smoke')).TrimEnd('\')
-if (-not $testRoot.StartsWith($workspace + '\', [StringComparison]::OrdinalIgnoreCase)) {
+$separator = [IO.Path]::DirectorySeparatorChar
+$comparison = if ([Environment]::OSVersion.Platform -eq [PlatformID]::Win32NT) { [StringComparison]::OrdinalIgnoreCase } else { [StringComparison]::Ordinal }
+$shellExecutable = (Get-Process -Id $PID).Path
+$workspace = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..')).TrimEnd($separator)
+$testRoot = [IO.Path]::GetFullPath((Join-Path $workspace '.fpga-studio\board-smoke')).TrimEnd($separator)
+if (-not $testRoot.StartsWith($workspace + $separator, $comparison)) {
     throw "Board smoke directory escaped the workspace: $testRoot"
 }
 
@@ -77,15 +80,15 @@ try {
             $relative = ".fpga-studio/board-smoke/$($profile.Id)"
             Write-Host "Starting board build: $($profile.Id)" -ForegroundColor Cyan
             $job = Start-Job -ScriptBlock {
-                param($Root, $Project, $Id)
+                param($Root, $Project, $Id, $ShellExecutable)
                 try {
-                    $lines = @(& powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $Root 'fpga.ps1') build -Project $Project 2>&1)
+                    $lines = @(& $ShellExecutable -NoProfile -ExecutionPolicy Bypass -File (Join-Path $Root 'fpga.ps1') build -Project $Project 2>&1)
                     if ($LASTEXITCODE -ne 0) { throw ($lines -join [Environment]::NewLine) }
                     [pscustomobject]@{ Board=$Id; Success=$true; Message=($lines | Select-Object -Last 1) }
                 } catch {
                     [pscustomobject]@{ Board=$Id; Success=$false; Message=$_.Exception.Message }
                 }
-            } -ArgumentList $workspace, $relative, $profile.Id
+            } -ArgumentList $workspace, $relative, $profile.Id, $shellExecutable
             $running += $job
         }
         $finished = Wait-Job -Job $running -Any

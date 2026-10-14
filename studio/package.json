@@ -11,9 +11,9 @@
     "test:watch": "vitest",
     "check": "npm run build && npm run test",
     "tauri": "tauri",
-    "desktop": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/run-tauri.ps1 dev",
-    "desktop:build": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/run-tauri.ps1 build",
-    "desktop:doctor": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/run-tauri.ps1 check"
+    "desktop": "node scripts/run-tauri.mjs dev",
+    "desktop:build": "node scripts/run-tauri.mjs build",
+    "desktop:doctor": "node scripts/run-tauri.mjs check"
   },
   "dependencies": {
     "@monaco-editor/react": "4.7.0",
@@ -29,7 +29,6 @@
   },
   "devDependencies": {
     "@tauri-apps/cli": "2.11.4",
-    "@tauri-apps/cli-win32-x64-msvc": "2.11.4",
     "@testing-library/jest-dom": "6.9.1",
     "@testing-library/react": "16.3.2",
     "@types/react": "19.2.18",

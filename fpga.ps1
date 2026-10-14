@@ -18,16 +18,19 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
-$WorkspaceRoot = [IO.Path]::GetFullPath($PSScriptRoot).TrimEnd('\')
+$script:OnWindows = [Environment]::OSVersion.Platform -eq [PlatformID]::Win32NT
+$script:PathSeparator = [IO.Path]::DirectorySeparatorChar
+$script:PathComparison = if ($script:OnWindows) { [StringComparison]::OrdinalIgnoreCase } else { [StringComparison]::Ordinal }
+$WorkspaceRoot = [IO.Path]::GetFullPath($PSScriptRoot).TrimEnd($script:PathSeparator)
 $projectCandidate = if ([IO.Path]::IsPathRooted($Project)) {
     $Project
 } else {
     Join-Path $WorkspaceRoot $Project
 }
-$ProjectRoot = [IO.Path]::GetFullPath($projectCandidate).TrimEnd('\')
+$ProjectRoot = [IO.Path]::GetFullPath($projectCandidate).TrimEnd($script:PathSeparator)
 if (-not [IO.Path]::IsPathRooted($Project) -and
-    $ProjectRoot -ne $WorkspaceRoot -and
-    -not $ProjectRoot.StartsWith($WorkspaceRoot + '\', [StringComparison]::OrdinalIgnoreCase)) {
+    -not $ProjectRoot.Equals($WorkspaceRoot, $script:PathComparison) -and
+    -not $ProjectRoot.StartsWith($WorkspaceRoot + $script:PathSeparator, $script:PathComparison)) {
     throw "Project must be inside the workspace: $ProjectRoot"
 }
 if (-not (Test-Path -LiteralPath $ProjectRoot -PathType Container)) {
@@ -72,6 +75,27 @@ always written inside that project's build/ directory.
 }
 
 function Initialize-Toolchain {
+    if (-not $script:OnWindows) {
+        $toolchainRoot = if ($env:OSS_CAD_SUITE_ROOT) { $env:OSS_CAD_SUITE_ROOT } else {
+            $dataHome = if ($env:XDG_DATA_HOME) { $env:XDG_DATA_HOME } else { Join-Path $HOME '.local/share' }
+            Join-Path $dataHome 'tang-fpga-studio/toolchains/2026-07-26/oss-cad-suite'
+        }
+        if (-not (Test-Path -LiteralPath (Join-Path $toolchainRoot 'bin/yosys') -PathType Leaf)) {
+            throw "OSS CAD Suite is not installed at '$toolchainRoot'. Run 'pwsh -File ./fpga.ps1 setup'."
+        }
+        $env:PATH = (Join-Path $toolchainRoot 'bin') + [IO.Path]::PathSeparator + $env:PATH
+        $env:YOSYSHQ_ROOT = $toolchainRoot + '/'
+        # Gowin power-on initialization is intentional. Keep this narrow waiver
+        # on recent tool invocations; older Ubuntu Verilator cannot parse it.
+        $script:VerilatorExecutable = Join-Path $toolchainRoot 'bin/verilator'
+        $versionText = & $script:VerilatorExecutable '--version'
+        if ($LASTEXITCODE -ne 0) { throw 'Cannot inspect the selected Verilator.' }
+        if ($versionText -match 'Verilator (\d+)\.(\d+)' -and
+            ([int]$Matches[1] -gt 5 -or ([int]$Matches[1] -eq 5 -and [int]$Matches[2] -ge 51))) {
+            $script:VerilatorWarningArguments = @('-Wno-PROCASSINIT')
+        }
+        return
+    }
     $toolchainRoot = if ($env:OSS_CAD_SUITE_ROOT) {
         $env:OSS_CAD_SUITE_ROOT
     } else {
@@ -85,7 +109,7 @@ function Initialize-Toolchain {
 
     # The upstream environment script only initializes YOSYSHQ_ROOT when it is
     # unset, so set it explicitly when a caller selects an override.
-    $env:YOSYSHQ_ROOT = "$($toolchainRoot.TrimEnd('\'))\"
+    $env:YOSYSHQ_ROOT = "$($toolchainRoot.TrimEnd($script:PathSeparator))\"
     . $environmentScript
 
     # OSS CAD Suite ships Verilator's Unix Perl wrapper as an extensionless
@@ -153,7 +177,10 @@ function Get-ProjectBuildBackend {
 
 function Get-GowinShell {
     $candidates = @()
-    if ($env:GOWIN_EDA_ROOT) {
+    if (-not $script:OnWindows -and $env:GOWIN_EDA_ROOT) {
+        $candidates += @((Join-Path $env:GOWIN_EDA_ROOT 'IDE/bin/gw_sh'), (Join-Path $env:GOWIN_EDA_ROOT 'bin/gw_sh'))
+    }
+    if ($script:OnWindows -and $env:GOWIN_EDA_ROOT) {
         $candidates += @(
             (Join-Path $env:GOWIN_EDA_ROOT 'IDE\bin\gw_sh.exe'),
             (Join-Path $env:GOWIN_EDA_ROOT 'bin\gw_sh.exe')
@@ -161,12 +188,13 @@ function Get-GowinShell {
     }
     $command = Get-Command 'gw_sh' -ErrorAction SilentlyContinue
     if ($command) { $candidates += $command.Source }
-    $candidates += @(Get-Item -Path 'C:\Gowin\Gowin_*\IDE\bin\gw_sh.exe' -ErrorAction SilentlyContinue |
-        ForEach-Object { $_.FullName })
+    if ($script:OnWindows) {
+        $candidates += @(Get-Item -Path 'C:\Gowin\Gowin_*\IDE\bin\gw_sh.exe' -ErrorAction SilentlyContinue | ForEach-Object { $_.FullName })
+    }
     $shell = $candidates | Where-Object { $_ -and (Test-Path -LiteralPath $_ -PathType Leaf) } |
         Select-Object -First 1
     if (-not $shell) {
-        throw "Tang Console 60K builds require Gowin EDA Education 1.9.11.03 or newer because the pinned open-source device database does not include GW5AT-60B. Install Gowin EDA, then set GOWIN_EDA_ROOT to the folder that contains IDE\bin\gw_sh.exe. Lint and simulation remain available without Gowin EDA."
+        throw "Tang Console 60K builds require Gowin EDA Education 1.9.11.03 or newer because the pinned open-source device database does not include GW5AT-60B. Install Gowin EDA for your operating system, then set GOWIN_EDA_ROOT to the folder containing IDE/bin/gw_sh (Linux) or IDE/bin/gw_sh.exe (Windows). Lint and simulation remain available without Gowin EDA."
     }
     $shell
 }
@@ -176,9 +204,9 @@ function Get-RelativeProjectPath {
     # Windows PowerShell 5.1 uses .NET Framework, which predates
     # [IO.Path]::GetRelativePath(). All project sources are required to live
     # below the workspace, so a validated prefix removal is sufficient.
-    $rootPrefix = [IO.Path]::GetFullPath($ProjectRoot).TrimEnd('\') + '\'
+    $rootPrefix = [IO.Path]::GetFullPath($ProjectRoot).TrimEnd($script:PathSeparator) + $script:PathSeparator
     $fullPath = [IO.Path]::GetFullPath($Path)
-    if (-not $fullPath.StartsWith($rootPrefix, [StringComparison]::OrdinalIgnoreCase)) {
+    if (-not $fullPath.StartsWith($rootPrefix, $script:PathComparison)) {
         throw "Path is outside the project: $fullPath"
     }
     $fullPath.Substring($rootPrefix.Length).Replace('\', '/')
@@ -230,9 +258,9 @@ function Invoke-GowinEdaBuild {
     }
     $vendorDirectory = Join-Path $BuildDir 'gowin'
     if (Test-Path -LiteralPath $vendorDirectory) {
-        $resolvedBuild = [IO.Path]::GetFullPath($BuildDir).TrimEnd('\')
-        $resolvedVendor = [IO.Path]::GetFullPath($vendorDirectory).TrimEnd('\')
-        if (-not $resolvedVendor.StartsWith($resolvedBuild + '\', [StringComparison]::OrdinalIgnoreCase)) {
+        $resolvedBuild = [IO.Path]::GetFullPath($BuildDir).TrimEnd($script:PathSeparator)
+        $resolvedVendor = [IO.Path]::GetFullPath($vendorDirectory).TrimEnd($script:PathSeparator)
+        if (-not $resolvedVendor.StartsWith($resolvedBuild + $script:PathSeparator, $script:PathComparison)) {
             throw "Refusing to replace a Gowin build path outside the project build folder: $resolvedVendor"
         }
         Remove-Item -LiteralPath $vendorDirectory -Recurse -Force
@@ -316,8 +344,8 @@ function Invoke-Simulation {
     $testbenches = @(
         if ($Testbench) {
             $candidate = [IO.Path]::GetFullPath((Join-Path $ProjectRoot $Testbench))
-            $simulationRoot = [IO.Path]::GetFullPath((Join-Path $ProjectRoot 'sim')).TrimEnd('\') + '\'
-            if (-not $candidate.StartsWith($simulationRoot, [StringComparison]::OrdinalIgnoreCase)) {
+            $simulationRoot = [IO.Path]::GetFullPath((Join-Path $ProjectRoot 'sim')).TrimEnd($script:PathSeparator) + $script:PathSeparator
+            if (-not $candidate.StartsWith($simulationRoot, $script:PathComparison)) {
                 throw "Selected testbench must be under sim/: $Testbench"
             }
             if (-not (Test-Path -LiteralPath $candidate -PathType Leaf) -or
@@ -349,8 +377,8 @@ function Open-Waveform {
     }
     $saveRelative = if ($WaveLayout) { $WaveLayout } else { 'sim\waves.gtkw' }
     $saveFile = [IO.Path]::GetFullPath((Join-Path $ProjectRoot $saveRelative))
-    $simulationRoot = [IO.Path]::GetFullPath((Join-Path $ProjectRoot 'sim')).TrimEnd('\') + '\'
-    if (-not $saveFile.StartsWith($simulationRoot, [StringComparison]::OrdinalIgnoreCase)) {
+    $simulationRoot = [IO.Path]::GetFullPath((Join-Path $ProjectRoot 'sim')).TrimEnd($script:PathSeparator) + $script:PathSeparator
+    if (-not $saveFile.StartsWith($simulationRoot, $script:PathComparison)) {
         throw "Wave layout must be under sim/: $saveRelative"
     }
     $gtkwaveArgs = @('--dump', ('"' + $waveform + '"'))
@@ -540,6 +568,9 @@ function Invoke-Detect {
     if ($diagnosis -match 'device not found|no JTAG probe|no cable found') {
         throw 'No JTAG programmer is currently visible. Connect the board port marked JTAG/UART or MCU directly to the computer, confirm the FPGA/SOM is enabled, then retry Detect JTAG.'
     }
+    if (-not $script:OnWindows -and $diagnosis -match 'unable to open|usb_open|permission|LIBUSB_ERROR_ACCESS|ftdi_usb_reset|FTDI reset|configure bitbang|unable to config pins') {
+        throw 'Linux USB access failed. Install the supplied udev rules, reconnect the board, and close other programmers. UART requires dialout membership; log out/in after joining. See docs/LINUX.md.'
+    }
     if ($diagnosis -match 'ftdi_usb_reset|FTDI reset|configure bitbang') {
         throw 'JTAG Interface 0 is connected but its FTDI endpoint could not reset. Unplug the board USB cable, wait five seconds, reconnect it, close other FPGA programmer tools, then run Detect JTAG again. Do not replace the driver: Interface 0 already uses WinUSB.'
     }
@@ -550,6 +581,10 @@ function Invoke-Detect {
 }
 
 function Open-JtagDriverInstaller {
+    if (-not $script:OnWindows) {
+        Write-Host 'Linux uses udev permissions, not WinUSB. See docs/LINUX.md: install the supplied udev rules, add your user to dialout, log out/in, and reconnect the board. No driver was changed.'
+        return
+    }
     if (-not (Test-Path -LiteralPath $Config.DriverTool)) {
         throw "The signed driver helper is missing at '$($Config.DriverTool)'. Run '.\fpga.ps1 setup' first."
     }
@@ -610,12 +645,20 @@ function Invoke-Doctor {
         Write-Warning 'USB scan returned an error. Check the debugger USB cable/driver.'
     } elseif ($scanOutput -match 'Operation not supported|Error code -12|Device Descriptor Request Failed') {
         Write-Warning 'The debugger USB endpoint did not enumerate cleanly. Reconnect it directly without a hub and try a known data-capable cable before changing any driver.'
+    } elseif (-not $script:OnWindows -and $scanOutput -match "can't open device|permission|LIBUSB_ERROR_ACCESS") {
+        Write-Warning 'Linux USB permission denied. Install the supplied udev rules, log out/in after group changes, and reconnect the board. See docs/LINUX.md.'
     } elseif ($scanOutput -match "can't open device") {
         Write-Warning "The Dock is connected, but JTAG interface A is not using WinUSB. Run '.\fpga.ps1 driver'."
     } elseif ($scanOutput.Count -le 1) {
         Write-Warning 'No JTAG probe is currently visible. Connect the Dock JTAG/UART USB-C port.'
     }
 
+    if (-not $script:OnWindows) {
+        Write-Host "`nLinux serial ports" -ForegroundColor Cyan
+        Get-ChildItem /dev/serial/by-id, /dev/ttyUSB*, /dev/ttyACM* -ErrorAction SilentlyContinue | ForEach-Object { Write-Host "  $($_.FullName)" }
+        Write-Host 'USB access: install the supplied udev rules; UART access: dialout membership (log out/in). See docs/LINUX.md.'
+        return
+    }
     Write-Host "`nWindows serial ports" -ForegroundColor Cyan
     $portDevices = @(Get-CimInstance Win32_PnPEntity |
         Where-Object { $_.Name -match '\(COM\d+\)' } |
@@ -669,9 +712,9 @@ function Clear-BuildDirectory {
         Write-Host 'Nothing to clean.'
         return
     }
-    $resolvedProject = [IO.Path]::GetFullPath($ProjectRoot).TrimEnd('\')
-    $resolvedBuild = [IO.Path]::GetFullPath($BuildDir).TrimEnd('\')
-    if (-not $resolvedBuild.StartsWith($resolvedProject + '\', [StringComparison]::OrdinalIgnoreCase)) {
+    $resolvedProject = [IO.Path]::GetFullPath($ProjectRoot).TrimEnd($script:PathSeparator)
+    $resolvedBuild = [IO.Path]::GetFullPath($BuildDir).TrimEnd($script:PathSeparator)
+    if (-not $resolvedBuild.StartsWith($resolvedProject + $script:PathSeparator, $script:PathComparison)) {
         throw "Refusing to remove a build path outside the project: $resolvedBuild"
     }
     Remove-Item -LiteralPath $resolvedBuild -Recurse -Force
@@ -685,7 +728,8 @@ try {
         return
     }
     if ($Command -eq 'setup') {
-        & (Join-Path $WorkspaceRoot 'scripts/setup-toolchain.ps1')
+        if ($script:OnWindows) { & (Join-Path $WorkspaceRoot 'scripts/setup-toolchain.ps1') }
+        else { Invoke-NativeTool 'bash' @((Join-Path $WorkspaceRoot 'scripts/setup-toolchain-linux.sh')) }
         return
     }
     if ($Command -eq 'driver') {

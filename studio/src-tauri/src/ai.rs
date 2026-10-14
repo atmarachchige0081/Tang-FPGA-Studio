@@ -216,6 +216,11 @@ impl AiRegistry {
             use std::os::windows::process::CommandExt;
             command.creation_flags(0x0800_0000);
         }
+        #[cfg(unix)]
+        {
+            use std::os::unix::process::CommandExt;
+            command.process_group(0);
+        }
         let mut child = command
             .spawn()
             .map_err(|error| format!("Codex App Server could not start: {error}"))?;
@@ -1358,6 +1363,7 @@ fn login_result(value: Value) -> Result<AiLoginResult, String> {
 }
 
 fn locate_codex() -> Result<(PathBuf, String), String> {
+    #[allow(unused_mut)]
     let mut candidates = vec![PathBuf::from("codex")];
     #[cfg(windows)]
     if let Some(profile) = std::env::var_os("USERPROFILE") {
@@ -1453,6 +1459,13 @@ fn terminate_session(session: &AiSession) {
         #[cfg(windows)]
         let _ = Command::new("taskkill")
             .args(["/PID", &process_id.to_string(), "/T", "/F"])
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status();
+        #[cfg(unix)]
+        let _ = Command::new("/bin/kill")
+            .args(["-KILL", "--", &format!("-{process_id}")])
             .stdin(Stdio::null())
             .stdout(Stdio::null())
             .stderr(Stdio::null())

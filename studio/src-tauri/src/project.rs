@@ -31,6 +31,36 @@ const MAX_TREE_ENTRIES: usize = 20_000;
 const PROJECT_AGENT_GUIDE: &str = include_str!("../../../projects/AGENTS.md");
 static FILE_WRITE_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
 
+/// Seed a writable per-user workspace from packaged resources. Never replace user files.
+#[cfg(target_os = "linux")]
+pub fn copy_bundled_workspace(source: &Path, destination: &Path) -> Result<(), String> {
+    fs::create_dir_all(destination).map_err(|error| error.to_string())?;
+    for entry in fs::read_dir(source).map_err(|error| error.to_string())? {
+        let entry = entry.map_err(|error| error.to_string())?;
+        let kind = entry.file_type().map_err(|error| error.to_string())?;
+        let target = destination.join(entry.file_name());
+        if kind.is_dir() {
+            copy_bundled_workspace(&entry.path(), &target)?;
+        } else if kind.is_file() {
+            // create_new prevents overwrites even when another instance starts concurrently.
+            match OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .open(&target)
+            {
+                Ok(mut file) => {
+                    use std::io::Write;
+                    let bytes = fs::read(entry.path()).map_err(|error| error.to_string())?;
+                    file.write_all(&bytes).map_err(|error| error.to_string())?;
+                }
+                Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {}
+                Err(error) => return Err(error.to_string()),
+            }
+        }
+    }
+    Ok(())
+}
+
 pub fn discover_workspace() -> Result<PathBuf, String> {
     if let Ok(override_root) = std::env::var("FPGA_STUDIO_WORKSPACE") {
         return canonical_workspace(&override_root);
@@ -1788,6 +1818,26 @@ mod tests {
                 .is_err()
         );
         assert!(!root.join("projects/05_invalid_target").exists());
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn packaged_workspace_is_writable_and_preserves_user_edits() {
+        let root = std::env::temp_dir().join(format!("tang-bundle-{}", uuid::Uuid::new_v4()));
+        let source = root.join("resources");
+        let destination = root.join("user");
+        fs::create_dir_all(source.join("rtl")).unwrap();
+        fs::write(source.join("fpga.ps1"), "runner").unwrap();
+        fs::write(source.join("rtl/top.sv"), "original").unwrap();
+        super::copy_bundled_workspace(&source, &destination).unwrap();
+        fs::write(destination.join("rtl/top.sv"), "user edit").unwrap();
+        super::copy_bundled_workspace(&source, &destination).unwrap();
+        assert_eq!(
+            fs::read_to_string(destination.join("rtl/top.sv")).unwrap(),
+            "user edit"
+        );
+        assert!(super::canonical_workspace(&destination.to_string_lossy()).is_ok());
         fs::remove_dir_all(root).unwrap();
     }
 }

@@ -1,0 +1,3 @@
+    Blocking waiting for file lock on build directory
+    Checking fpga-studio v3.4.1 (/workspace/Tang-FPGA-Studio/studio/src-tauri)
+    Finished `release` profile [optimized] target(s) in 44.33s
