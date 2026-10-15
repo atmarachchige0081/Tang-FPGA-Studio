@@ -1,0 +1,23 @@
+{
+  "version": "3.5.0",
+  "date": "2026-10-15",
+  "checks": {
+    "frontendProductionBuild": "passed",
+    "frontendTests": {
+      "passed": 57,
+      "files": 19
+    },
+    "pythonTests": {
+      "passed": 37
+    },
+    "sixVersionFields": "aligned",
+    "cargoMetadataLocked": "passed"
+  },
+  "nativePackages": "fresh 3.5.0 packages not built; saved binary evidence is 3.4.1",
+  "pending": [
+    "Windows runtime and installer acceptance",
+    "Physical board acceptance",
+    "Applicable vendor-tool and authenticated-service acceptance"
+  ],
+  "publication": "local commit only; no tag, push or release"
+}

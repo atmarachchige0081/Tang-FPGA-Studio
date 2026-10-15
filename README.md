@@ -3,7 +3,7 @@
 [![Quality gates](https://github.com/atmarachchige0081/Tang-FPGA-Studio/actions/workflows/quality-gates.yml/badge.svg)](https://github.com/atmarachchige0081/Tang-FPGA-Studio/actions/workflows/quality-gates.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-6c63ff.svg)](LICENSE)
 [![Desktop: Tauri + Rust](https://img.shields.io/badge/desktop-Tauri%20%2B%20Rust-4f9cff.svg)](studio/)
-[![Release: v3.4.1](https://img.shields.io/badge/release-v3.4.1-2d91b8.svg)](CHANGELOG.md)
+[![Version: v3.5.0](https://img.shields.io/badge/version-v3.5.0-2d91b8.svg)](docs/RELEASE_3.5.0.md)
 
 An open-source, beginner-friendly FPGA IDE and development environment for
 Sipeed Tang Nano, Tang Primer, and Tang Console boards. Simulate, inspect waveforms, lint,
@@ -90,8 +90,9 @@ reasoning-level selection, and explicit local sign-in for each user. The
 production installer no longer depends on a development web server. See the
 [v3.4.1 release notes](docs/RELEASE_3.4.1.md).
 
-## Ubuntu Linux support in development
+## Ubuntu Linux support
 
+Version 3.5.0 is prepared locally; publication awaits the [release gates](docs/RELEASE_PREPARATION.md).
 Ubuntu 22.04+ x86_64 native development, packages, toolchain setup and validation
 are described in the [Linux guide](docs/LINUX.md). See the [validation evidence](docs/LINUX_VALIDATION.md)
 before treating a Linux build as release-qualified; hardware verification remains

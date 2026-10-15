@@ -1,10 +1,10 @@
-# Tang FPGA Studio 3.5.0 — draft release notes
+# Tang FPGA Studio 3.5.0 — Windows and Ubuntu
 
-**Unreleased proposal.** Current application/package metadata remains 3.4.1.
-Do not publish this draft as evidence of completed hardware or Windows acceptance.
+**Prepared locally; not published.** Application/package metadata is aligned at 3.5.0.
+Windows runtime and physical-board acceptance remain pending.
 See [release preparation](RELEASE_PREPARATION.md) for the remaining gates.
 
-This release proposes Ubuntu 22.04, 24.04 and 26.04 x86_64 support alongside
+This release adds Ubuntu 22.04, 24.04 and 26.04 x86_64 support alongside
 Windows, using the same React/Rust workspace and PowerShell FPGA runner.
 
 - Native `.deb` and AppImage distributions, writable per-user workspaces and

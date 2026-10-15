@@ -118,7 +118,7 @@ For the installed desktop (with `tauri-driver`, WebKitWebDriver, Xvfb and scrot)
 xvfb-run -a -s '-screen 0 1600x1200x24' dbus-run-session -- \
   python3 scripts/test-linux-desktop.py /usr/bin/fpga-studio --output build/linux-evidence/native
 APPIMAGE_EXTRACT_AND_RUN=1 xvfb-run -a -s '-screen 0 1600x1200x24' dbus-run-session -- \
-  python3 scripts/test-linux-desktop.py '/path/to/Tang FPGA Studio_3.4.1_amd64.AppImage' \
+  python3 scripts/test-linux-desktop.py '/path/to/Tang FPGA Studio_3.5.0_amd64.AppImage' \
   --ui-only --output build/linux-evidence/appimage
 ```
 

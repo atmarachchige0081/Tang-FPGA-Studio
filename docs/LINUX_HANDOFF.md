@@ -14,6 +14,10 @@ The final supported `npm run desktop:build` completed successfully. Final packag
 
 The final Ubuntu 26.04 installed package now passes all 17 checkpoints. Fresh results, screenshots, timing and experiment evidence are committed in `docs/evidence/linux/`. See `RELEASE_PREPARATION.md` for the next gates and `RELEASE_3.5.0.md` for proposed release notes. The Windows MSVC package workflow is prepared but has not been executed here. No version bump, tag or publication has occurred.
 
+## Local release commit preparation — 2026-10-15
+
+At the user’s request, version metadata, release history and the application’s first-launch notes are aligned at **3.5.0**. No publication or tag is authorized by that local commit. Saved binary evidence remains for the prior 3.4.1 development packages; fresh 3.5.0 packages must be built and validated before release.
+
 ## Original first task (completed on resume)
 
 Finish the **final Ubuntu 26.04 full `.deb` run**. An earlier build passed all 17 checkpoints, but the final rebuilt artifact reached 10 checkpoints, including analyzer instrumentation/build, before this pause. Optimization, Console 60K prerequisite checks and the final screenshots must finish in a fresh run. The running driver group was stopped at pause; do not count the partial JSON as a complete pass.

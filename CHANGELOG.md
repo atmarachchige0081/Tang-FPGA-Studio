@@ -2,6 +2,20 @@
 
 All notable user-facing changes are recorded here.
 
+## 3.5.0 — Unreleased
+
+- Added Ubuntu 22.04/24.04/26.04 x86_64 support alongside Windows, with native
+  `.deb` and AppImage packaging and writable per-user workspaces.
+- Added checksum-verified Linux FPGA toolchain setup, PowerShell 7 support,
+  platform-aware paths/executables, and udev/libusb plus dialout guidance.
+- Added Unix tool-process cancellation and portable path-validation fixes.
+- Verified native Linux workflows and AppImage UI across the three Ubuntu LTS
+  versions; prepared Windows MSVC install/smoke/uninstall validation.
+- Aligned application metadata and first-launch release notes at 3.5.0.
+- Publication remains pending Windows runtime, physical-board and applicable
+  vendor-tool acceptance. Existing 3.4.1 artifacts are development evidence,
+  not final 3.5.0 release packages. See [release preparation](docs/RELEASE_PREPARATION.md).
+
 ## 3.4.1 — 2026-10-14
 
 - Fixed the title-bar version badge that incorrectly displayed 3.3 in the
