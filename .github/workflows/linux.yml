@@ -57,9 +57,24 @@ jobs:
       - name: Rust formatting and native regression tests
         working-directory: studio/src-tauri
         run: |
-          cargo fmt --check
-          cargo test --locked --release
-          cargo clippy --locked --release --all-targets -- -D warnings
+          mkdir -p ../../build/linux-evidence
+          set +e
+          (
+            set -e
+            cargo fmt --check
+            cargo test --locked --release
+            cargo clippy --locked --release --all-targets -- -D warnings
+          ) 2>&1 | tee ../../build/linux-evidence/rust-gates.log
+          gate_status=${PIPESTATUS[0]}
+          if (( gate_status != 0 )); then
+            python3 - <<'PY'
+          from pathlib import Path
+          tail = Path('../../build/linux-evidence/rust-gates.log').read_text(errors='replace')[-5000:]
+          tail = tail.replace('%', '%25').replace('\r', '%0D').replace('\n', '%0A')
+          print('::error title=Rust release gate failed::' + tail)
+          PY
+          fi
+          exit "$gate_status"
       - name: Build native Linux distribution
         working-directory: studio
         run: npm run desktop:build

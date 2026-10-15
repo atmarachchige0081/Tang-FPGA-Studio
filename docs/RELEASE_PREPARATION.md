@@ -6,9 +6,9 @@ record, not authorization to publish an unverified release. No tag is created.
 ## Evidence and remaining gates
 
 | Gate | Status / evidence |
+| --- | --- |
 | Version metadata and release notes | Aligned at 3.5.0; unpublished |
 | Fresh 3.5.0 distribution packages | Pending rebuild and validation; saved artifacts are 3.4.1 |
-| --- | --- |
 | Ubuntu 22.04/24.04 native installed workflow | Passed 17 checkpoints each; `evidence/linux/verified-ubuntu*-results.json` |
 | Ubuntu 26.04 final native workflow | Passed all 17 checkpoints on 2026-10-15; `evidence/linux/verified-ubuntu26-results.json` |
 | AppImage UI on 22.04/24.04/26.04 | Passed seven checkpoints each; `evidence/linux/verified-appimage*-results.json` |
