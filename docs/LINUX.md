@@ -95,6 +95,7 @@ access, programming, board behavior or measured logic-analyzer captures.
 
 ```bash
 cd studio && npm run check
+node --input-type=module -e "import { prepareWorkspace } from './scripts/stage-linux-workspace.mjs'; prepareWorkspace();"
 cd src-tauri
 cargo fmt --check
 cargo clippy --locked --all-targets -- -D warnings

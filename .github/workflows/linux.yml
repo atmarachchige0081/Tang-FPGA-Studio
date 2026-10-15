@@ -57,6 +57,7 @@ jobs:
       - name: Rust formatting and native regression tests
         working-directory: studio/src-tauri
         run: |
+          node --input-type=module -e "import { prepareWorkspace } from '../scripts/stage-linux-workspace.mjs'; prepareWorkspace();"
           mkdir -p ../../build/linux-evidence
           set +e
           (
@@ -69,7 +70,7 @@ jobs:
           if (( gate_status != 0 )); then
             python3 - <<'PY'
           from pathlib import Path
-          tail = Path('../../build/linux-evidence/rust-gates.log').read_text(errors='replace')[-5000:]
+          tail = Path('../../build/linux-evidence/rust-gates.log').read_text(errors='replace')[-1800:]
           tail = tail.replace('%', '%25').replace('\r', '%0D').replace('\n', '%0A')
           print('::error title=Rust release gate failed::' + tail)
           PY

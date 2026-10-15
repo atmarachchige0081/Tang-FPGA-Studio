@@ -223,11 +223,21 @@ def main():
                 invoke('open_project', parameters)
                 # Await a new document: the old Console project tree can remain
                 # briefly visible while reload is queued by WebKit.
-                js('window.__evidenceBeforeReload = true; window.location.reload()')
+                previous_document = js('return performance.timeOrigin')
+                try:
+                    js('window.location.reload()')
+                except (http.client.RemoteDisconnected, ConnectionResetError):
+                    # Navigation may replace the WebKit document before its
+                    # HTTP response returns. Verify the new document below;
+                    # never infer successful navigation from lost transport.
+                    pass
+                reloaded = False
                 for _ in range(150):
-                    if js('return !window.__evidenceBeforeReload && !!document.querySelector(".brand-mark")'):
+                    reloaded = js('return performance.timeOrigin !== arguments[0] && !!document.querySelector(".brand-mark")', [previous_document])
+                    if reloaded:
                         break
                     time.sleep(.2)
+                assert reloaded, 'Packaged UI did not reload into a new document'
                 for _ in range(150):
                     opened = js("const file = Array.from(document.querySelectorAll('button.tree-row')).find(b => b.title === arguments[0]); if (file) file.click(); return !!file;", [path])
                     if opened:
