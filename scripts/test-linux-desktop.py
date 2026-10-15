@@ -62,6 +62,10 @@ def main():
         env.setdefault('LIBGL_ALWAYS_SOFTWARE', '1')
         env.setdefault('WEBKIT_DISABLE_DMABUF_RENDERER', '1')
         env.pop('FPGA_STUDIO_WORKSPACE', None)
+        # Isolate application data without hiding the caller's installed tools.
+        # fpga.ps1 otherwise discovers them through XDG_DATA_HOME, which changes below.
+        data_home = Path(env.get('XDG_DATA_HOME') or Path.home() / '.local/share')
+        env.setdefault('OSS_CAD_SUITE_ROOT', str(data_home / 'tang-fpga-studio/toolchains/2026-07-26/oss-cad-suite'))
         env['XDG_DATA_HOME'] = temporary + '/data'
         env['XDG_CONFIG_HOME'] = temporary + '/config'
         env['XDG_CACHE_HOME'] = temporary + '/cache'
