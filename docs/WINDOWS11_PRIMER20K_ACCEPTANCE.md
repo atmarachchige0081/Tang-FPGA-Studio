@@ -7,10 +7,10 @@ The laptop and its USB devices are not attached to the cloud executor.
 ## Get the exact candidate
 
 Use a separate local checkout so existing projects and installed releases remain
-available. The validation branch does not publish a release:
+available. The default branch is named `master`; downloading it does not publish a release:
 
 ```powershell
-git clone --branch codex/release-3.5.0-validation https://github.com/atmarachchige0081/Tang-FPGA-Studio.git Tang-FPGA-Studio-3.5-validation
+git clone --branch master https://github.com/atmarachchige0081/Tang-FPGA-Studio.git Tang-FPGA-Studio-3.5-validation
 cd Tang-FPGA-Studio-3.5-validation
 git rev-parse HEAD
 ```
