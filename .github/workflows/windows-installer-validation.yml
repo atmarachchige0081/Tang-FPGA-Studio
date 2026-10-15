@@ -1,0 +1,63 @@
+name: Complete Windows installer validation
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/windows-installer-validation.yml'
+      - 'scripts/test-windows-full-installer.ps1'
+
+permissions:
+  contents: read
+
+jobs:
+  complete-installer:
+    runs-on: windows-2022
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+      - name: Check out reviewed installer automation
+        uses: actions/checkout@v7
+        with:
+          repository: atmarachchige0081/Tang-FPGA-Studio-Installer
+          ref: a24173e36312d19d137f66885a215b2d3f1a2992
+          path: installer-validation
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: studio/package-lock.json
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Build candidate production application
+        working-directory: studio
+        shell: pwsh
+        run: |
+          npm ci
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          npm run desktop:build
+          exit $LASTEXITCODE
+      - name: Install Inno Setup
+        run: choco install innosetup --yes --no-progress
+      - name: Synchronize and build complete candidate installer without publishing
+        shell: pwsh
+        run: |
+          $version = (Get-Content studio/package.json -Raw | ConvertFrom-Json).version
+          ./installer-validation/sync-upstream.ps1 -SourceRoot $env:GITHUB_WORKSPACE -Version $version
+          ./installer-validation/test-dependency-contract.ps1
+          ./installer-validation/build-installer.ps1 -Version $version -SkipInnoInstall -NativeBinary (Join-Path $env:GITHUB_WORKSPACE 'studio/src-tauri/target/release/fpga-studio.exe')
+          ./installer-validation/test-installer.ps1 -Version $version
+      - name: Install complete package, verify tools and workspace, then uninstall
+        shell: pwsh
+        run: ./scripts/test-windows-full-installer.ps1 -InstallerRoot (Join-Path $env:GITHUB_WORKSPACE 'installer-validation') -InstallToolchain
+      - uses: actions/upload-artifact@v6
+        if: always()
+        with:
+          name: complete-windows-installer-and-evidence
+          path: |
+            installer-validation/dist/*.exe
+            installer-validation/dist/*.sha256
+            build/windows-full-installer-evidence/
