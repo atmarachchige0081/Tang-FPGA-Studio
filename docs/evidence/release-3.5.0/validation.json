@@ -11,13 +11,72 @@
       "passed": 37
     },
     "sixVersionFields": "aligned",
-    "cargoMetadataLocked": "passed"
+    "cargoMetadataLocked": "passed",
+    "nativeRust": {
+      "passed": 72,
+      "ignored": 2,
+      "failed": 0
+    },
+    "rustFormatting": "passed",
+    "releaseClippyAllTargets": "passed",
+    "sharedFpgaWorkflows": "passed",
+    "boardImplementationFamilies": 6,
+    "stress": {
+      "rounds": 3,
+      "frontendExecutions": 171,
+      "runnerExecutions": 30
+    },
+    "npmAuditVulnerabilities": 0
   },
-  "nativePackages": "fresh 3.5.0 packages not built; saved binary evidence is 3.4.1",
+  "nativePackages": {
+    "version": "3.5.0",
+    "formats": [
+      "deb",
+      "AppImage"
+    ],
+    "checksums": "SHA256SUMS",
+    "ubuntu": {
+      "22.04": {
+        "installedNativeCheckpoints": 17,
+        "appImageUiCheckpoints": 7,
+        "appImageHeadless": "passed"
+      },
+      "24.04": {
+        "installedNativeCheckpoints": 17,
+        "appImageUiCheckpoints": 7,
+        "appImageHeadless": "passed"
+      },
+      "26.04": {
+        "installedNativeCheckpoints": 17,
+        "appImageUiCheckpoints": 7,
+        "appImageHeadless": "passed"
+      }
+    }
+  },
   "pending": [
-    "Windows runtime and installer acceptance",
-    "Physical board acceptance",
-    "Applicable vendor-tool and authenticated-service acceptance"
+    "Updated Ubuntu hosted CI matrix completion",
+    "Complete external Windows installer CI completion",
+    "Windows 11 GUI and physical Dock JTAG/SRAM/flash/UART/analyzer acceptance",
+    "Ubuntu physical USB/board acceptance",
+    "Applicable Gowin vendor implementation and authenticated AI acceptance"
   ],
-  "publication": "local commit only; no tag, push or release"
+  "publication": "Validation branches pushed; master unchanged; no tag or release",
+  "applicationSource": "07acdf9918adcb437714b0c13d0d7d52143a5ccb",
+  "validationSource": "9b6c1e60055963099215909a0b7a71aae2e17ad3",
+  "windowsMsvcPackage": {
+    "status": "passed",
+    "run": "https://github.com/atmarachchige0081/Tang-FPGA-Studio/actions/runs/38780505263",
+    "scope": "NSIS production build, install, headless smoke and uninstall; no GUI or hardware claim"
+  },
+  "qualityGates": {
+    "status": "passed",
+    "run": "https://github.com/atmarachchige0081/Tang-FPGA-Studio/actions/runs/38785858242"
+  },
+  "confirmedHardwareTarget": {
+    "os": "Windows 11",
+    "board": "Tang Primer 20K with Sipeed Dock",
+    "connectedToCloud": false,
+    "physicalTests": "pending"
+  },
+  "tagReady": false
 }

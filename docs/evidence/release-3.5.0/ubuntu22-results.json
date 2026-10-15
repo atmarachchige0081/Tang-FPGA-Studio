@@ -1,0 +1,324 @@
+[
+  {
+    "check": "Packaged React UI rendered inside native WebKit; no Vite server",
+    "status": "passed",
+    "detail": {
+      "url": "tauri://localhost"
+    }
+  },
+  {
+    "check": "Installed resources seeded a writable per-user workspace",
+    "status": "passed",
+    "detail": "/tmp/tang-linux-desktop-rcq5yax6/data/dev.fpgastudio.desktop/workspace-3.5.0"
+  },
+  {
+    "check": "Bundled boards, HDL patterns and plugins loaded",
+    "status": "passed",
+    "detail": null
+  },
+  {
+    "check": "Project creation with spaces, native save/read, HDL indexing, search and Git discovery",
+    "status": "passed",
+    "detail": null
+  },
+  {
+    "check": "Native IPC runner: lint",
+    "status": "passed",
+    "detail": {
+      "exitCode": 0,
+      "durationMs": 10311
+    }
+  },
+  {
+    "check": "Native IPC runner: sim",
+    "status": "passed",
+    "detail": {
+      "exitCode": 0,
+      "durationMs": 10214
+    }
+  },
+  {
+    "check": "Native IPC runner: build",
+    "status": "passed",
+    "detail": {
+      "exitCode": 0,
+      "durationMs": 131926
+    }
+  },
+  {
+    "check": "Measured bitstream and timing loaded into app reports",
+    "status": "passed",
+    "detail": {
+      "registersUsed": 101,
+      "updatedAt": "2026-10-15T17:55:07.144397329+00:00",
+      "lutUsed": 163,
+      "criticalPaths": [
+        {
+          "source": "posedge receiver.clk",
+          "destination": "posedge receiver.clk",
+          "segments": 11,
+          "delayNs": 2.8909999914467335,
+          "slackNs": 34.146037045590305
+        }
+      ],
+      "status": "passed",
+      "fmaxMHz": 345.90106201171875,
+      "targetMHz": 27,
+      "timingMet": true,
+      "registersTotal": 15552,
+      "lutTotal": 20736,
+      "worstSlackNs": 34.146037045590305,
+      "resources": [
+        {
+          "name": "LUT4",
+          "label": "Logic LUTs",
+          "total": 20736,
+          "used": 163
+        },
+        {
+          "name": "DFF",
+          "label": "Flip-flops",
+          "total": 15552,
+          "used": 101
+        },
+        {
+          "name": "BSRAM",
+          "label": "Block RAM",
+          "total": 46,
+          "used": 0
+        },
+        {
+          "name": "MULT18X18",
+          "label": "18\u00d718 DSP multipliers",
+          "total": 48,
+          "used": 0
+        },
+        {
+          "name": "MULT36X36",
+          "label": "36\u00d736 DSP multipliers",
+          "total": 12,
+          "used": 0
+        },
+        {
+          "name": "MULT9X9",
+          "label": "9\u00d79 DSP multipliers",
+          "total": 96,
+          "used": 0
+        },
+        {
+          "name": "IOB",
+          "label": "I/O blocks",
+          "total": 384,
+          "used": 14
+        },
+        {
+          "name": "rPLL",
+          "label": "PLLs",
+          "total": 4,
+          "used": 0
+        },
+        {
+          "name": "BUFG",
+          "label": "Global clock buffers",
+          "total": 24,
+          "used": 0
+        },
+        {
+          "name": "ALU",
+          "label": "ALU",
+          "total": 15552,
+          "used": 54
+        },
+        {
+          "name": "MUX2_LUT5",
+          "label": "MUX2_LUT5",
+          "total": 10368,
+          "used": 20
+        },
+        {
+          "name": "GND",
+          "label": "GND",
+          "total": 1,
+          "used": 1
+        },
+        {
+          "name": "GSR",
+          "label": "GSR",
+          "total": 1,
+          "used": 1
+        },
+        {
+          "name": "VCC",
+          "label": "VCC",
+          "total": 1,
+          "used": 1
+        },
+        {
+          "name": "ALU54D",
+          "label": "ALU54D",
+          "total": 24,
+          "used": 0
+        },
+        {
+          "name": "CLKDIV",
+          "label": "CLKDIV",
+          "total": 8,
+          "used": 0
+        },
+        {
+          "name": "CLKDIV2",
+          "label": "CLKDIV2",
+          "total": 16,
+          "used": 0
+        },
+        {
+          "name": "DCS",
+          "label": "DCS",
+          "total": 8,
+          "used": 0
+        },
+        {
+          "name": "DHCEN",
+          "label": "DHCEN",
+          "total": 24,
+          "used": 0
+        },
+        {
+          "name": "DQCE",
+          "label": "DQCE",
+          "total": 24,
+          "used": 0
+        },
+        {
+          "name": "IOLOGICI",
+          "label": "IOLOGICI",
+          "total": 384,
+          "used": 0
+        },
+        {
+          "name": "IOLOGICO",
+          "label": "IOLOGICO",
+          "total": 384,
+          "used": 0
+        },
+        {
+          "name": "MULTADDALU18X18",
+          "label": "MULTADDALU18X18",
+          "total": 24,
+          "used": 0
+        },
+        {
+          "name": "MULTALU18X18",
+          "label": "MULTALU18X18",
+          "total": 24,
+          "used": 0
+        },
+        {
+          "name": "MULTALU36X18",
+          "label": "MULTALU36X18",
+          "total": 24,
+          "used": 0
+        },
+        {
+          "name": "MUX2_LUT6",
+          "label": "MUX2_LUT6",
+          "total": 5184,
+          "used": 0
+        },
+        {
+          "name": "MUX2_LUT7",
+          "label": "MUX2_LUT7",
+          "total": 2592,
+          "used": 0
+        },
+        {
+          "name": "MUX2_LUT8",
+          "label": "MUX2_LUT8",
+          "total": 2592,
+          "used": 0
+        },
+        {
+          "name": "OSC",
+          "label": "OSC",
+          "total": 1,
+          "used": 0
+        },
+        {
+          "name": "PADD18",
+          "label": "PADD18",
+          "total": 48,
+          "used": 0
+        },
+        {
+          "name": "PADD9",
+          "label": "PADD9",
+          "total": 96,
+          "used": 0
+        },
+        {
+          "name": "RAM16SDP4",
+          "label": "RAM16SDP4",
+          "total": 648,
+          "used": 0
+        }
+      ],
+      "bitstreamBytes": 4618782,
+      "clocks": [
+        {
+          "name": "receiver.clk",
+          "constraintMHz": 27,
+          "achievedMHz": 345.90106201171875,
+          "timingMet": true,
+          "slackNs": 34.1460369511046
+        }
+      ]
+    }
+  },
+  {
+    "check": "Waveform, netlist, traceability, verification and design-health native APIs",
+    "status": "passed",
+    "detail": null
+  },
+  {
+    "check": "Native logic-analyzer configuration, generation and instrumented bitstream build (no upload)",
+    "status": "passed",
+    "detail": null
+  },
+  {
+    "check": "Native optimization experiment, measured snapshots and comparison",
+    "status": "passed",
+    "detail": null
+  },
+  {
+    "check": "Console 60K lint, simulation, Yosys synthesis and Gowin project generation; vendor implementation requires Gowin EDA",
+    "status": "passed",
+    "detail": null
+  },
+  {
+    "check": "Native serial enumeration (no physical UART asserted)",
+    "status": "passed",
+    "detail": null
+  },
+  {
+    "check": "AI provider status API",
+    "status": "passed",
+    "detail": {
+      "state": null
+    }
+  },
+  {
+    "check": "Packaged Monaco editor opened actual RTL source offline",
+    "status": "passed",
+    "detail": null
+  },
+  {
+    "check": "Native desktop screenshot captured",
+    "status": "passed",
+    "detail": null
+  },
+  {
+    "check": "Native Linux hardware guidance screenshot captured",
+    "status": "passed",
+    "detail": null
+  }
+]

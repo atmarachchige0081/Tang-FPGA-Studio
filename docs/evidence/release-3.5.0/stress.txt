@@ -1,0 +1,190 @@
+> tang-fpga-studio@3.5.0 test
+> vitest run --maxWorkers=2
+
+
+ RUN  v4.1.11 /workspace/Tang-FPGA-Studio/studio
+
+ ✓ src/ai/AiPanel.test.tsx (5 tests) 8562ms
+     ✓ lists provider models and sends the selected model and supported effort  1275ms
+     ✓ connects, authenticates, sends a turn, and renders its streamed answer  565ms
+     ✓ disconnects and makes the panel recoverable when Stop cannot reach the provider  592ms
+     ✓ recovers when the interrupt request itself never resolves  5664ms
+     ✓ renders an agent follow-up question and returns the selected answer  456ms
+ ✓ src/components/workspace-features.test.tsx (4 tests) 2167ms
+     ✓ creates a custom project from separately presented board and FPGA target settings  882ms
+     ✓ provides keyboard-style file and symbol search in the project sidebar  619ms
+     ✓ creates files and refreshes the Explorer without discarding the workspace  463ms
+ ✓ src/components/hardware-intelligence.test.tsx (4 tests) 1449ms
+     ✓ shows cross-layer timing and physical evidence  773ms
+     ✓ configures probes without silently starting a hardware job  303ms
+ ✓ src/components/navigation.test.tsx (4 tests) 912ms
+     ✓ opens real toolbar menus and dispatches build actions  549ms
+ ✓ src/components/linux-hardware.test.tsx (1 test) 1146ms
+     ✓ shows udev and dialout guidance without opening the Windows repair helper  1142ms
+ ✓ src/components/intelligence.test.tsx (2 tests) 959ms
+     ✓ shows real analysis categories and architecture without inventing findings  399ms
+     ✓ records explicit user evidence instead of inferring hardware behavior  554ms
+ ✓ src/ai/MarkdownMessage.test.tsx (1 test) 424ms
+     ✓ renders emphasis, ordered steps, code, and project references without literal Markdown markers  419ms
+ ✓ src/components/TitleBar.test.tsx (1 test) 102ms
+ ✓ src/store/workbench.test.ts (6 tests) 1510ms
+     ✓ bounds streamed output to 2,000 entries  906ms
+ ✓ src/lib/hdl-intelligence.test.ts (4 tests) 28ms
+ ✓ src/lib/waveform.test.ts (4 tests) 14ms
+ ✓ src/ai/state.test.ts (7 tests) 25ms
+ ✓ src/ai/persistence.test.ts (3 tests) 18ms
+ ✓ src/lib/release-notes.test.ts (2 tests) 8ms
+ ✓ src/lib/monaco-loader.test.ts (1 test) 22ms
+ ✓ src/lib/language.test.ts (3 tests) 7ms
+ ✓ src/lib/documents.test.ts (2 tests) 16ms
+ ✓ src/lib/navigation-path.test.ts (1 test) 21ms
+ ✓ src/lib/hardware.test.ts (2 tests) 17ms
+
+ Test Files  19 passed (19)
+      Tests  57 passed (57)
+   Start at  18:08:04
+   Duration  68.53s (transform 2.87s, setup 706ms, import 11.86s, tests 17.41s, environment 24.69s)
+
+   Compiling fpga-studio v3.5.0 (/workspace/Tang-FPGA-Studio/studio/src-tauri)
+    Finished `release` profile [optimized] target(s) in 1m 53s
+     Running unittests src/lib.rs (/workspace/.tang-linux/target/release/deps/fpga_studio_lib-3b2c75c753f12913)
+
+running 10 tests
+test runner::tests::explains_ftdi_reset_without_suggesting_driver_replacement ... ok
+test runner::tests::explains_incompatible_compressed_gowin_bitstreams ... ok
+test runner::tests::distinguishes_an_absent_programmer_from_a_driver_failure ... ok
+test runner::tests::explains_stalled_or_reset_jtag_interfaces ... ok
+test runner::tests::extracts_hdl_diagnostics ... ok
+test runner::tests::permits_only_one_job_per_project ... ok
+test runner::tests::linux_usb_denial_reports_udev_instead_of_windows_drivers ... ok
+test runner::tests::hides_powershell_stack_noise_and_explains_jtag_access ... ok
+test runner::tests::concurrent_starts_cannot_share_a_project ... ok
+test runner::tests::cancellation_kills_the_owned_process_group ... ok
+
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 64 filtered out; finished in 0.02s
+
+
+> tang-fpga-studio@3.5.0 test
+> vitest run --maxWorkers=2
+
+
+ RUN  v4.1.11 /workspace/Tang-FPGA-Studio/studio
+
+ ✓ src/ai/AiPanel.test.tsx (5 tests) 7837ms
+     ✓ lists provider models and sends the selected model and supported effort  1120ms
+     ✓ connects, authenticates, sends a turn, and renders its streamed answer  623ms
+     ✓ disconnects and makes the panel recoverable when Stop cannot reach the provider  498ms
+     ✓ recovers when the interrupt request itself never resolves  5277ms
+     ✓ renders an agent follow-up question and returns the selected answer  314ms
+ ✓ src/components/workspace-features.test.tsx (4 tests) 1845ms
+     ✓ creates a custom project from separately presented board and FPGA target settings  943ms
+     ✓ provides keyboard-style file and symbol search in the project sidebar  568ms
+ ✓ src/store/workbench.test.ts (6 tests) 113ms
+ ✓ src/components/hardware-intelligence.test.tsx (4 tests) 1398ms
+     ✓ shows cross-layer timing and physical evidence  644ms
+     ✓ configures probes without silently starting a hardware job  375ms
+ ✓ src/components/linux-hardware.test.tsx (1 test) 822ms
+     ✓ shows udev and dialout guidance without opening the Windows repair helper  817ms
+ ✓ src/components/intelligence.test.tsx (2 tests) 1627ms
+     ✓ shows real analysis categories and architecture without inventing findings  1025ms
+     ✓ records explicit user evidence instead of inferring hardware behavior  597ms
+ ✓ src/components/navigation.test.tsx (4 tests) 696ms
+     ✓ opens real toolbar menus and dispatches build actions  435ms
+ ✓ src/ai/MarkdownMessage.test.tsx (1 test) 330ms
+     ✓ renders emphasis, ordered steps, code, and project references without literal Markdown markers  326ms
+ ✓ src/components/TitleBar.test.tsx (1 test) 80ms
+ ✓ src/lib/hdl-intelligence.test.ts (4 tests) 22ms
+ ✓ src/ai/state.test.ts (7 tests) 14ms
+ ✓ src/lib/monaco-loader.test.ts (1 test) 9ms
+ ✓ src/lib/navigation-path.test.ts (1 test) 15ms
+ ✓ src/ai/persistence.test.ts (3 tests) 29ms
+ ✓ src/lib/hardware.test.ts (2 tests) 7ms
+ ✓ src/lib/documents.test.ts (2 tests) 9ms
+ ✓ src/lib/waveform.test.ts (4 tests) 13ms
+ ✓ src/lib/release-notes.test.ts (2 tests) 8ms
+ ✓ src/lib/language.test.ts (3 tests) 14ms
+
+ Test Files  19 passed (19)
+      Tests  57 passed (57)
+   Start at  18:11:11
+   Duration  54.37s (transform 1.88s, setup 439ms, import 7.40s, tests 14.89s, environment 24.71s)
+
+    Finished `release` profile [optimized] target(s) in 0.95s
+     Running unittests src/lib.rs (/workspace/.tang-linux/target/release/deps/fpga_studio_lib-3b2c75c753f12913)
+
+running 10 tests
+test runner::tests::distinguishes_an_absent_programmer_from_a_driver_failure ... ok
+test runner::tests::explains_ftdi_reset_without_suggesting_driver_replacement ... ok
+test runner::tests::explains_stalled_or_reset_jtag_interfaces ... ok
+test runner::tests::explains_incompatible_compressed_gowin_bitstreams ... ok
+test runner::tests::linux_usb_denial_reports_udev_instead_of_windows_drivers ... ok
+test runner::tests::permits_only_one_job_per_project ... ok
+test runner::tests::extracts_hdl_diagnostics ... ok
+test runner::tests::hides_powershell_stack_noise_and_explains_jtag_access ... ok
+test runner::tests::cancellation_kills_the_owned_process_group ... ok
+test runner::tests::concurrent_starts_cannot_share_a_project ... ok
+
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 64 filtered out; finished in 0.02s
+
+
+> tang-fpga-studio@3.5.0 test
+> vitest run --maxWorkers=2
+
+
+ RUN  v4.1.11 /workspace/Tang-FPGA-Studio/studio
+
+ ✓ src/ai/AiPanel.test.tsx (5 tests) 7811ms
+     ✓ lists provider models and sends the selected model and supported effort  984ms
+     ✓ connects, authenticates, sends a turn, and renders its streamed answer  497ms
+     ✓ disconnects and makes the panel recoverable when Stop cannot reach the provider  537ms
+     ✓ recovers when the interrupt request itself never resolves  5361ms
+     ✓ renders an agent follow-up question and returns the selected answer  426ms
+ ✓ src/components/workspace-features.test.tsx (4 tests) 2224ms
+     ✓ creates a custom project from separately presented board and FPGA target settings  1200ms
+     ✓ provides keyboard-style file and symbol search in the project sidebar  555ms
+     ✓ creates files and refreshes the Explorer without discarding the workspace  331ms
+ ✓ src/components/intelligence.test.tsx (2 tests) 1265ms
+     ✓ shows real analysis categories and architecture without inventing findings  651ms
+     ✓ records explicit user evidence instead of inferring hardware behavior  607ms
+ ✓ src/components/hardware-intelligence.test.tsx (4 tests) 844ms
+     ✓ shows cross-layer timing and physical evidence  443ms
+ ✓ src/components/linux-hardware.test.tsx (1 test) 796ms
+     ✓ shows udev and dialout guidance without opening the Windows repair helper  792ms
+ ✓ src/components/navigation.test.tsx (4 tests) 1032ms
+     ✓ opens real toolbar menus and dispatches build actions  656ms
+ ✓ src/ai/MarkdownMessage.test.tsx (1 test) 364ms
+     ✓ renders emphasis, ordered steps, code, and project references without literal Markdown markers  359ms
+ ✓ src/store/workbench.test.ts (6 tests) 105ms
+ ✓ src/components/TitleBar.test.tsx (1 test) 158ms
+ ✓ src/ai/persistence.test.ts (3 tests) 19ms
+ ✓ src/lib/hdl-intelligence.test.ts (4 tests) 31ms
+ ✓ src/lib/navigation-path.test.ts (1 test) 9ms
+ ✓ src/ai/state.test.ts (7 tests) 33ms
+ ✓ src/lib/language.test.ts (3 tests) 12ms
+ ✓ src/lib/waveform.test.ts (4 tests) 16ms
+ ✓ src/lib/monaco-loader.test.ts (1 test) 14ms
+ ✓ src/lib/documents.test.ts (2 tests) 16ms
+ ✓ src/lib/release-notes.test.ts (2 tests) 12ms
+ ✓ src/lib/hardware.test.ts (2 tests) 23ms
+
+ Test Files  19 passed (19)
+      Tests  57 passed (57)
+   Start at  18:12:08
+   Duration  53.35s (transform 1.84s, setup 563ms, import 7.58s, tests 14.78s, environment 21.71s)
+
+    Finished `release` profile [optimized] target(s) in 1.89s
+     Running unittests src/lib.rs (/workspace/.tang-linux/target/release/deps/fpga_studio_lib-3b2c75c753f12913)
+
+running 10 tests
+test runner::tests::distinguishes_an_absent_programmer_from_a_driver_failure ... ok
+test runner::tests::explains_incompatible_compressed_gowin_bitstreams ... ok
+test runner::tests::explains_ftdi_reset_without_suggesting_driver_replacement ... ok
+test runner::tests::cancellation_kills_the_owned_process_group ... ok
+test runner::tests::explains_stalled_or_reset_jtag_interfaces ... ok
+test runner::tests::linux_usb_denial_reports_udev_instead_of_windows_drivers ... ok
+test runner::tests::permits_only_one_job_per_project ... ok
+test runner::tests::hides_powershell_stack_noise_and_explains_jtag_access ... ok
+test runner::tests::extracts_hdl_diagnostics ... ok
+test runner::tests::concurrent_starts_cannot_share_a_project ... ok
+
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 64 filtered out; finished in 0.05s

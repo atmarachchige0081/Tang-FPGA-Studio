@@ -48,4 +48,12 @@ The AppImage deliberately uses host desktop libraries. Bundling old GLib/GTK alo
 - Linux Gowin EDA/license for Console 60K place/route; current evidence covers lint, simulation, Yosys and vendor-project generation.
 - Authenticated AI integration if claiming it as release-tested; no user credentials were supplied.
 
-Do not tag a dual-platform release until the applicable gates are documented. The current version remains 3.4.1; choose/bump the release version only when preparing that release.
+Do not tag a dual-platform release until the applicable gates are documented. The prepared version is 3.5.0; no release tag has been created.
+
+## Fresh 3.5.0 evidence — 2026-10-15
+
+Fresh production `.deb` and AppImage packages are built and checked. All three Ubuntu versions (22.04, 24.04 and 26.04) passed 17 installed native checkpoints and seven AppImage UI checkpoints plus headless smoke. See `docs/evidence/release-3.5.0/` for current results, screenshots and SHA-256 manifest; the earlier `evidence/linux/` artifacts are historical 3.4.1 evidence. Local packages remain under `build/release-3.5.0/packages/`.
+
+Fresh Rust tests passed 72 with two intentionally ignored; formatting and release Clippy passed. Six board implementation families produced bitstreams and timing. Three stress rounds passed (171 frontend test executions and 30 runner test executions). Windows MSVC NSIS install/smoke/uninstall passed in Actions run 38780505263. Updated quality gates passed in run 38785858242.
+
+Validation branches have been pushed without changing master or creating a tag. Ubuntu matrix run 38785858828 and complete external Windows installer run 38784739248 are being checked. Physical target confirmed by the user: Windows 11 laptop with Tang Primer 20K and Sipeed Dock. No connection to that laptop or physical hardware results exist here; follow `WINDOWS11_PRIMER20K_ACCEPTANCE.md`.

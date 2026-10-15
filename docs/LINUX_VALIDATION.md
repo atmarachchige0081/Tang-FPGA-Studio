@@ -1,6 +1,6 @@
 # Linux validation record
 
-Validation dates: 2026-10-14 and 2026-10-15. Base revision: `84e97ee7889e5edc0a26680dfdcd8ff5b03c7591`, with Linux implementation committed as `4b5a1cf`. These are development artifacts, not a tagged release.
+Validation dates: 2026-10-14 and 2026-10-15. Base revision: `84e97ee7889e5edc0a26680dfdcd8ff5b03c7591`, with Linux implementation committed as `4b5a1cf`. Fresh 3.5.0 candidate artifacts were built and checked on 2026-10-15; the application source is `07acdf9`, with validation fixes on `codex/release-3.5.0-validation`. No release tag has been created.
 
 ## Environment and method
 
@@ -22,7 +22,7 @@ PowerShell 7.6.7 and checksum-verified OSS CAD Suite 2026-07-26 provide the shar
 | Native Ubuntu 24.04 desktop | Full workflow and editor/hardware screenshots passed |
 | Native Ubuntu 26.04 desktop | Final installed package passed all 17 checkpoints on 2026-10-15; native screenshots and results committed under `docs/evidence/linux/`. |
 | AppImage | Built on 22.04; native UI, resource seeding, project save/read, offline Monaco and hardware guidance passed on 22.04, 24.04 and 26.04 |
-| Windows compile | GNU Windows target, release all-targets check passed; this is not MSVC or Windows execution evidence |
+| Windows compile | Windows MSVC production NSIS install, installed headless smoke and uninstall passed in [Actions](https://github.com/atmarachchige0081/Tang-FPGA-Studio/actions/runs/38780505263). Windows 11 GUI/hardware acceptance remains pending. |
 
 The full native desktop test exercises writable packaged resources, boards/patterns/plugins, project creation, save/read, HDL indexing/search, Git discovery, lint, simulation, bitstream/timing reports, waveform/netlist/traceability APIs, analyzer configuration and instrumented bitstream generation, and a measured optimization experiment. Serial enumeration and AI provider status are checked without asserting hardware or authenticated service access. Console 60K lint, simulation, Yosys synthesis and Gowin project generation pass; absent vendor implementation is an expected prerequisite failure.
 
@@ -41,7 +41,7 @@ All six open-source device families produced nonempty packed bitstreams and met 
 | Primer 20K | 427.72 | 27 |
 | Console 138K C | 458.51 | 50 |
 
-Raw reports and bitstreams are under `build/linux-evidence/` and `.fpga-studio/board-smoke/`. Native screenshots are `build/linux-evidence/verified-ubuntu22/native-desktop.png` and `build/linux-evidence/verified-ubuntu22/native-linux-hardware.png`; earlier files in `previews/` are explicitly browser previews, not package or hardware evidence. Logs are retained in `build/linux-evidence/logs/`.
+Raw reports and bitstreams are under `build/linux-evidence/` and `.fpga-studio/board-smoke/`. Native screenshots are `docs/evidence/release-3.5.0/ubuntu26-native-desktop.png` and `docs/evidence/release-3.5.0/ubuntu26-native-linux-hardware.png`; earlier files in `previews/` are explicitly browser previews, not package or hardware evidence. Logs are retained in `build/linux-evidence/logs/`.
 
 ## Compatibility issues addressed
 
@@ -58,11 +58,11 @@ Raw reports and bitstreams are under `build/linux-evidence/` and `.fpga-studio/b
 
 The reviewed `.deb` and `.AppImage` are copied to `build/linux-evidence/packages/` with `SHA256SUMS`. Verify the exact downloaded files against that manifest; repackaging changes the checksums.
 
-They retain the repository's current 3.4.1 version. Final release artifacts must be rebuilt from the eventual reviewed/tagged revision and receive fresh checksums.
+The historical folder contains 3.4.1 evidence. Fresh 3.5.0 Linux packages are in `build/release-3.5.0/packages/`, with the manifest committed in `docs/evidence/release-3.5.0/SHA256SUMS`. Final tagged artifacts must identify the eventual reviewed revision and receive matching checksums.
 
 ## Remaining release gates
 
-- Run the maintained Windows/MSVC build, installer and desktop regression workflow on Windows for this revision. Cross-compilation does not satisfy this gate.
+- The automated Windows/MSVC NSIS gate passed; complete Windows 11 GUI and the external complete one-file installer acceptance on the confirmed Dock test host.
 - On real supported hardware, record JTAG identity, SRAM programming and observed behavior, explicit flash write and power-cycle persistence, UART transmit/receive, and actual on-chip analyzer capture. No USB board is connected to this cloud environment.
 - Supply Linux Gowin EDA and any required license for Console 60K place/route and programming evidence.
 - Verify authenticated AI operations with the user's own Codex CLI installation and credentials if claiming that integration as release-tested.

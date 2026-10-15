@@ -8,13 +8,16 @@ record, not authorization to publish an unverified release. No tag is created.
 | Gate | Status / evidence |
 | --- | --- |
 | Version metadata and release notes | Aligned at 3.5.0; unpublished |
-| Fresh 3.5.0 distribution packages | Pending rebuild and validation; saved artifacts are 3.4.1 |
-| Ubuntu 22.04/24.04 native installed workflow | Passed 17 checkpoints each; `evidence/linux/verified-ubuntu*-results.json` |
-| Ubuntu 26.04 final native workflow | Passed all 17 checkpoints on 2026-10-15; `evidence/linux/verified-ubuntu26-results.json` |
-| AppImage UI on 22.04/24.04/26.04 | Passed seven checkpoints each; `evidence/linux/verified-appimage*-results.json` |
-| Six open-source board families | Bitstreams and timing passed; `evidence/linux/board-builds.json` |
-| Windows MSVC NSIS installation | New `Windows MSVC package validation` workflow prepared; not run here |
-| Windows GUI and complete one-file installer | Pending real Windows execution and external installer-repository evidence |
+| Fresh 3.5.0 Linux packages | Built on Ubuntu 22.04; native/AppImage checks passed on 22.04/24.04/26.04; `evidence/release-3.5.0/SHA256SUMS` |
+| Ubuntu 22.04/24.04 native installed workflow | Passed 17 checkpoints each; `evidence/release-3.5.0/ubuntu*-results.json` |
+| Ubuntu 26.04 final native workflow | Passed all 17 checkpoints on 2026-10-15; `evidence/release-3.5.0/ubuntu26-results.json` |
+| AppImage UI on 22.04/24.04/26.04 | Passed seven checkpoints each; `evidence/release-3.5.0/appimage*-results.json` |
+| Hosted quality gates | [Passed on validation source 9b6c1e6](https://github.com/atmarachchige0081/Tang-FPGA-Studio/actions/runs/38785858242) |
+| Hosted Ubuntu matrix | [Running on validation source 9b6c1e6](https://github.com/atmarachchige0081/Tang-FPGA-Studio/actions/runs/38785858828); local native/package evidence below already passed |
+| Six open-source board families | Bitstreams and timing passed; `evidence/release-3.5.0/board-builds.json` |
+| Windows MSVC NSIS installation | Passed: [MSVC NSIS install/smoke/uninstall run](https://github.com/atmarachchige0081/Tang-FPGA-Studio/actions/runs/38780505263) for application source `07acdf9` |
+| Complete Windows one-file installer | Validation running: [pinned installer build/install/workspace/toolchain/uninstall](https://github.com/atmarachchige0081/Tang-FPGA-Studio/actions/runs/38784739248); not yet counted as passed |
+| Windows 11 GUI | Pending user workstation acceptance |
 | Physical board acceptance on both platforms | Pending connected hardware; no cloud USB board |
 | Console 60K vendor implementation | Pending Linux Gowin EDA/license; synthesis/project generation already tested |
 | Authenticated AI calls | Pending user-authenticated Codex CLI if claimed as release-tested |
@@ -32,9 +35,28 @@ capture. Cover the claimed board matrix and distinguish shared-device Core/Lite
 carrier pins from Dock pins. Do not substitute build timing for board behavior.
 
 Local 3.5.0 commit checks: production frontend build, 57 frontend tests, 37 Python
-tests, six aligned version fields and locked Cargo metadata passed. Evidence is
+tests, 72 Rust tests (two ignored), formatting, release Clippy, six aligned version
+fields and locked Cargo metadata passed. Three stress rounds also passed: 171
+frontend and 30 runner test executions. Evidence is
 in `evidence/release-3.5.0/`. These checks do not replace fresh native packages or
 the external release gates above.
+
+## Candidate and hardware target
+
+The candidate is available on branch `codex/release-3.5.0-validation`; `master`
+and release tags are unchanged. The application version/React/Rust source is
+`07acdf9`; subsequent validation changes stage Linux resources before Cargo and
+verify WebKit navigation without replaying FPGA operations. A clean-source Cargo
+check reproduced the missing-resource error and passed after staging.
+
+The confirmed physical target is **Windows 11 + Tang Primer 20K with Dock**.
+The laptop is not attached to the cloud executor. Follow
+[the Windows/Dock acceptance procedure](WINDOWS11_PRIMER20K_ACCEPTANCE.md) and
+record real GUI, JTAG, SRAM/flash, UART and analyzer observations. No physical
+hardware pass is claimed by any cloud result.
+
+Fresh local Linux 3.5.0 artifacts are under `build/release-3.5.0/packages/`. Their
+checksums differ from the historical 3.4.1 artifacts under `build/linux-evidence/`.
 
 ## Final release sequence
 
@@ -52,5 +74,6 @@ the external release gates above.
    existing Windows installer notification and Ubuntu release workflow then
    produce/publish their platform artifacts; verify both downloads and checksums.
 
-Until fresh 3.5.0 package builds and checks are complete, local packages in
-`build/linux-evidence/packages/` remain development 3.4.1 artifacts.
+Historical artifacts in `build/linux-evidence/packages/` remain 3.4.1 development
+evidence. Use `build/release-3.5.0/packages/` for the newly checked Linux 3.5.0
+artifacts. Final tagged builds must still be tied to the reviewed final revision.
