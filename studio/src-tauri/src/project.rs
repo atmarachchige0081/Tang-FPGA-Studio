@@ -90,6 +90,93 @@ pub fn snapshot() -> Result<WorkspaceSnapshot, String> {
     snapshot_for(&root, active, state.recent_projects)
 }
 
+#[derive(Debug, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RecognizedProject {
+    pub path: String,
+    pub name: String,
+    pub identification: String,
+}
+
+/// Inspect selected folders without executing project scripts or changing files.
+pub fn recognize_projects(folder: &str) -> Result<Vec<RecognizedProject>, String> {
+    let selected = fs::canonicalize(folder)
+        .map_err(|error| format!("Cannot open selected folder: {error}"))?;
+    if !selected.is_dir() {
+        return Err("Select a project folder.".into());
+    }
+    let mut result = Vec::new();
+    let mut pending = vec![(selected, 0)];
+    let mut inspected = 0;
+    while let Some((directory, depth)) = pending.pop() {
+        inspected += 1;
+        if inspected > 500 {
+            return Err("Too many folders to inspect. Select the project folder directly.".into());
+        }
+        if directory.join("fpga.config.psd1").is_file() {
+            let manifest = directory.join("fpga.project.json");
+            let identification = if manifest.is_file() {
+                if fs::metadata(&manifest)
+                    .map_err(|error| error.to_string())?
+                    .len()
+                    > 1024 * 1024
+                {
+                    return Err("Project metadata is too large.".into());
+                }
+                let value: serde_json::Value = serde_json::from_slice(
+                    &fs::read(&manifest).map_err(|error| error.to_string())?,
+                )
+                .map_err(|error| format!("Invalid fpga.project.json: {error}"))?;
+                let version = value
+                    .get("schemaVersion")
+                    .and_then(serde_json::Value::as_u64);
+                if !matches!(version, Some(1 | 2)) {
+                    return Err("Unsupported fpga.project.json version. Update Studio before opening this project.".into());
+                }
+                "Studio project · fpga.project.json"
+            } else {
+                "Existing FPGA project · fpga.config.psd1"
+            };
+            result.push(RecognizedProject {
+                path: child_process_path(&directory)
+                    .to_string_lossy()
+                    .into_owned(),
+                name: project_display_name(&directory),
+                identification: identification.into(),
+            });
+            // A workspace root can contain multiple projects, so inspect its children too.
+        }
+        if depth < 2 {
+            for entry in fs::read_dir(&directory)
+                .map_err(|error| error.to_string())?
+                .take(501)
+            {
+                let entry = entry.map_err(|error| error.to_string())?;
+                let name = entry.file_name();
+                let name = name.to_string_lossy();
+                if name.starts_with('.')
+                    || IGNORED_DIRECTORIES.contains(&name.as_ref())
+                    || name == "build"
+                {
+                    continue;
+                }
+                if entry
+                    .file_type()
+                    .map_err(|error| error.to_string())?
+                    .is_dir()
+                {
+                    pending.push((entry.path(), depth + 1));
+                }
+            }
+        }
+    }
+    result.sort_by(|left, right| left.path.cmp(&right.path));
+    if result.is_empty() {
+        return Err("No Studio project found. Select a folder containing fpga.config.psd1. Studio-created projects also include fpga.project.json; HDL files alone do not identify a board or pin mapping.".into());
+    }
+    Ok(result)
+}
+
 pub fn open_project(root: &str, project_path: &str) -> Result<WorkspaceSnapshot, String> {
     let root = canonical_workspace(root)?;
     let directory = resolve_project_path(&root, project_path)?;
@@ -99,8 +186,9 @@ pub fn open_project(root: &str, project_path: &str) -> Result<WorkspaceSnapshot,
     state.recent_projects.insert(0, relative.clone());
     state.recent_projects.truncate(12);
     state.active_project = relative.clone();
+    let snapshot = snapshot_for(&root, &relative, state.recent_projects.clone())?;
     persist_workspace_state(&root, &state)?;
-    snapshot_for(&root, &relative, state.recent_projects)
+    Ok(snapshot)
 }
 
 fn snapshot_for(
@@ -746,7 +834,7 @@ fn project_display_name(directory: &Path) -> String {
         if let Ok(value) = serde_json::from_slice::<serde_json::Value>(&content) {
             if let Some(name) = value.get("name").and_then(serde_json::Value::as_str) {
                 if !name.trim().is_empty() {
-                    return name.trim().to_owned();
+                    return name.trim().chars().take(160).collect();
                 }
             }
         }
@@ -1283,6 +1371,30 @@ mod tests {
     use crate::models::CustomProjectRequest;
     use std::fs;
     use std::path::Path;
+
+    #[test]
+    fn recognizes_portable_and_legacy_projects_without_modifying_sources() {
+        let root = std::env::temp_dir().join(format!("fpga-recognition-{}", uuid::Uuid::new_v4()));
+        let modern = root.join("My project");
+        let legacy = root.join("Old project");
+        fs::create_dir_all(&modern).unwrap();
+        fs::create_dir_all(&legacy).unwrap();
+        fs::write(modern.join("fpga.config.psd1"), "@{ Top = 'top' }").unwrap();
+        fs::write(legacy.join("fpga.config.psd1"), "@{ Top = 'top' }").unwrap();
+        let metadata = r#"{"schemaVersion":2,"name":"My UART"}"#;
+        fs::write(modern.join("fpga.project.json"), metadata).unwrap();
+        let found = super::recognize_projects(&root.to_string_lossy()).unwrap();
+        assert_eq!(found.len(), 2);
+        assert!(found.iter().any(|project| project.name == "My UART"
+            && project.identification.contains("fpga.project.json")));
+        assert_eq!(
+            fs::read_to_string(modern.join("fpga.project.json")).unwrap(),
+            metadata
+        );
+        fs::write(modern.join("fpga.project.json"), "invalid json").unwrap();
+        assert!(super::recognize_projects(&modern.to_string_lossy()).is_err());
+        fs::remove_dir_all(&root).unwrap();
+    }
 
     #[test]
     fn accepts_friendly_project_names_and_rejects_unsafe_folder_names() {

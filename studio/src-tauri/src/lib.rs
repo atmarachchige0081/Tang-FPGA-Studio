@@ -35,7 +35,10 @@ where
     T: Send + 'static,
     F: FnOnce() -> Result<T, String> + Send + 'static,
 {
-    tauri::async_runtime::spawn_blocking(operation)
+    tauri::async_runtime::spawn_blocking(move || {
+        std::panic::catch_unwind(std::panic::AssertUnwindSafe(operation))
+            .unwrap_or_else(|_| Err(format!("{label} failed unexpectedly. The app is still open; see the crash log for details.")))
+    })
         .await
         .map_err(|error| format!("{label} worker stopped unexpectedly: {error}"))?
 }
@@ -46,7 +49,24 @@ async fn workspace_snapshot() -> Result<WorkspaceSnapshot, String> {
 }
 
 #[tauri::command]
-async fn open_project(root: String, project: String) -> Result<WorkspaceSnapshot, String> {
+async fn recognize_project_folder(
+    folder: String,
+) -> Result<Vec<project::RecognizedProject>, String> {
+    blocking("Project recognition", move || {
+        project::recognize_projects(&folder)
+    })
+    .await
+}
+
+#[tauri::command]
+async fn open_project(
+    jobs: State<'_, JobRegistry>,
+    root: String,
+    project: String,
+) -> Result<WorkspaceSnapshot, String> {
+    if jobs.is_active() {
+        return Err("Wait for the current FPGA task to finish before changing projects.".into());
+    }
     blocking("Project open", move || {
         project::open_project(&root, &project)
     })
@@ -266,6 +286,7 @@ async fn finish_optimization_experiment(
 
 #[tauri::command]
 async fn create_project(
+    jobs: State<'_, JobRegistry>,
     root: String,
     name: String,
     location: String,
@@ -273,6 +294,9 @@ async fn create_project(
     display_name: String,
     board_id: String,
 ) -> Result<WorkspaceSnapshot, String> {
+    if jobs.is_active() {
+        return Err("Wait for the current FPGA task to finish before creating a project.".into());
+    }
     blocking("Project creation", move || {
         project::create_project(
             &root,
@@ -288,11 +312,15 @@ async fn create_project(
 
 #[tauri::command]
 async fn create_custom_project(
+    jobs: State<'_, JobRegistry>,
     root: String,
     name: String,
     location: String,
     request: CustomProjectRequest,
 ) -> Result<WorkspaceSnapshot, String> {
+    if jobs.is_active() {
+        return Err("Wait for the current FPGA task to finish before creating a project.".into());
+    }
     blocking("Custom project creation", move || {
         project::create_custom_project(&root, &name, &location, request)
     })
@@ -449,6 +477,11 @@ async fn ai_disconnect(registry: State<'_, AiRegistry>) -> Result<bool, String> 
 }
 
 #[tauri::command]
+async fn ai_pending_requests(registry: State<'_, AiRegistry>) -> Result<Vec<ai::AiEvent>, String> {
+    registry.pending_requests()
+}
+
+#[tauri::command]
 async fn ai_account_read(registry: State<'_, AiRegistry>, refresh: bool) -> Result<Value, String> {
     let registry = registry.inner().clone();
     blocking("AI account status", move || registry.account(refresh)).await
@@ -566,6 +599,35 @@ async fn ai_turn_start(
 }
 
 #[tauri::command]
+async fn ai_inline_completion(
+    registry: State<'_, AiRegistry>,
+    project: String,
+    path: String,
+    prefix: String,
+    suffix: String,
+) -> Result<String, String> {
+    let registry = registry.inner().clone();
+    blocking("Inline suggestion", move || {
+        registry.inline_completion(&project, &path, &prefix, &suffix)
+    })
+    .await
+}
+
+#[tauri::command]
+async fn ai_turn_steer(
+    registry: State<'_, AiRegistry>,
+    thread_id: String,
+    turn_id: String,
+    prompt: String,
+) -> Result<Value, String> {
+    let registry = registry.inner().clone();
+    blocking("AI follow-up", move || {
+        registry.steer_turn(&thread_id, &turn_id, &prompt)
+    })
+    .await
+}
+
+#[tauri::command]
 async fn ai_turn_interrupt(
     registry: State<'_, AiRegistry>,
     jobs: State<'_, JobRegistry>,
@@ -625,6 +687,15 @@ async fn ai_respond_user_input(
 pub fn run() -> Result<(), String> {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
+        .on_window_event(|window, event| {
+            use tauri::{Emitter, Manager};
+            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                if window.state::<JobRegistry>().is_active() {
+                    api.prevent_close();
+                    let _ = window.emit("runtime-warning", "A hardware or build task is still running. Wait for it to finish before closing the app.");
+                }
+            }
+        })
         .setup(|app| {
             #[cfg(target_os = "linux")]
             if std::env::var_os("FPGA_STUDIO_WORKSPACE").is_none() {
@@ -650,6 +721,7 @@ pub fn run() -> Result<(), String> {
         .invoke_handler(tauri::generate_handler![
             workspace_snapshot,
             open_project,
+            recognize_project_folder,
             read_text_file,
             write_text_file,
             search_project_text,
@@ -692,6 +764,7 @@ pub fn run() -> Result<(), String> {
             ai_connect,
             ai_disconnect,
             ai_account_read,
+            ai_pending_requests,
             ai_login_chatgpt,
             ai_login_api_key,
             ai_cancel_login,
@@ -704,6 +777,8 @@ pub fn run() -> Result<(), String> {
             ai_thread_resume,
             ai_turn_start,
             ai_turn_interrupt,
+            ai_turn_steer,
+            ai_inline_completion,
             ai_execute_tang_tool,
             ai_respond_approval,
             ai_respond_user_input,
@@ -739,4 +814,22 @@ pub fn smoke_test() -> Result<(), String> {
     let _git = git::status(&snapshot.root, &snapshot.project_path)?;
     let _hdl = hdl::index(&snapshot.root, &snapshot.project_path)?;
     Ok(())
+}
+
+#[cfg(test)]
+mod recovery_tests {
+    #[test]
+    fn failed_background_task_does_not_stop_subsequent_work() {
+        let error = tauri::async_runtime::block_on(super::blocking(
+            "Test worker",
+            || -> Result<(), String> {
+                panic!("simulated task panic");
+            },
+        ))
+        .unwrap_err();
+        assert!(error.contains("app is still open"));
+        let result =
+            tauri::async_runtime::block_on(super::blocking("Next worker", || Ok(42))).unwrap();
+        assert_eq!(result, 42);
+    }
 }

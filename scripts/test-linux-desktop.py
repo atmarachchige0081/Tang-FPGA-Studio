@@ -30,6 +30,7 @@ def main():
     parser.add_argument('application')
     parser.add_argument('--output', default='build/linux-evidence')
     parser.add_argument('--ui-only', action='store_true', help='Check packaged UI/resources without repeating FPGA implementations')
+    parser.add_argument('--ai-fixture', action='store_true', help='Exercise native AI protocol with scripts/fixtures/codex on PATH; never use a real provider')
     args = parser.parse_args()
     output = Path(args.output).resolve()
     output.mkdir(parents=True, exist_ok=True)
@@ -132,13 +133,55 @@ def main():
                 assert js('return document.body.innerText.includes("FPGA Studio")')
                 document_url = js('return window.location.href')
                 assert not document_url.startswith(('http://localhost:', 'http://127.0.0.1:')), document_url
-                js("Array.from(document.querySelectorAll('button')).find(b => b.getAttribute('aria-label') === 'Close release notes')?.click()")
+                assert js("return !document.querySelector('.release-dialog')"), 'Release notes opened automatically'
+                passed('Startup has no automatic release-notes dialog')
                 passed('Packaged React UI rendered inside native WebKit; no Vite server', {'url': document_url})
                 snapshot = invoke('workspace_snapshot')
                 root = snapshot['root']
                 assert root.startswith(temporary), root
                 assert Path(root, 'fpga.ps1').is_file()
                 passed('Installed resources seeded a writable per-user workspace', root)
+                recognized = invoke('recognize_project_folder', {'folder': str(Path(root, 'projects/03_uart_terminal'))})
+                assert len(recognized) == 1 and 'fpga.config.psd1' in recognized[0]['identification']
+                js("window.dispatchEvent(new Event('fpga-studio:open-project'))")
+                for _ in range(100):
+                    if js("return !!document.querySelector('#project-folder')"):
+                        break
+                    time.sleep(.1)
+                element = request('POST', prefix + '/element', {'using': 'css selector', 'value': '#project-folder'})['element-6066-11e4-a52e-4f735466cecf']
+                request('POST', prefix + '/element/' + element + '/value', {'text': str(Path(root, 'projects/03_uart_terminal'))})
+                js("Array.from(document.querySelectorAll('button')).find(b => b.textContent === 'Find projects').click()")
+                for _ in range(100):
+                    if js("return !!document.querySelector('.recognized-project')"):
+                        break
+                    time.sleep(.1)
+                assert js("return !!document.querySelector('.recognized-project')"), 'Selected folder was not recognized in the UI'
+                js("Array.from(document.querySelectorAll('.open-project-dialog button')).find(b => b.textContent.trim() === 'Open project').click()")
+                for _ in range(100):
+                    if js("return !document.querySelector('.open-project-dialog')"):
+                        break
+                    time.sleep(.1)
+                assert js("return !document.querySelector('.open-project-dialog')"), 'Recognized project did not open'
+                assert invoke('workspace_snapshot')['projectPath'].endswith('03_uart_terminal')
+                passed('Native folder recognition and existing-project dialog opened a real configured project')
+                if args.ai_fixture:
+                    status = invoke('ai_connect', {'root': root, 'project': 'projects/03_uart_terminal'})
+                    assert status['version'].startswith('codex-fixture'), 'Refusing to test against a real AI provider'
+                    assert invoke('ai_connect', {'root': root, 'project': 'projects/03_uart_terminal'})['connected']
+                    passed('Native provider reconnect is idempotent without locking the registry (local fixture)')
+                    answer = invoke('ai_inline_completion', {'project': 'projects/03_uart_terminal', 'path': 'projects/03_uart_terminal/rtl/top.sv', 'prefix': 'module top; ', 'suffix': ' endmodule'})
+                    assert answer == 'assign led = counter[23];', answer
+                    assert invoke('ai_account_read', {'refresh': False})['fixtureToolRefused'] is True
+                    passed('Native isolated inline stream returned code while refusing fixture hardware tool access')
+                    thread = invoke('ai_thread_start', {'model': None})['thread']['id']
+                    turn = invoke('ai_turn_start', {'threadId': thread, 'prompt': 'fixture only', 'context': {}, 'model': None, 'effort': None})['turn']['id']
+                    assert invoke('ai_turn_steer', {'threadId': thread, 'turnId': turn, 'prompt': 'Use Dock pins'})['turnId'] == turn
+                    passed('Native steering used the expected running turn (local fixture)')
+                    assert any(event.get('requestId') == 222 for event in invoke('ai_pending_requests'))
+                    invoke('ai_respond_approval', {'requestId': 222, 'decision': 'allowOnce', 'dirtyPaths': []})
+                    assert invoke('ai_account_read', {'refresh': False})['fixtureCommandApproved'] is True
+                    passed('Native command approval completed through the App Server protocol without executing a command (local fixture)')
+                    invoke('ai_disconnect')
                 assert len(invoke('list_boards', {'root': root})) >= 7
                 assert len(invoke('list_hdl_patterns', {'root': root})) >= 50
                 assert all(p['valid'] for p in invoke('list_plugins', {'root': root}))
@@ -254,6 +297,44 @@ def main():
                     time.sleep(.2)
                 assert js("return document.querySelector('.monaco-editor .view-lines')?.textContent.includes('module') ?? false"), 'Packaged Monaco editor did not render source offline'
                 passed('Packaged Monaco editor opened actual RTL source offline')
+                assert js("return document.querySelector('.inline-toggle')?.getAttribute('aria-pressed') === 'false'"), 'Inline suggestions must be opt-in'
+                js("document.querySelector('.inline-toggle').click()")
+                for _ in range(30):
+                    if js("return document.querySelector('.inline-toggle')?.getAttribute('aria-pressed') === 'true'"):
+                        break
+                    time.sleep(.1)
+                assert js("return document.querySelector('.inline-toggle')?.getAttribute('aria-pressed') === 'true'")
+                passed('Inline AI control is opt-in and usable beside the native Monaco editor; no authenticated generation asserted')
+                if args.ai_fixture:
+                    status = invoke('ai_connect', parameters)
+                    assert status['version'].startswith('codex-fixture')
+                    def press(*values):
+                        actions = [{'type': 'keyDown', 'value': key} for key in values] + [{'type': 'keyUp', 'value': key} for key in reversed(values)]
+                        request('POST', prefix + '/actions', {'actions': [{'type': 'key', 'id': 'fixture-keyboard', 'actions': actions}]})
+                    js("document.querySelector('.monaco-editor textarea').focus()")
+                    press('\ue009', '\ue010')  # Ctrl+End
+                    press('\ue007')  # Enter
+                    press('\ue00a', '\\')  # Alt+Backslash: request ghost text
+                    for _ in range(150):
+                        if js("return document.querySelector('.monaco-editor .view-lines')?.textContent.replaceAll(String.fromCharCode(160), ' ').includes('assign led = counter[23];') ?? false"):
+                            break
+                        time.sleep(.2)
+                    assert js("return document.querySelector('.monaco-editor .view-lines')?.textContent.replaceAll(String.fromCharCode(160), ' ').includes('assign led = counter[23];') ?? false"), 'Native inline ghost text did not render'
+                    subprocess.run(['scrot', '--overwrite', str(output / 'native-inline-ghost-fixture.png')], check=True)
+                    before = invoke('read_text_file', {'root': root, 'path': path})
+                    assert 'assign led = counter[23];' not in before, 'Fixture code must not be saved before acceptance'
+                    press('\ue004')  # Tab accepts the suggestion
+                    press('\ue009', 's')  # Explicitly save the accepted editor buffer
+                    accepted = False
+                    for _ in range(100):
+                        accepted = 'assign led = counter[23];' in invoke('read_text_file', {'root': root, 'path': path})
+                        if accepted:
+                            break
+                        time.sleep(.1)
+                    assert accepted, 'Tab did not insert the suggestion into the editor buffer'
+                    assert js("return !Array.from(document.querySelectorAll('.runtime-notice')).some(node => node.textContent.includes('Canceled'))"), 'Normal editor cancellation was shown as an application error'
+                    passed('Native Monaco displayed fixture ghost text; Tab accepted it and only explicit Save persisted it')
+                    invoke('ai_disconnect')
                 subprocess.run(['scrot', '--overwrite', str(output / 'native-desktop.png')], check=True)
                 passed('Native desktop screenshot captured')
                 js("Array.from(document.querySelectorAll('button')).find(b => b.getAttribute('aria-label') === 'Open hardware manager')?.click()")

@@ -54,7 +54,6 @@
     }
   },
   "pending": [
-    "Updated Ubuntu hosted CI matrix completion",
     "Complete external Windows installer CI completion",
     "Windows 11 GUI and physical Dock JTAG/SRAM/flash/UART/analyzer acceptance",
     "Ubuntu physical USB/board acceptance",
@@ -86,11 +85,17 @@
     "test": "Ubuntu 26.04 installed native package with caller XDG data home preserved before application isolation"
   },
   "ubuntuHostedMatrix": {
-    "status": "running",
+    "status": "passed",
     "run": "https://github.com/atmarachchige0081/Tang-FPGA-Studio/actions/runs/38787507635"
   },
   "priorHostedFailure": {
     "run": 38785858828,
     "cause": "UI test isolated XDG_DATA_HOME and hid default tool installation; harness now preserves toolchain root before isolation"
-  }
+  },
+  "completeWindowsInstaller": {
+    "status": "cancelled",
+    "run": "https://github.com/atmarachchige0081/Tang-FPGA-Studio/actions/runs/38784739248",
+    "acceptance": "not established"
+  },
+  "evidenceScope": "Precedes the assistant, inline suggestions and classic workbench update; see ../agent-reliability/"
 }

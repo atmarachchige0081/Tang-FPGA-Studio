@@ -1,0 +1,68 @@
+#!/usr/bin/env python3
+"""Local App Server protocol fixture. No credentials, network or host commands."""
+import json
+import sys
+
+if '--version' in sys.argv:
+    print('codex-fixture (protocol test only)')
+    raise SystemExit(0)
+
+threads = {}
+pending = {}
+tool_refused = False
+command_approved = False
+
+def send(value):
+    print(json.dumps(value), flush=True)
+
+def notify(method, params):
+    send({'method': method, 'params': params})
+
+for line in sys.stdin:
+    value = json.loads(line)
+    method = value.get('method')
+    params = value.get('params', {})
+    request = value.get('id')
+    if not method:
+        if request == 777: tool_refused = value.get("error", {}).get("code") == -32601
+        if request in pending:
+            command_approved = value.get('result', {}).get('decision') == 'accept'
+            thread = pending.pop(request)
+            notify('item/agentMessage/delta', {'threadId': thread, 'itemId': 'answer', 'delta': 'Protocol fixture finished; no command was executed.'})
+            notify('turn/completed', {'threadId': thread, 'turn': {'id': 'fixture-turn', 'status': 'completed'}})
+        continue
+    if request is None:
+        continue
+    result = {}
+    if method == 'account/read':
+        result = {'account': {'type': 'chatgpt', 'email': 'fixture@example.invalid'}, 'requiresOpenaiAuth': True, 'fixtureToolRefused': tool_refused, 'fixtureCommandApproved': command_approved}
+    elif method == 'model/list':
+        result = {'data': [{'id': 'fixture', 'model': 'fixture', 'displayName': 'Protocol fixture', 'isDefault': True, 'supportedReasoningEfforts': []}]}
+    elif method == 'thread/list':
+        result = {'data': []}
+    elif method == 'thread/start':
+        if params.get('ephemeral') is True:
+            assert params.get('sandbox') == 'read-only'
+            assert params.get('config', {}).get('features', {}).get('shell_tool') is False
+        thread = 'fixture-thread-' + str(len(threads) + 1)
+        threads[thread] = {'inline': params.get('ephemeral') is True, 'cwd': params.get('cwd')}
+        result = {'thread': {'id': thread}}
+    elif method == 'turn/start':
+        thread = params['threadId']
+        result = {'turn': {'id': 'fixture-turn', 'status': 'inProgress'}}
+        send({'id': request, 'result': result})
+        if threads[thread]['inline']:
+            # Exercise rejection of tool calls in the isolated suggestion thread.
+            send({'id': 777, 'method': 'item/tool/call', 'params': {'threadId': thread, 'tool': 'tang_run', 'arguments': {'action': 'flash'}}})
+            notify('item/agentMessage/delta', {'threadId': thread, 'itemId': 'inline', 'delta': 'assign led = counter[23];'})
+            notify('turn/completed', {'threadId': thread, 'turn': {'id': 'fixture-turn', 'status': 'completed'}})
+        else:
+            pending[222] = thread
+            notify('turn/started', {'threadId': thread, 'turn': {'id': 'fixture-turn'}})
+            send({'id': 222, 'method': 'item/commandExecution/requestApproval', 'params': {'threadId': thread, 'itemId': 'fixture-command', 'command': 'echo protocol-fixture', 'cwd': threads[thread]['cwd']}})
+        continue
+    elif method == 'turn/steer':
+        result = {'turnId': params['expectedTurnId']}
+    elif method in ('thread/read', 'thread/resume'):
+        result = {'thread': {'id': params['threadId'], 'turns': []}}
+    send({'id': request, 'result': result})

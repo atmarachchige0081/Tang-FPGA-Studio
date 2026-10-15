@@ -4,6 +4,17 @@ All notable user-facing changes are recorded here.
 
 ## 3.5.0 — Unreleased
 
+- Reworked the workbench with classic dark/light colors, readable text, flatter
+  controls and a simpler project start screen; release notes no longer interrupt startup.
+- Added Open project folder (Ctrl+O), recognizing portable Studio metadata and
+  older build configurations, including projects outside the workspace.
+- Restore assistant connections across project changes and pending approvals after
+  panel recovery. Approval controls remain visible independently of long details.
+- Added live agent steering and opt-in HDL inline suggestions with Tab/Esc controls,
+  separate read-only provider threads and stale-response protection.
+- Added independent component recovery, background panic handling and window-close
+  protection for active native tasks and unsaved editor buffers.
+
 - Added Ubuntu 22.04/24.04/26.04 x86_64 support alongside Windows, with native
   `.deb` and AppImage packaging and writable per-user workspaces.
 - Added checksum-verified Linux FPGA toolchain setup, PowerShell 7 support,
@@ -11,7 +22,7 @@ All notable user-facing changes are recorded here.
 - Added Unix tool-process cancellation and portable path-validation fixes.
 - Verified native Linux workflows and AppImage UI across the three Ubuntu LTS
   versions; prepared Windows MSVC install/smoke/uninstall validation.
-- Aligned application metadata and first-launch release notes at 3.5.0.
+- Aligned application metadata at 3.5.0.
 - Publication remains pending Windows runtime, physical-board and applicable
   vendor-tool acceptance. Existing 3.4.1 artifacts are development evidence,
   not final 3.5.0 release packages. See [release preparation](docs/RELEASE_PREPARATION.md).

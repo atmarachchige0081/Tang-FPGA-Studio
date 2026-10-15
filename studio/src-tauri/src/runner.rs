@@ -26,6 +26,13 @@ pub struct JobRegistry {
 }
 
 impl JobRegistry {
+    pub fn is_active(&self) -> bool {
+        self.state
+            .lock()
+            .map(|state| !state.jobs.is_empty())
+            .unwrap_or(true)
+    }
+
     fn insert(&self, id: String, project: String, flag: Arc<AtomicBool>) -> Result<(), String> {
         let mut state = self
             .state

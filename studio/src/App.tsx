@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ActivityBar } from "./components/ActivityBar";
 import { BottomDock } from "./components/BottomDock";
 import { CommandBar } from "./components/CommandBar";
@@ -7,6 +7,7 @@ import { ErrorBoundary } from "./components/ErrorBoundary";
 import { Sidebar } from "./components/Sidebar";
 import { StatusBar } from "./components/StatusBar";
 import { TitleBar } from "./components/TitleBar";
+import { OpenProjectDialog } from "./components/OpenProjectDialog";
 import { ProjectWizard } from "./components/ProjectWizard";
 import { ReleaseNotes } from "./components/ReleaseNotes";
 import { QuickLauncher } from "./components/QuickLauncher";
@@ -16,6 +17,7 @@ import { VerificationView } from "./components/VerificationView";
 import { DesignHealthView, LogicAnalyzerView, TraceabilityView } from "./components/HardwareIntelligence";
 import { AiPanel } from "./ai/AiPanel";
 import { bridge } from "./lib/bridge";
+import { expectedCancellation } from "./lib/errors";
 import { hasUnsavedChanges } from "./lib/documents";
 import { useWorkbench } from "./store/workbench";
 import type { BuildAction, BuildEvent, WorkbenchView } from "./types";
@@ -33,9 +35,50 @@ const viewComponents: Record<Exclude<WorkbenchView, "editor" | "verification" | 
 
 function Workbench(): React.JSX.Element {
   const store = useWorkbench();
+  const [runtimeError, setRuntimeError] = useState<string | null>(null);
   const runLock = useRef(false);
   const saveLock = useRef(false);
   const documentationCaptureApplied = useRef(false);
+
+  useEffect(() => {
+    const report = (reason: unknown) => {
+      if (expectedCancellation(reason)) return;
+      const message = reason instanceof Error ? reason.message : String(reason ?? "Unknown error");
+      setRuntimeError(message);
+      useWorkbench.getState().appendOutput({ jobId: "interface", phase: "error", stream: "stderr", message, timestamp: new Date().toISOString() });
+    };
+    const rejected = (event: PromiseRejectionEvent) => report(event.reason);
+    const failed = (event: ErrorEvent) => report(event.error ?? event.message);
+    window.addEventListener("unhandledrejection", rejected);
+    window.addEventListener("error", failed);
+    return () => { window.removeEventListener("unhandledrejection", rejected); window.removeEventListener("error", failed); };
+  }, []);
+
+  useEffect(() => {
+    if (!("__TAURI_INTERNALS__" in window)) return;
+    let disposed = false;
+    let unlisten: (() => void) | undefined;
+    void import("@tauri-apps/api/window").then(({ getCurrentWindow }) => getCurrentWindow().onCloseRequested(async (event) => {
+      const state = useWorkbench.getState();
+      if (state.runningJob) {
+        event.preventDefault();
+        setRuntimeError("A hardware or build task is still running. Wait for it to finish before closing the app.");
+      } else if (hasUnsavedChanges(state.tabs)) {
+        event.preventDefault();
+        setRuntimeError("Save or close your modified files before closing the app.");
+      }
+    })).then((stop) => { if (disposed) stop(); else unlisten = stop; }).catch((error) => setRuntimeError(String(error)));
+    return () => { disposed = true; unlisten?.(); };
+  }, []);
+
+  useEffect(() => {
+    if (!("__TAURI_INTERNALS__" in window)) return;
+    let disposed = false;
+    let unlisten: (() => void) | undefined;
+    void import("@tauri-apps/api/event").then(({ listen }) => listen<string>("runtime-warning", (event) => setRuntimeError(event.payload)))
+      .then((stop) => { if (disposed) stop(); else unlisten = stop; }).catch((error) => setRuntimeError(String(error)));
+    return () => { disposed = true; unlisten?.(); };
+  }, []);
 
   useEffect(() => {
     const protectUnsaved = (event: BeforeUnloadEvent) => {
@@ -78,7 +121,7 @@ function Workbench(): React.JSX.Element {
 
   useEffect(() => {
     let disposed = false;
-    void (async () => {
+    if (!useWorkbench.getState().ready) void (async () => {
       const snapshot = await bridge.workspaceSnapshot();
       if (disposed) return;
       store.setWorkspace(snapshot.root, snapshot.project, snapshot.projectPath, snapshot.tree, snapshot.recentProjects);
@@ -193,7 +236,8 @@ function Workbench(): React.JSX.Element {
   }, [store]);
 
   const stop = useCallback(async () => {
-    if (store.runningJob) await bridge.cancel(store.runningJob);
+    try { if (store.runningJob) await bridge.cancel(store.runningJob); }
+    catch (error) { store.appendOutput({ jobId: "cancel", phase: "cancel", stream: "stderr", message: String(error), timestamp: new Date().toISOString() }); }
   }, [store.runningJob]);
 
   const content = store.view === "editor"
@@ -206,18 +250,19 @@ function Workbench(): React.JSX.Element {
           ? <DesignHealthView onRun={run} />
           : (() => { const View = viewComponents[store.view]; return <View />; })();
   return <><div className="app-shell">
-    <TitleBar onRun={(action) => void run(action)} onSave={() => void save()} />
+    {runtimeError && <div className="runtime-notice" role="alert"><span>{runtimeError}</span><button onClick={() => { store.setBottomPanel("output"); setRuntimeError(null); }}>Show output</button><button aria-label="Dismiss error" onClick={() => setRuntimeError(null)}>Dismiss</button></div>}
+    <ErrorBoundary label="Menu" compact><TitleBar onRun={(action) => void run(action)} onSave={() => void save()} /></ErrorBoundary>
     <div className="workbench-shell">
-      <ActivityBar />
-      {store.sidebarOpen && <Sidebar />}
+      <ErrorBoundary label="Navigation" compact><ActivityBar /></ErrorBoundary>
+      {store.sidebarOpen && <ErrorBoundary label="Sidebar" resetKey={store.projectPath} compact><Sidebar /></ErrorBoundary>}
       <main className="main-area">
-        <CommandBar onRun={(action) => void run(action)} onSave={() => void save()} onStop={() => void stop()} />
-        <div className="content-and-dock"><div className="content-surface">{content}</div><BottomDock /></div>
+        <ErrorBoundary label="Toolbar" compact><CommandBar onRun={(action) => void run(action)} onSave={() => void save()} onStop={() => void stop()} /></ErrorBoundary>
+        <div className="content-and-dock"><div className="content-surface"><ErrorBoundary label="Workspace view" resetKey={`${store.projectPath}/${store.view}`}>{content}</ErrorBoundary></div><ErrorBoundary label="Output panel" resetKey={store.bottomPanel} compact><BottomDock /></ErrorBoundary></div>
       </main>
-      {store.aiPanelOpen && <AiPanel />}
+      {store.aiPanelOpen && <ErrorBoundary label="Assistant"><AiPanel /></ErrorBoundary>}
     </div>
-    <StatusBar />
-  </div><ProjectWizard /><ReleaseNotes /><QuickLauncher onRun={(action) => void run(action)} onSave={() => void save()} /></>;
+    <ErrorBoundary label="Status bar" compact><StatusBar /></ErrorBoundary>
+  </div><ErrorBoundary label="Open project" compact><OpenProjectDialog /></ErrorBoundary><ErrorBoundary label="Project dialog" compact><ProjectWizard /></ErrorBoundary><ErrorBoundary label="Release notes" compact><ReleaseNotes /></ErrorBoundary><ErrorBoundary label="Command dialog" compact><QuickLauncher onRun={(action) => void run(action)} onSave={() => void save()} /></ErrorBoundary></>;
 }
 
 export function App(): React.JSX.Element {

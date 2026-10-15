@@ -14,11 +14,14 @@ import {
   type AiActivityItem, type AiApprovalRequest, type AiConversationState, type AiQuestionRequest,
 } from "./state";
 import {
-  readActiveThread, readAiSettings, writeActiveThread, writeAiSettings,
+  readActiveThread, readAiSettings, writeActiveThread, writeAiSettings, readAgentConnection, writeAgentConnection,
   type AiSettings,
 } from "./persistence";
 
 type UnknownRecord = Record<string, unknown>;
+
+// Retain live approvals and messages across panel recovery; never persist credentials.
+const liveConversations = new Map<string, AiConversationState>();
 
 function record(value: unknown): UnknownRecord {
   return value && typeof value === "object" && !Array.isArray(value) ? value as UnknownRecord : {};
@@ -105,7 +108,7 @@ function ActivityGroup({ activities }: { activities: AiActivityItem[] }): React.
   return <section className="ai-work-group" aria-label="Agent activity">
     <button className="ai-work-summary" aria-expanded={expanded} onClick={() => setExpanded((value) => !value)}>
       {running ? <LoaderCircle className="spin" size={13}/> : failed ? <AlertTriangle size={13}/> : <Check size={13}/>}
-      <span>{running ? "Working on this answer" : failed ? "Work needs attention" : "Work completed"}</span>
+      <span>{running ? "Working" : failed ? "Work needs attention" : "Work completed"}</span>
       <small>{activities.length} {activities.length === 1 ? "step" : "steps"}</small>
       {expanded ? <ChevronDown size={13}/> : <ChevronRight size={13}/>}
     </button>
@@ -120,23 +123,23 @@ function ApprovalCard({
   busy: boolean;
   onDecision: (decision: AiApprovalDecision) => void;
 }): React.JSX.Element {
-  const [expanded, setExpanded] = useState(true);
+  const [expanded, setExpanded] = useState(false);
   return <article className={`ai-approval ${approval.risk}`}>
     <header><ShieldCheck size={16}/><div><strong>{approval.title}</strong><span>{approval.risk === "high" ? "High-risk operation" : "Your approval is required"}</span></div><button aria-label="Toggle approval details" onClick={() => setExpanded((value) => !value)}>{expanded ? <ChevronDown size={14}/> : <ChevronRight size={14}/>}</button></header>
+      {approval.command && <div className="ai-command-preview"><TerminalSquare size={14}/><code>{approval.command}</code></div>}
     {expanded && <div className="ai-approval-body">
       {approval.reason && <p>{approval.reason}</p>}
-      {approval.command && <div className="ai-command-preview"><TerminalSquare size={14}/><code>{approval.command}</code></div>}
       {approval.cwd && <small>Working directory: {approval.cwd}</small>}
       {approval.changes.map((change) => <div className="ai-change-row" key={`${change.kind}:${change.path}`}><FileDiff size={13}/><strong>{change.path}</strong><span>{change.kind}</span>{change.diff && <pre>{change.diff}</pre>}</div>)}
       {approval.diff && !approval.changes.some((change) => change.diff) && <pre className="ai-diff-preview">{approval.diff}</pre>}
+    </div>}
       <div className="ai-approval-actions">
         <button disabled={busy} className="ai-deny" onClick={() => onDecision("deny")}>Reject</button>
         <button disabled={busy} onClick={() => onDecision("allowOnce")}>Allow once</button>
         {approval.method === "item/fileChange/requestApproval" && <button disabled={busy} onClick={() => onDecision("allowSession")}>Allow session</button>}
-        {approval.method === "item/fileChange/requestApproval" && <button disabled={busy} className="ai-accept" onClick={() => onDecision("alwaysAllow")}>Always allow</button>}
+        {approval.method === "item/fileChange/requestApproval" && <button disabled={busy} className="ai-accept" onClick={() => onDecision("alwaysAllow")}>Allow future edits</button>}
         <button disabled={busy} title="Reject this request and stop the agent" onClick={() => onDecision("cancel")}><CircleStop size={13}/> Cancel agent</button>
       </div>
-    </div>}
   </article>;
 }
 
@@ -154,8 +157,8 @@ function SignIn({
   const [key, setKey] = useState("");
   const copyCode = () => login?.userCode && void navigator.clipboard?.writeText(login.userCode);
   return <div className="ai-signin">
-    <Bot size={28}/><h3>Connect your AI coding agent</h3>
-    <p>Use your own ChatGPT account through the official Codex sign-in, or use an OpenAI API key with separate API billing.</p>
+    <Bot size={28}/><h3>Sign in to Codex</h3>
+    <p>Sign in with ChatGPT, or use an OpenAI API key.</p>
     <button className="primary-button" disabled={busy} onClick={onChatGpt}>{busy ? <LoaderCircle className="spin" size={15}/> : <UserRound size={15}/>} Sign in with ChatGPT</button>
     <button className="secondary-button" disabled={busy} onClick={onDeviceCode}><KeyRound size={15}/> Use device code</button>
     {login?.userCode && <div className="ai-device-code"><span>Enter this code on the secure OpenAI page</span><button onClick={copyCode}><code>{login.userCode}</code><Copy size={13}/></button></div>}
@@ -164,9 +167,9 @@ function SignIn({
     {showKey && <form onSubmit={(event) => { event.preventDefault(); const submitted = key; setKey(""); onApiKey(submitted); }}>
       <input type="password" autoComplete="off" spellCheck={false} aria-label="OpenAI API key" value={key} onChange={(event) => setKey(event.target.value)} placeholder="sk-…"/>
       <button className="secondary-button" disabled={busy || key.trim().length < 20}>Connect key</button>
-      <small>The key is passed directly to Codex over local IPC. FPGA Studio never saves or logs it.</small>
+      <small>Credentials are managed by Codex on this computer.</small>
     </form>}
-    <div className="ai-auth-boundary"><ShieldCheck size={14}/><span>ChatGPT subscriptions and OpenAI API billing are separate. The selected sign-in method determines usage and policy.</span></div>
+    <div className="ai-auth-boundary"><ShieldCheck size={14}/><span>API keys use separate API billing.</span></div>
   </div>;
 }
 
@@ -194,8 +197,8 @@ export function AiPanel(): React.JSX.Element {
   const [account, setAccount] = useState<AiAccountStatus | null>(null);
   const [models, setModels] = useState<AiModel[]>([]);
   const [modelError, setModelError] = useState<string | null>(null);
-  const [conversation, setConversation] = useState<AiConversationState>(initialAiConversation);
-  const [threadId, setThreadId] = useState<string | null>(() => readActiveThread(workbench.projectPath));
+  const [conversation, setConversation] = useState<AiConversationState>(() => (readAgentConnection() ? liveConversations.get(`${workbench.root}/${workbench.projectPath}`) : undefined) ?? initialAiConversation);
+  const [threadId, setThreadId] = useState<string | null>(() => readActiveThread(`${workbench.root}/${workbench.projectPath}`));
   const [threads, setThreads] = useState<ThreadSummary[]>([]);
   const [prompt, setPrompt] = useState("");
   const [busy, setBusy] = useState(false);
@@ -207,13 +210,26 @@ export function AiPanel(): React.JSX.Element {
   const [settings, setSettings] = useState<AiSettings>(() => readAiSettings());
   const [resolving, setResolving] = useState<Array<string | number>>([]);
   const settingsRef = useRef(settings);
+  const resolutionLock = useRef(new Set<string | number>());
   const autoApprovalAttempts = useRef(new Set<string>());
-  const previousProject = useRef(workbench.projectPath);
+  const previousProject = useRef(`${workbench.root}/${workbench.projectPath}`);
+  const connectionIntent = useRef(readAgentConnection());
+  const generation = useRef(0);
+  const operationLock = useRef(false);
+  const completedTurns = useRef(new Set<string>());
   const conversationEnd = useRef<HTMLDivElement>(null);
   const conversationRef = useRef(conversation);
+  const activeThreadRef = useRef(threadId);
+  activeThreadRef.current = threadId;
   const stopWatchdog = useRef<number | null>(null);
 
-  useEffect(() => { conversationRef.current = conversation; }, [conversation]);
+  useEffect(() => {
+    conversationRef.current = conversation;
+    const key = `${workbench.root}/${workbench.projectPath}`;
+    if (previousProject.current !== key) return;
+    liveConversations.set(key, conversation);
+    if (liveConversations.size > 8) liveConversations.delete(liveConversations.keys().next().value!);
+  }, [conversation, workbench.root, workbench.projectPath]);
   useEffect(() => () => { if (stopWatchdog.current !== null) window.clearTimeout(stopWatchdog.current); }, []);
 
   const setAndPersistSettings = (next: AiSettings) => {
@@ -222,17 +238,32 @@ export function AiPanel(): React.JSX.Element {
     writeAiSettings(next);
   };
 
+  const restorePendingRequests = useCallback(async () => {
+    const epoch = generation.current;
+    try {
+      const pending = await bridge.aiPendingRequests();
+      if (epoch !== generation.current) return;
+      setConversation((current) => pending.filter((event) => !event.params.threadId || event.params.threadId === activeThreadRef.current)
+        .reduce((value, event) => reduceAiEvent(value, event), current));
+    } catch (caught) { if (epoch === generation.current) setError(String(caught)); }
+  }, []);
+
   const refreshAccount = useCallback(async () => {
-    try { setAccount(await bridge.aiAccount(false)); } catch (caught) { setError(caught instanceof Error ? caught.message : String(caught)); }
+    const epoch = generation.current;
+    try { const value = await bridge.aiAccount(false); if (epoch === generation.current) setAccount(value); } catch (caught) { setError(caught instanceof Error ? caught.message : String(caught)); }
   }, []);
 
   const refreshThreads = useCallback(async () => {
-    try { setThreads(threadSummaries(await bridge.aiThreadList())); } catch { setThreads([]); }
+    const epoch = generation.current;
+    try { const value = await bridge.aiThreadList(); if (epoch === generation.current) setThreads(threadSummaries(value)); } catch { setThreads([]); }
   }, []);
 
   const refreshModels = useCallback(async () => {
+    const epoch = generation.current;
     try {
-      setModels(modelsFromResponse(await bridge.aiModelList()));
+      const value = await bridge.aiModelList();
+      if (epoch !== generation.current) return;
+      setModels(modelsFromResponse(value));
       setModelError(null);
     } catch (caught) {
       setModelError(caught instanceof Error ? caught.message : String(caught));
@@ -264,15 +295,19 @@ export function AiPanel(): React.JSX.Element {
     let unlisten: (() => void) | undefined;
     void bridge.aiProviderStatus().then(async (value) => {
       if (disposed) return;
+      if (connectionIntent.current) return;
       setStatus(value);
       if (value.connected) {
-        await Promise.allSettled([refreshAccount(), refreshThreads(), refreshModels()]);
+        await Promise.allSettled([refreshAccount(), refreshThreads(), refreshModels(), restorePendingRequests()]);
       }
     }).catch((caught) => { if (!disposed) setError(caught instanceof Error ? caught.message : String(caught)); });
     void bridge.onAiEvent((event) => {
       if (disposed) return;
-      setConversation((current) => reduceAiEvent(current, event));
+      const eventThread = valueString(event.params.threadId);
+      if (eventThread && eventThread !== activeThreadRef.current) return;
       const completedTurnId = event.method === "turn/completed" ? valueString(record(event.params.turn).id) : null;
+      setConversation((current) => reduceAiEvent(current, event));
+      if (completedTurnId) completedTurns.current.add(completedTurnId);
       const isCurrentCompletion = event.method === "turn/completed"
         && (!completedTurnId || !conversationRef.current.turnId || completedTurnId === conversationRef.current.turnId);
       if (isCurrentCompletion || event.method === "provider/stopped") {
@@ -295,34 +330,38 @@ export function AiPanel(): React.JSX.Element {
         const message = valueString(event.params.message);
         if (message) workbench.appendOutput({ jobId: "ai", phase: "provider", stream: "stderr", message, timestamp: event.timestamp });
       }
-    }).then((stop) => { if (disposed) stop(); else unlisten = stop; });
+    }).then((stop) => { if (disposed) stop(); else unlisten = stop; }).catch((caught) => { if (!disposed) setError(String(caught)); });
     return () => { disposed = true; unlisten?.(); };
-  }, [refreshAccount, refreshChangedFiles, refreshModels]);
+  }, [refreshAccount, refreshChangedFiles, refreshModels, restorePendingRequests]);
 
   useEffect(() => { conversationEnd.current?.scrollIntoView({ block: "end" }); }, [conversation.messages, conversation.activities, conversation.approvals, conversation.questions]);
 
   useEffect(() => {
-    if (previousProject.current === workbench.projectPath) return;
-    previousProject.current = workbench.projectPath;
-    void bridge.aiDisconnect().catch(() => undefined);
+    const key = `${workbench.root}/${workbench.projectPath}`;
+    if (previousProject.current === key) return;
+    previousProject.current = key;
+    generation.current += 1;
+    operationLock.current = false;
+    setBusy(false);
     setStatus(null);
-    setAccount(null);
-    setModels([]);
-    setModelError(null);
-    setThreadId(readActiveThread(workbench.projectPath));
+    setThreadId(readActiveThread(key));
+    activeThreadRef.current = null;
     setConversation(initialAiConversation);
+    setPrompt("");
     setError(null);
+    setResolving([]);
     autoApprovalAttempts.current.clear();
-    void bridge.aiProviderStatus().then(setStatus).catch((caught) => setError(caught instanceof Error ? caught.message : String(caught)));
-  }, [workbench.projectPath]);
+    // connect() replaces the project process; it does not log out of Codex.
+    if (connectionIntent.current) void connect();
+    else void bridge.aiDisconnect().then(() => bridge.aiProviderStatus()).then(setStatus).catch((caught) => setError(String(caught)));
+  }, [workbench.root, workbench.projectPath]);
 
   const resolveApproval = useCallback(async (approval: AiApprovalRequest, decision: AiApprovalDecision) => {
+    if (resolutionLock.current.has(approval.requestId)) return;
+    resolutionLock.current.add(approval.requestId);
     setResolving((items) => [...items, approval.requestId]);
     setError(null);
     try {
-      if (decision === "alwaysAllow" && approval.method === "item/fileChange/requestApproval") {
-        setAndPersistSettings({ ...settingsRef.current, alwaysAllowFileEdits: true });
-      }
       if (approval.method === "item/tool/call" && decision === "allowOnce") {
         const result = await bridge.aiExecuteTangTool(approval.requestId);
         if (!result.success) setError(result.failureMessage ?? `${result.action} did not complete successfully.`);
@@ -330,11 +369,12 @@ export function AiPanel(): React.JSX.Element {
         const dirtyPaths = useWorkbench.getState().tabs.filter((tab) => tab.content !== tab.savedContent).map((tab) => tab.path);
         await bridge.aiRespondApproval(approval.requestId, decision === "alwaysAllow" && approval.method === "item/fileChange/requestApproval" ? "allowSession" : decision, dirtyPaths);
       }
+      if (decision === "alwaysAllow" && approval.method === "item/fileChange/requestApproval") setAndPersistSettings({ ...settingsRef.current, alwaysAllowFileEdits: true });
       setConversation((current) => removeApproval(current, approval.requestId));
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : String(caught));
-      setConversation((current) => removeApproval(current, approval.requestId));
     } finally {
+      resolutionLock.current.delete(approval.requestId);
       setResolving((items) => items.filter((item) => item !== approval.requestId));
     }
   }, []);
@@ -363,59 +403,87 @@ export function AiPanel(): React.JSX.Element {
   };
 
   const connect = async () => {
+    const epoch = ++generation.current;
     setBusy(true); setError(null);
     try {
+      const previous = await bridge.aiProviderStatus();
+      if (epoch !== generation.current) return;
+      if (!previous.connected && conversationRef.current.running) {
+        const recovered = { ...conversationRef.current, running: false, turnId: null, approvals: [], questions: [] };
+        conversationRef.current = recovered;
+        setConversation(recovered);
+      }
       const connected = await bridge.aiConnect(workbench.root, workbench.projectPath);
+      if (epoch !== generation.current) return;
+      connectionIntent.current = true;
+      writeAgentConnection(true);
       setStatus(connected);
       const nextAccount = await bridge.aiAccount(false);
+      if (epoch !== generation.current) return;
       setAccount(nextAccount);
       await refreshThreads();
       await refreshModels();
-      const saved = readActiveThread(workbench.projectPath);
-      if (saved && (nextAccount.account || !nextAccount.requiresOpenaiAuth)) {
+      const saved = readActiveThread(`${workbench.root}/${workbench.projectPath}`);
+      if (saved && !conversationRef.current.running && (nextAccount.account || !nextAccount.requiresOpenaiAuth)) {
         try {
           const response = await bridge.aiThreadResume(saved);
-          setThreadId(responseThreadId(response) ?? saved);
+          if (epoch !== generation.current) return;
+          activeThreadRef.current = responseThreadId(response) ?? saved;
+          setThreadId(activeThreadRef.current);
           const history = await bridge.aiThreadRead(saved);
-          setConversation(conversationWithHistory(messagesFromThread(history)));
-        } catch { writeActiveThread(workbench.projectPath, null); setThreadId(null); }
+          if (epoch === generation.current) setConversation(conversationWithHistory(messagesFromThread(history)));
+        } catch { if (epoch === generation.current) { writeActiveThread(`${workbench.root}/${workbench.projectPath}`, null); setThreadId(null); } }
       }
-    } catch (caught) { setError(caught instanceof Error ? caught.message : String(caught)); }
-    finally { setBusy(false); }
+      if (epoch === generation.current) await restorePendingRequests();
+    } catch (caught) {
+      if (epoch === generation.current) {
+        const message = caught instanceof Error ? caught.message : String(caught);
+        setError(message);
+        setStatus({ provider: "codex-app-server", available: true, connected: false, message });
+      }
+    }
+    finally { if (epoch === generation.current) setBusy(false); }
   };
 
+  useEffect(() => { if (connectionIntent.current) void connect(); }, []);
+
   const loginChatGpt = async (deviceCode: boolean) => {
+    const epoch = generation.current;
     setBusy(true); setError(null);
     try {
       const result = await bridge.aiLoginChatgpt(deviceCode);
+      if (epoch !== generation.current) return;
       setLogin(result);
       const url = result.authUrl ?? result.verificationUrl;
       if (url) await bridge.aiOpenAuthUrl(url);
       if (!result.loginId) await refreshAccount();
-    } catch (caught) { setError(caught instanceof Error ? caught.message : String(caught)); }
-    finally { setBusy(false); }
+    } catch (caught) { if (epoch === generation.current) setError(caught instanceof Error ? caught.message : String(caught)); }
+    finally { if (epoch === generation.current) setBusy(false); }
   };
 
   const loginApiKey = async (apiKey: string) => {
+    const epoch = generation.current;
     setBusy(true); setError(null);
     try { setLogin(await bridge.aiLoginApiKey(apiKey)); await Promise.all([refreshAccount(), refreshModels()]); }
-    catch (caught) { setError(caught instanceof Error ? caught.message : String(caught)); }
-    finally { setBusy(false); }
+    catch (caught) { if (epoch === generation.current) setError(caught instanceof Error ? caught.message : String(caught)); }
+    finally { if (epoch === generation.current) setBusy(false); }
   };
 
   const cancelLogin = async () => {
     if (!login?.loginId) return;
+    const epoch = generation.current;
     setBusy(true); setError(null);
     try { await bridge.aiCancelLogin(login.loginId); setLogin(null); }
-    catch (caught) { setError(caught instanceof Error ? caught.message : String(caught)); }
-    finally { setBusy(false); }
+    catch (caught) { if (epoch === generation.current) setError(caught instanceof Error ? caught.message : String(caught)); }
+    finally { if (epoch === generation.current) setBusy(false); }
   };
 
   const newConversation = () => {
     if (conversation.running) return;
     setThreadId(null);
+    activeThreadRef.current = null;
     setConversation(initialAiConversation);
-    writeActiveThread(workbench.projectPath, null);
+    writeActiveThread(`${workbench.root}/${workbench.projectPath}`, null);
     setHistoryOpen(false);
   };
 
@@ -425,7 +493,7 @@ export function AiPanel(): React.JSX.Element {
       await bridge.aiThreadResume(id);
       const history = await bridge.aiThreadRead(id);
       setThreadId(id);
-      writeActiveThread(workbench.projectPath, id);
+      writeActiveThread(`${workbench.root}/${workbench.projectPath}`, id);
       setConversation(conversationWithHistory(messagesFromThread(history)));
       setHistoryOpen(false);
     } catch (caught) { setError(caught instanceof Error ? caught.message : String(caught)); }
@@ -434,7 +502,10 @@ export function AiPanel(): React.JSX.Element {
 
   const sendPrompt = async (override?: string) => {
     const text = (override ?? prompt).trim();
-    if (!text || conversation.running || busy) return;
+    if (!text || busy || operationLock.current) return;
+    if (conversation.running) { await steer(text); return; }
+    operationLock.current = true;
+    const epoch = generation.current;
     setPrompt(""); setError(null);
     if (override === undefined) setConversation((current) => appendUserMessage(current, text));
     setBusy(true);
@@ -444,8 +515,10 @@ export function AiPanel(): React.JSX.Element {
         const response = await bridge.aiThreadStart(models.find((entry) => entry.model === settings.model)?.model);
         activeThread = responseThreadId(response);
         if (!activeThread) throw new Error("Codex did not return a conversation identifier.");
+        if (epoch !== generation.current) return;
+        activeThreadRef.current = activeThread;
         setThreadId(activeThread);
-        writeActiveThread(workbench.projectPath, activeThread);
+        writeActiveThread(`${workbench.root}/${workbench.projectPath}`, activeThread);
       }
       const output = settings.includeToolOutput ? workbench.output.slice(-80).map((event) => `[${event.phase}/${event.stream}] ${event.message}`).join("\n").slice(-12_000) : undefined;
       const diagnostics = settings.includeDiagnostics ? workbench.diagnostics.slice(0, 100).map(formatDiagnostic) : [];
@@ -465,12 +538,32 @@ export function AiPanel(): React.JSX.Element {
       selectedModel?.supportedReasoningEfforts?.some((entry) => entry.reasoningEffort === settings.effort) ? settings.effort : undefined);
       const turn = record(response.turn);
       const id = valueString(turn.id);
-      if (id) setConversation((current) => ({ ...current, running: true, turnId: id }));
+      if (epoch !== generation.current) return;
+      if (id && !completedTurns.current.has(id)) setConversation((current) => ({ ...current, running: true, turnId: id }));
     } catch (caught) {
+      if (epoch !== generation.current) return;
+      setPrompt(text);
       const message = caught instanceof Error ? caught.message : String(caught);
       setConversation((current) => ({ ...current, running: false, error: message }));
       setError(message);
-    } finally { setBusy(false); }
+    } finally { if (epoch === generation.current) { operationLock.current = false; setBusy(false); } }
+  };
+
+  const steer = async (text: string) => {
+    if (!threadId || !conversation.turnId || operationLock.current || stopping) return;
+    const epoch = generation.current;
+    operationLock.current = true;
+    setBusy(true); setError(null);
+    try {
+      await bridge.aiTurnSteer(threadId, conversation.turnId, text);
+      if (epoch !== generation.current) return;
+      setConversation((current) => appendUserMessage(current, text));
+      setPrompt("");
+    } catch (caught) {
+      if (epoch === generation.current) setError(`Follow-up was not sent: ${caught instanceof Error ? caught.message : String(caught)}`);
+    } finally {
+      if (epoch === generation.current) { operationLock.current = false; setBusy(false); }
+    }
   };
 
   const stop = async () => {
@@ -514,6 +607,7 @@ export function AiPanel(): React.JSX.Element {
     if (conversation.running) return;
     setBusy(true); setError(null);
     try {
+      connectionIntent.current = false; writeAgentConnection(false);
       await bridge.aiDisconnect();
       setAccount(null); setLogin(null); setConversation(initialAiConversation);
       setStatus(await bridge.aiProviderStatus());
@@ -564,19 +658,19 @@ export function AiPanel(): React.JSX.Element {
     {historyOpen && <section className="ai-popover ai-history"><header><strong>Project conversations</strong><button onClick={() => void refreshThreads()}><RefreshCw size={13}/></button></header>{threads.map((thread) => <button className={thread.id === threadId ? "active" : ""} key={thread.id} onClick={() => void openThread(thread.id)}><strong>{thread.name}</strong><span>{thread.preview || "Open conversation"}</span></button>)}{!threads.length && <p>No saved conversations for this project.</p>}</section>}
 
     {settingsOpen && <section className="ai-popover ai-settings"><header><strong>Agent settings</strong><button onClick={() => setSettingsOpen(false)}><X size={13}/></button></header>
-      <small>Choose a model and reasoning effort beside the message box. Choices come from the connected Codex provider. A listed model can still be unavailable to an account when a turn runs.</small>
+      <small>Choose the model and thinking level below.</small>
       <label className="ai-check"><input type="checkbox" checked={settings.includeDiagnostics} onChange={(event) => setAndPersistSettings({ ...settings, includeDiagnostics: event.target.checked })}/><span>Include current diagnostics</span></label>
       <label className="ai-check"><input type="checkbox" checked={settings.includeToolOutput} onChange={(event) => setAndPersistSettings({ ...settings, includeToolOutput: event.target.checked })}/><span>Include recent tool output</span></label>
-      <label className="ai-check"><input type="checkbox" checked={settings.alwaysAllowFileEdits} onChange={(event) => setAndPersistSettings({ ...settings, alwaysAllowFileEdits: event.target.checked })}/><span>Always allow reviewed file edits</span></label>
-      <small>Workspace boundaries and stale-file checks remain enforced even when edits are pre-approved. Commands are never globally pre-approved here.</small>
+      <label className="ai-check"><input type="checkbox" checked={settings.alwaysAllowFileEdits} onChange={(event) => setAndPersistSettings({ ...settings, alwaysAllowFileEdits: event.target.checked })}/><span>Allow file edits without asking</span></label>
+      <small>Commands and hardware programming still ask for approval.</small>
       <button className="secondary-button" disabled={busy || conversation.running} onClick={() => void disconnect()}>Disconnect local provider</button>
     </section>}
 
-    {error && <div className="ai-error"><AlertTriangle size={15}/><span>{error}</span><button onClick={() => setError(null)}><X size={12}/></button></div>}
+    {error && error !== conversation.error && <div className="ai-error" role="alert"><AlertTriangle size={15}/><span>{error}</span><button onClick={() => setError(null)}><X size={12}/></button></div>}
 
     {!status ? <div className="ai-loading"><LoaderCircle className="spin" size={20}/> Checking Codex…</div>
       : !status.available ? <div className="ai-unavailable"><AlertTriangle size={25}/><h3>Codex CLI required</h3><p>{status.message}</p><code>npm install -g @openai/codex</code><button className="secondary-button" onClick={() => void bridge.aiProviderStatus().then(setStatus)}>Check again</button></div>
-      : !status.connected ? <div className="ai-connect"><Bot size={28}/><h3>AI for your FPGA project</h3><p>Connect the official Codex App Server to <strong>{workbench.project}</strong>. Agent access is restricted to this project and all changes remain reviewable.</p><button className="primary-button" disabled={busy} onClick={() => void connect()}>{busy ? <LoaderCircle className="spin" size={15}/> : <Play size={15}/>} Connect agent</button><small>{status.version}</small></div>
+      : !status.connected ? <div className="ai-connect"><Bot size={28}/><h3>Project assistant</h3><p>Use your Codex account in <strong>{workbench.project}</strong>.</p><button className="primary-button" disabled={busy} onClick={() => void connect()}>{busy ? <LoaderCircle className="spin" size={15}/> : <Play size={15}/>} Connect agent</button><small>{status.version}</small></div>
       : !signedIn ? <SignIn busy={busy} login={login} onChatGpt={() => void loginChatGpt(false)} onDeviceCode={() => void loginChatGpt(true)} onApiKey={(key) => void loginApiKey(key)} onCancelLogin={() => void cancelLogin()}/>
       : <>
         <div className="ai-model-bar">
@@ -592,20 +686,22 @@ export function AiPanel(): React.JSX.Element {
         </div>
         {modelError && <div className="ai-model-error">Model list unavailable: {modelError}</div>}
         <div className="ai-conversation">
-          {!conversation.messages.length && <div className="ai-empty"><Code2 size={25}/><h3>What should we build?</h3><p>Ask about RTL, diagnose synthesis errors, propose a patch, or run an approved FPGA workflow.</p><div>{["Explain the active module", "Find and fix synthesis errors", "Review timing and suggest improvements"].map((value) => <button key={value} onClick={() => setPrompt(value)}>{value}</button>)}</div></div>}
+          {!conversation.messages.length && <div className="ai-empty"><Code2 size={25}/><h3>Ask about your project</h3><p>Review code, diagnose a build error, or check timing.</p><div>{["Explain the active module", "Find and fix synthesis errors", "Review timing and suggest improvements"].map((value) => <button key={value} onClick={() => setPrompt(value)}>{value}</button>)}</div></div>}
           {timeline.map((row) => row.type === "message"
             ? <article className={`ai-message ${row.message.role}`} key={row.id}><header>{row.message.role === "user" ? <UserRound size={13}/> : <Bot size={13}/>}<strong>{row.message.role === "user" ? "You" : "Codex"}</strong>{row.message.streaming && <LoaderCircle className="spin" size={11}/>}</header><MarkdownMessage text={row.message.text} onOpenFile={(path, line, column) => void openWorkspaceLocation(path, line, column)}/></article>
             : <ActivityGroup activities={row.activities} key={row.id}/>)}
-          {conversation.approvals.map((approval) => <ApprovalCard key={String(approval.requestId)} approval={approval} busy={resolving.includes(approval.requestId)} onDecision={(decision) => void resolveApproval(approval, decision)}/>)}
-          {conversation.questions.map((question) => <QuestionCard key={String(question.requestId)} request={question} busy={resolving.includes(question.requestId)} onSubmit={(answers) => void answerQuestion(question, answers)}/>)}
-          {(conversation.error || error) && <div className="ai-retry"><AlertTriangle size={14}/><span>{conversation.error ?? error}</span><button onClick={retry}><RotateCcw size={12}/> Retry</button></div>}
+          {conversation.error && <div className="ai-retry"><AlertTriangle size={14}/><span>{conversation.error ?? error}</span><button onClick={retry}><RotateCcw size={12}/> Retry</button></div>}
           <div ref={conversationEnd}/>
         </div>
+        {(conversation.approvals.length > 0 || conversation.questions.length > 0) && <section className="ai-review-queue" aria-label="Pending agent requests">
+          {conversation.approvals.map((approval) => <ApprovalCard key={String(approval.requestId)} approval={approval} busy={resolving.includes(approval.requestId)} onDecision={(decision) => void resolveApproval(approval, decision)}/>)}
+          {conversation.questions.map((question) => <QuestionCard key={String(question.requestId)} request={question} busy={resolving.includes(question.requestId)} onSubmit={(answers) => void answerQuestion(question, answers)}/>)}
+        </section>}
         <div className="ai-composer">
-          <textarea aria-label="Ask AI about this project" value={prompt} disabled={conversation.running} onChange={(event) => setPrompt(event.target.value.slice(0, 100_000))} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); void sendPrompt(); } }} placeholder="Ask AI about this FPGA project…"/>
-          <div><span>{workbench.activePath ? `${workbench.activePath}${workbench.editorSelection ? " · selection" : ""}` : "Project context"}</span>{conversation.running ? <button className="ai-stop" disabled={stopping} onClick={() => void stop()}>{stopping ? <LoaderCircle className="spin" size={14}/> : <CircleStop size={14}/>} {stopping ? "Stopping…" : "Stop"}</button> : <button className="ai-send" disabled={!prompt.trim() || busy} onClick={() => void sendPrompt()}><Send size={14}/> Send</button>}</div>
+          <textarea aria-label="Ask AI about this project" value={prompt} disabled={stopping} onChange={(event) => setPrompt(event.target.value.slice(0, 100_000))} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); void sendPrompt(); } }} placeholder={conversation.running ? "Send a correction or follow-up…" : "Ask about this project…"}/>
+          <div><span>{workbench.activePath ? `${workbench.activePath}${workbench.editorSelection ? " · selection" : ""}` : "Project context"}</span>{conversation.running && <button className="ai-send" disabled={!prompt.trim() || busy || stopping} onClick={() => void sendPrompt()}><Send size={14}/> Send follow-up</button>}{conversation.running ? <button className="ai-stop" disabled={stopping} onClick={() => void stop()}>{stopping ? <LoaderCircle className="spin" size={14}/> : <CircleStop size={14}/>} {stopping ? "Stopping…" : "Stop"}</button> : <button className="ai-send" disabled={!prompt.trim() || busy} onClick={() => void sendPrompt()}><Send size={14}/> Send</button>}</div>
         </div>
-        <footer className="ai-footer"><ShieldCheck size={12}/><span>Project sandbox · approval-gated edits</span><button title="Sign out" disabled={busy || conversation.running} onClick={() => void logout()}><LogOut size={12}/></button></footer>
+        <footer className="ai-footer"><ShieldCheck size={12}/><span>Project: {workbench.project}</span><button title="Sign out" disabled={busy || conversation.running} onClick={() => void logout()}><LogOut size={12}/></button></footer>
       </>}
   </aside>;
 }

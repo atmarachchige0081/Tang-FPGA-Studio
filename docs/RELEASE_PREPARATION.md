@@ -3,6 +3,17 @@
 Prepared version: **3.5.0**, reflecting the added platform. This is a preparation
 record, not authorization to publish an unverified release. No tag is created.
 
+## Current workbench update
+
+The assistant/recovery, existing-project opening, opt-in inline suggestions and
+classic UI changes are described in [AGENT_AND_PROJECT_RECOVERY.md](AGENT_AND_PROJECT_RECOVERY.md).
+Current results and reviewed screenshots are in `evidence/agent-reliability/`:
+68 frontend tests, 75 native tests (two ignored), release Clippy and 15 native
+desktop checkpoints using a local AI protocol fixture passed.
+The older release evidence below covers the preceding candidate. New Windows
+account persistence, authenticated suggestions and sign-in while programming
+require workstation acceptance before tagging this updated application.
+
 ## Evidence and remaining gates
 
 | Gate | Status / evidence |
@@ -13,10 +24,10 @@ record, not authorization to publish an unverified release. No tag is created.
 | Ubuntu 26.04 final native workflow | Passed all 17 checkpoints on 2026-10-15; `evidence/release-3.5.0/ubuntu26-results.json` |
 | AppImage UI on 22.04/24.04/26.04 | Passed seven checkpoints each; `evidence/release-3.5.0/appimage*-results.json` |
 | Hosted quality gates | [Passed on validation source 9b6c1e6](https://github.com/atmarachchige0081/Tang-FPGA-Studio/actions/runs/38785858242) |
-| Hosted Ubuntu matrix | [Running on validation source 962d2ef](https://github.com/atmarachchige0081/Tang-FPGA-Studio/actions/runs/38787507635); local native/package evidence below already passed |
+| Hosted Ubuntu matrix | [Passed on preceding validation source 962d2ef](https://github.com/atmarachchige0081/Tang-FPGA-Studio/actions/runs/38787507635); this precedes the current workbench update |
 | Six open-source board families | Bitstreams and timing passed; `evidence/release-3.5.0/board-builds.json` |
 | Windows MSVC NSIS installation | Passed: [MSVC NSIS install/smoke/uninstall run](https://github.com/atmarachchige0081/Tang-FPGA-Studio/actions/runs/38780505263) for application source `07acdf9` |
-| Complete Windows one-file installer | Validation running: [pinned installer build/install/workspace/toolchain/uninstall](https://github.com/atmarachchige0081/Tang-FPGA-Studio/actions/runs/38784739248); not yet counted as passed |
+| Complete Windows one-file installer | Cancelled without acceptance: [pinned installer build/install/workspace/toolchain/uninstall](https://github.com/atmarachchige0081/Tang-FPGA-Studio/actions/runs/38784739248); no complete installer pass claimed |
 | Windows 11 GUI | Pending user workstation acceptance |
 | Physical board acceptance on both platforms | Pending connected hardware; no cloud USB board |
 | Console 60K vendor implementation | Pending Linux Gowin EDA/license; synthesis/project generation already tested |
@@ -43,9 +54,10 @@ the external release gates above.
 
 ## Candidate and hardware target
 
-The candidate is available on branch `codex/release-3.5.0-validation`; `master`
-and release tags are unchanged. The application version/React/Rust source is
-`07acdf9`; subsequent validation changes stage Linux resources before Cargo and
+The preceding platform validation candidate used application source `07acdf9`.
+The current workbench changes are being committed to the default branch `master`
+for Windows workstation acceptance; no release tag is created. Earlier validation
+changes stage Linux resources before Cargo and
 verify WebKit navigation without replaying FPGA operations. A clean-source Cargo
 check reproduced the missing-resource error and passed after staging.
 
@@ -83,4 +95,5 @@ isolated `XDG_DATA_HOME`, hiding the default tool installation. The harness now
 preserves the original toolchain location before isolation. A fresh Ubuntu 26.04
 installed-package run without an explicit toolchain override passed all 17
 checkpoints; see `ubuntu26-default-tool-discovery-results.json`. The restarted
-hosted matrix above is still pending and is not counted as passed.
+hosted matrix above passed for source 962d2ef. It does not cover the subsequent
+assistant and workbench update.

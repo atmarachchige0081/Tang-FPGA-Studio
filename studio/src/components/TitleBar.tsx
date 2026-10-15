@@ -42,6 +42,7 @@ export function TitleBar({ onRun, onSave }: Props): React.JSX.Element {
 
   const menus: Record<MenuId, MenuItem[]> = {
     file: [
+      { label: "Open project folder…", shortcut: "Ctrl+O", run: () => window.dispatchEvent(new Event("fpga-studio:open-project")) },
       { label: "New FPGA project…", shortcut: "Ctrl+N", run: store.openProjectWizard },
       { label: "Go to project file…", shortcut: "Ctrl+P", run: () => openSearch("files") },
       { label: "Save active file", shortcut: "Ctrl+S", disabled: !store.activePath, run: onSave },

@@ -57,3 +57,12 @@ Fresh production `.deb` and AppImage packages are built and checked. All three U
 Fresh Rust tests passed 72 with two intentionally ignored; formatting and release Clippy passed. Six board implementation families produced bitstreams and timing. Three stress rounds passed (171 frontend test executions and 30 runner test executions). Windows MSVC NSIS install/smoke/uninstall passed in Actions run 38780505263. Updated quality gates passed in run 38785858242.
 
 Validation branches have been pushed without changing master or creating a tag. Ubuntu matrix run 38787507635 (source 962d2ef) and complete external Windows installer run 38784739248 are being checked. The prior Ubuntu UI run exposed test isolation hiding the default toolchain; the harness fix passed a fresh 17-checkpoint native run without an explicit toolchain override. Physical target confirmed by the user: Windows 11 laptop with Tang Primer 20K and Sipeed Dock. No connection to that laptop or physical hardware results exist here; follow `WINDOWS11_PRIMER20K_ACCEPTANCE.md`.
+
+## Workbench and assistant follow-up
+
+User-reported Windows 11 / Primer 20K Dock detection and flashing succeeded before
+the workbench update. The earlier Ubuntu hosted matrix 38787507635 succeeded;
+complete Windows installer run 38784739248 was cancelled, so it is not a pass.
+New work is documented in `AGENT_AND_PROJECT_RECOVERY.md` and current evidence
+under `docs/evidence/agent-reliability/`. Recheck authenticated assistant behavior
+and AI sign-in while programming on the user's Windows workstation before tagging.

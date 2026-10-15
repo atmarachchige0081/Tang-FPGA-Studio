@@ -1,0 +1,2 @@
+   Compiling fpga-studio v3.5.0 (/workspace/Tang-FPGA-Studio/studio/src-tauri)
+    Finished `release` profile [optimized] target(s) in 6m 35s

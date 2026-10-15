@@ -114,6 +114,11 @@ export const bridge = {
     return { root: "Browser preview", project: "Tang Primer 20K Demo", projectPath: ".", tree: demoTree, recentProjects: [] };
   },
 
+  async recognizeProjectFolder(folder: string): Promise<Array<{ path: string; name: string; identification: string }>> {
+    if (isDesktop()) return invoke("recognize_project_folder", { folder });
+    return [{ path: folder, name: folder.split(/[\\/]/).at(-1) ?? "FPGA project", identification: "Preview project" }];
+  },
+
   async openProject(root: string, project: string): Promise<WorkspaceSnapshot> {
     if (isDesktop()) return invoke<WorkspaceSnapshot>("open_project", { root, project });
     return { root, project: project.split("/").at(-1) ?? project, projectPath: project, tree: demoTree, recentProjects: [project] };
@@ -444,6 +449,11 @@ export const bridge = {
     return true;
   },
 
+  async aiPendingRequests(): Promise<AiEvent[]> {
+    if (isDesktop()) return invoke<AiEvent[]>("ai_pending_requests");
+    return [];
+  },
+
   async aiAccount(refresh = false): Promise<AiAccountStatus> {
     if (isDesktop()) return invoke<AiAccountStatus>("ai_account_read", { refresh });
     return { account: demoAiAuthenticated ? { type: "chatgpt", email: "preview@example.com", planType: "preview" } : null, requiresOpenaiAuth: true };
@@ -514,6 +524,16 @@ export const bridge = {
       window.dispatchEvent(new CustomEvent<AiEvent>("fpga-ai-demo", { detail: { method: "turn/completed", params: { threadId, turn: { id: turnId, status: "completed" } }, timestamp: new Date().toISOString() } }));
     }, 80);
     return { turn: { id: turnId, status: "inProgress" } };
+  },
+
+  async aiInlineCompletion(project: string, path: string, prefix: string, suffix: string): Promise<string> {
+    if (isDesktop()) return invoke<string>("ai_inline_completion", { project, path, prefix, suffix });
+    return "";
+  },
+
+  async aiTurnSteer(threadId: string, turnId: string, prompt: string): Promise<Record<string, unknown>> {
+    if (isDesktop()) return invoke<Record<string, unknown>>("ai_turn_steer", { threadId, turnId, prompt });
+    return { turnId };
   },
 
   async aiTurnInterrupt(threadId: string, turnId: string): Promise<Record<string, unknown>> {

@@ -54,7 +54,8 @@ export function QuickLauncher({ onRun, onSave }: Props): React.JSX.Element | nul
         state.setActivity("search");
         window.setTimeout(() => window.dispatchEvent(new CustomEvent("fpga-studio:workspace-search", { detail: { mode } })), 0);
       };
-      if (key === "s" && !event.shiftKey) { event.preventDefault(); onSave(); }
+      if (key === "o" && !event.shiftKey) { event.preventDefault(); window.dispatchEvent(new Event("fpga-studio:open-project")); }
+      else if (key === "s" && !event.shiftKey) { event.preventDefault(); onSave(); }
       else if (key === "b" && event.shiftKey) { event.preventDefault(); onRun("build"); }
       else if (key === "n" && !event.shiftKey) { event.preventDefault(); state.openProjectWizard(); }
       else if (key === "p" && !event.shiftKey) { event.preventDefault(); search("files"); }

@@ -1,0 +1,44 @@
+{
+  "candidateVersion": "3.5.0",
+  "releaseTagged": false,
+  "frontend": {
+    "passed": 68,
+    "files": 23,
+    "productionBuild": "passed"
+  },
+  "native": {
+    "passed": 75,
+    "ignored": 2,
+    "releaseClippy": "passed",
+    "finalProductionBuild": "passed",
+    "sha256": "864fe38223427aa22d96ae73e312021863d49253a75418bd8a031ea41cc2fd4d"
+  },
+  "headlessSmoke": {
+    "platform": "Ubuntu 26.04",
+    "exitCode": 0
+  },
+  "layout": {
+    "status": "passed",
+    "screenshots": 5,
+    "scope": "Chromium demo provider fixtures"
+  },
+  "frontendAssets": {
+    "bytes": 15304655,
+    "sourceMaps": 0,
+    "previousTotalMB": 58.8,
+    "previousSourceMapMB": 44.2
+  },
+  "limitations": [
+    "No physical board attached to cloud",
+    "Real authenticated AI account acceptance pending",
+    "Windows sign-in while flashing crash not reproduced here",
+    "Older deb/AppImage packages precede this workbench update"
+  ],
+  "nativeDesktop": {
+    "platform": "Ubuntu 26.04",
+    "checkpoints": 15,
+    "status": "passed",
+    "scope": "Native WebKit and local unauthenticated Codex protocol fixture",
+    "incompletePreviousAttempt": "WebDriver HTTP connection lost; retained log; clean isolated rerun passed"
+  }
+}

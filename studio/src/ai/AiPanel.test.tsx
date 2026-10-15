@@ -102,4 +102,62 @@ describe("native AI Assistant panel", () => {
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
     await waitFor(() => expect(screen.queryByText("Which board?")).toBeNull());
   });
+  it("reconnects to a new project without asking for sign-in again", async () => {
+    const connect = vi.spyOn(bridge, "aiConnect");
+    const login = vi.spyOn(bridge, "aiLoginChatgpt");
+    render(<AiPanel/>);
+    fireEvent.click(await screen.findByRole("button", { name: /Connect agent/i }));
+    fireEvent.click(await screen.findByRole("button", { name: /Sign in with ChatGPT/i }));
+    await screen.findByRole("textbox", { name: "Ask AI about this project" });
+    useWorkbench.setState({ project: "Second project", projectPath: "projects/second" });
+    await waitFor(() => expect(connect).toHaveBeenLastCalledWith("Browser preview", "projects/second"));
+    await screen.findByRole("textbox", { name: "Ask AI about this project" });
+    expect(screen.queryByRole("button", { name: /Sign in with ChatGPT/i })).toBeNull();
+    expect(login).toHaveBeenCalledTimes(1);
+  });
+
+  it("steers a running turn without starting a second turn", async () => {
+    const start = vi.spyOn(bridge, "aiTurnStart").mockResolvedValue({ turn: { id: "running-turn" } });
+    const steer = vi.spyOn(bridge, "aiTurnSteer").mockResolvedValue({ turnId: "running-turn" });
+    render(<AiPanel/>);
+    fireEvent.click(await screen.findByRole("button", { name: /Connect agent/i }));
+    fireEvent.click(await screen.findByRole("button", { name: /Sign in with ChatGPT/i }));
+    const input = await screen.findByRole("textbox", { name: "Ask AI about this project" });
+    fireEvent.change(input, { target: { value: "Review timing" } });
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+    await screen.findByRole("button", { name: "Stop" });
+    fireEvent.change(input, { target: { value: "Use Dock pins" } });
+    fireEvent.click(screen.getByRole("button", { name: "Send follow-up" }));
+    await waitFor(() => expect(steer).toHaveBeenCalledWith(expect.any(String), "running-turn", "Use Dock pins"));
+    expect(start).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps approval actions available with collapsed details and after a failed response", async () => {
+    vi.spyOn(bridge, "aiRespondApproval").mockRejectedValue(new Error("Save the modified file first"));
+    render(<AiPanel/>);
+    fireEvent.click(await screen.findByRole("button", { name: /Connect agent/i }));
+    fireEvent.click(await screen.findByRole("button", { name: /Sign in with ChatGPT/i }));
+    await screen.findByRole("textbox", { name: "Ask AI about this project" });
+    window.dispatchEvent(new CustomEvent("fpga-ai-demo", { detail: {
+      method: "item/commandExecution/requestApproval", requestId: 88,
+      params: { command: "tool " + "output ".repeat(1000), cwd: "project" }, timestamp: new Date().toISOString(),
+    } }));
+    fireEvent.click(await screen.findByRole("button", { name: "Allow once" }));
+    await screen.findByText("Save the modified file first");
+    expect(screen.getByRole("button", { name: "Reject" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Allow once" }).closest(".ai-review-queue")).toBeTruthy();
+  });
+
+  it("restores unresolved provider approvals when a panel is mounted again", async () => {
+    await bridge.aiConnect("Browser preview", ".");
+    await bridge.aiLoginChatgpt(false);
+    vi.spyOn(bridge, "aiPendingRequests").mockResolvedValue([{
+      method: "item/commandExecution/requestApproval", requestId: 99,
+      params: { command: "echo restore-review" }, timestamp: new Date().toISOString(),
+    }]);
+    render(<AiPanel/>);
+    expect(await screen.findByRole("button", { name: "Allow once" })).toBeTruthy();
+    expect(screen.getByText("echo restore-review")).toBeTruthy();
+  });
+
 });

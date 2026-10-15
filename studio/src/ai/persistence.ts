@@ -66,3 +66,11 @@ export function writeActiveThread(projectPath: string, threadId: string | null, 
     // App Server retains history even if the active UI selection cannot be stored.
   }
 }
+
+// Connection intent only; account credentials stay in the Codex credential store.
+export function readAgentConnection(): boolean {
+  try { return localStorage.getItem("fpga-studio.ai.reconnect") === "true"; } catch { return false; }
+}
+export function writeAgentConnection(connected: boolean): void {
+  try { localStorage.setItem("fpga-studio.ai.reconnect", String(connected)); } catch { /* Session-only when storage is unavailable. */ }
+}

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Background, Controls, Handle, MiniMap, Position, ReactFlow, type NodeProps } from "@xyflow/react";
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { ArrowRight, BookOpen, Box, Cable, CheckCircle2, ChevronRight, CircuitBoard, Clock3, Cpu, ExternalLink, FolderOpen, Gauge, Lightbulb, Maximize2, MemoryStick, Minus, Network, Play, Plus, RefreshCw, Search, ShieldCheck, Sparkles, TerminalSquare, Waves, Zap } from "lucide-react";
+import { ArrowRight, Box, Cable, CheckCircle2, CircuitBoard, Clock3, Code2, Cpu, ExternalLink, FolderOpen, Gauge, Maximize2, MemoryStick, Minus, Network, Play, Plus, RefreshCw, Search, ShieldCheck, Sparkles, TerminalSquare, Waves, Zap } from "lucide-react";
 import { bridge } from "../lib/bridge";
 import { confirmDiscardUnsaved } from "../lib/documents";
 import { needsJtagDriverRepair } from "../lib/hardware";
@@ -362,26 +362,16 @@ export function WelcomeView(): React.JSX.Element {
       appendOutput({ jobId: "project", phase: "open", stream: "stderr", message: reason instanceof Error ? reason.message : String(reason), timestamp: new Date().toISOString() });
     }
   };
-  const starts = [
-    { label: "Create from a verified template", run: openProjectWizard },
-    { label: "Explore project source", run: () => { setActivity("explorer"); setView("editor"); } },
-    { label: "Talk to the UART example", run: () => setView("uart") },
-  ];
-  const lessons = [
-    { i: Lightbulb, t: "Your first LED design", s: "10 min", run: openProjectWizard },
-    { i: Waves, t: "Read a simulation waveform", s: "12 min", run: () => setView("waveform") },
-    { i: Network, t: "Understand the synthesized netlist", s: "15 min", run: () => setView("netlist") },
-  ];
   const buildState = build?.status === "passed" ? "Build passed" : build?.status === "failed" ? "Build failed" : build?.status === "running" ? "Build running" : "Ready to build";
   return <section className="welcome-view">
-    <header className="welcome-header"><div><p className="eyebrow">Workspace</p><h1>FPGA Studio <span>3.4</span></h1><p>{projectPath && projectPath !== "." ? projectPath : "Local FPGA workspace"}</p></div><div className="welcome-actions"><button className="primary-button" onClick={openProjectWizard}><Plus size={15}/> New project</button><button className="secondary-button" onClick={() => { setActivity("explorer"); setView("editor"); }}><FolderOpen size={15}/> Open source</button></div></header>
+    <header className="welcome-header"><div><h1>FPGA Studio <span>{RELEASE_NOTES_VERSION}</span></h1><p>{root || "Loading workspace…"}</p></div><div className="welcome-actions"><button className="primary-button" onClick={openProjectWizard}><Plus size={15}/> New project</button><button className="secondary-button" onClick={() => window.dispatchEvent(new Event("fpga-studio:open-project"))}><FolderOpen size={15}/> Open project…</button></div></header>
     <div className="welcome-workspace">
       <main className="welcome-main">
-        <section className="welcome-section project-summary"><div className="welcome-section-title"><h2>Active project</h2><button className="text-button" onClick={() => setView("hardware")}>Hardware manager <ChevronRight size={13}/></button></div><div className="property-table"><div><span>Project</span><strong>{project || "No project loaded"}</strong></div><div><span>Target board</span><strong>{board?.name ?? "Loading board profile"}</strong></div><div><span>FPGA device</span><code>{board?.device ?? "—"}</code></div><div><span>Clock</span><strong>{board?.clocks[0] ? `${board.clocks[0].frequencyHz / 1_000_000} MHz` : "—"}</strong></div><div><span>Build status</span><strong className={`build-state ${build?.status ?? "ready"}`}>{buildState}</strong></div></div></section>
-        <section className="welcome-section"><div className="welcome-section-title"><h2>Getting started</h2><span>Guided FPGA workflows</span></div><div className="lesson-list">{lessons.map(({i:Icon,t,s,run}) => <button className="lesson-card" key={t} onClick={run}><Icon size={16}/><span><strong>{t}</strong><small>{s} guided lesson</small></span><ArrowRight size={13}/></button>)}</div></section>
+        <section className="welcome-section project-summary"><div className="welcome-section-title"><h2>Current project</h2><span className={`build-state ${build?.status ?? "ready"}`}>{buildState}</span></div><div className="property-table"><div><span>Project</span><strong>{project || "No project loaded"}</strong></div><div><span>Folder</span><code>{projectPath}</code></div><div><span>Board</span><strong>{board?.name ?? "Loading…"}</strong></div><div><span>Device</span><code>{board?.device ?? "—"}</code></div><div><span>Clock</span><strong>{board?.clocks[0] ? `${board.clocks[0].frequencyHz / 1_000_000} MHz` : "—"}</strong></div></div><div className="welcome-project-actions"><button className="secondary-button" onClick={() => { setActivity("explorer"); setView("editor"); }}><Code2 size={15}/> Edit source</button><button className="secondary-button" onClick={() => setView("hardware")}><Cable size={15}/> Hardware</button><button className="secondary-button" onClick={() => setView("uart")}><TerminalSquare size={15}/> Serial terminal</button></div></section>
+        <section className="welcome-section"><div className="welcome-section-title"><h2>Inspect</h2></div><div className="welcome-tool-links"><button onClick={() => setView("waveform")}><Waves size={16}/> Waveforms</button><button onClick={() => setView("netlist")}><Network size={16}/> Netlist</button><button onClick={() => setView("dashboard")}><Gauge size={16}/> Build reports</button></div></section>
       </main>
-      <aside className="welcome-side"><section className="welcome-section"><div className="welcome-section-title"><h2>Start</h2></div>{starts.map((item) => <button className="start-link" key={item.label} onClick={item.run}><ChevronRight size={13}/>{item.label}</button>)}{recentProjects.filter((path) => path !== projectPath).slice(0, 4).map((path) => <button className="start-link recent-project" key={path} onClick={() => void switchProject(path)} title={path}><FolderOpen size={13}/><span>{path.split("/").at(-1)}</span></button>)}</section><section className="welcome-section"><div className="welcome-section-title"><h2>What’s new</h2><span>v{RELEASE_NOTES_VERSION}</span></div><div className="release-card"><h3>AI for FPGA development</h3><p>Bring your own Codex account, choose a model and thinking level, and review project-aware assistance.</p><button className="text-button" onClick={() => window.dispatchEvent(new Event("fpga-studio:release-notes"))}><BookOpen size={13}/> Release notes</button></div></section></aside>
+      <aside className="welcome-side"><section className="welcome-section"><div className="welcome-section-title"><h2>Recent projects</h2></div>{recentProjects.length ? recentProjects.slice(0, 8).map((path) => <button className="start-link recent-project" key={path} onClick={() => void switchProject(path)} title={path}><FolderOpen size={13}/><span>{path.replaceAll("\\", "/").split("/").at(-1) || project}</span></button>) : <p className="welcome-empty">Opened projects appear here.</p>}</section></aside>
     </div>
-    <footer className="welcome-tip"><Sparkles size={14}/><span><strong>Keyboard workflow</strong> — <kbd>Ctrl K</kbd> commands · <kbd>Ctrl P</kbd> files · <kbd>Ctrl T</kbd> symbols · <kbd>Ctrl Shift F</kbd> project search.</span></footer>
+    <footer className="welcome-tip"><span><kbd>Ctrl O</kbd> Open project · <kbd>Ctrl N</kbd> New project · <kbd>Ctrl K</kbd> Commands</span></footer>
   </section>;
 }

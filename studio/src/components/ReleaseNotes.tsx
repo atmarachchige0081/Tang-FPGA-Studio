@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Bot, CircuitBoard, ShieldCheck, Sparkles, X } from "lucide-react";
-import { markReleaseNotesSeen, releaseNotesPending, RELEASE_NOTES_VERSION } from "../lib/release-notes";
+import { markReleaseNotesSeen, RELEASE_NOTES_VERSION } from "../lib/release-notes";
 
 const highlights = [
   { icon: CircuitBoard, title: "Windows and Ubuntu", text: "Use the shared FPGA workspace on Windows or Ubuntu 22.04 and newer LTS releases on x86_64." },
@@ -13,7 +13,7 @@ const highlights = [
 
 export function ReleaseNotes(): React.JSX.Element | null {
   const capture = import.meta.env.DEV ? new URLSearchParams(window.location.search).get("capture") : null;
-  const [open, setOpen] = useState(() => capture === "release-notes" || (!capture && releaseNotesPending()));
+  const [open, setOpen] = useState(() => capture === "release-notes");
   useEffect(() => {
     const reveal = () => setOpen(true);
     window.addEventListener("fpga-studio:release-notes", reveal);
@@ -21,5 +21,5 @@ export function ReleaseNotes(): React.JSX.Element | null {
   }, []);
   if (!open) return null;
   const close = () => { markReleaseNotesSeen(); setOpen(false); };
-  return <div className="release-overlay" role="presentation"><section className="release-dialog" role="dialog" aria-modal="true" aria-labelledby="release-title"><div className="release-top"><div className="release-symbol"><CircuitBoard size={27}/></div><div><span>FPGA STUDIO {RELEASE_NOTES_VERSION}</span><h2 id="release-title">Build on Windows and Ubuntu.</h2><p>Release 3.5 adds native Ubuntu packages, Linux FPGA workflows, and platform-aware hardware guidance.</p></div><button className="release-close" onClick={close} aria-label="Close release notes"><X size={18}/></button></div><div className="release-highlights">{highlights.map(({ icon: Icon, title, text }) => <article key={title}><Icon size={18}/><div><h3>{title}</h3><p>{text}</p></div></article>)}</div><div className="release-safety"><ShieldCheck size={18}/><span><strong>Bring your own account:</strong> no developer credential is included. Codex authentication stays local to each user, and FPGA programming still requires explicit approval.</span></div><div className="release-actions"><span>Release notes appear once per version and remain available from Help.</span><button className="primary-button" onClick={close}>Open FPGA Studio {RELEASE_NOTES_VERSION}</button></div></section></div>;
+  return <div className="release-overlay" role="presentation"><section className="release-dialog" role="dialog" aria-modal="true" aria-labelledby="release-title"><div className="release-top"><div className="release-symbol"><CircuitBoard size={27}/></div><div><span>FPGA STUDIO {RELEASE_NOTES_VERSION}</span><h2 id="release-title">Build on Windows and Ubuntu.</h2><p>Release 3.5 adds native Ubuntu packages, Linux FPGA workflows, and platform-aware hardware guidance.</p></div><button className="release-close" onClick={close} aria-label="Close release notes"><X size={18}/></button></div><div className="release-highlights">{highlights.map(({ icon: Icon, title, text }) => <article key={title}><Icon size={18}/><div><h3>{title}</h3><p>{text}</p></div></article>)}</div><div className="release-safety"><ShieldCheck size={18}/><span><strong>Bring your own account:</strong> no developer credential is included. Codex authentication stays local to each user, and FPGA programming still requires explicit approval.</span></div><div className="release-actions"><span>Release notes are available from Help.</span><button className="primary-button" onClick={close}>Open FPGA Studio {RELEASE_NOTES_VERSION}</button></div></section></div>;
 }

@@ -1,0 +1,17 @@
+{
+  "status": "passed",
+  "scope": "Production frontend layout fixtures in Chromium; demo provider only, no real authentication or hardware",
+  "screenshots": [
+    "retro-welcome-light.png",
+    "retro-welcome-dark.png",
+    "retro-open-project-layout.png",
+    "retro-approval-layout-laptop.png",
+    "retro-editor-layout-laptop.png"
+  ],
+  "approvalButtonBounds": {
+    "x": 1003.09375,
+    "y": 575,
+    "width": 110.109375,
+    "height": 32
+  }
+}
