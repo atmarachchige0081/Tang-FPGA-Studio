@@ -13,7 +13,7 @@ record, not authorization to publish an unverified release. No tag is created.
 | Ubuntu 26.04 final native workflow | Passed all 17 checkpoints on 2026-10-15; `evidence/release-3.5.0/ubuntu26-results.json` |
 | AppImage UI on 22.04/24.04/26.04 | Passed seven checkpoints each; `evidence/release-3.5.0/appimage*-results.json` |
 | Hosted quality gates | [Passed on validation source 9b6c1e6](https://github.com/atmarachchige0081/Tang-FPGA-Studio/actions/runs/38785858242) |
-| Hosted Ubuntu matrix | [Running on validation source 9b6c1e6](https://github.com/atmarachchige0081/Tang-FPGA-Studio/actions/runs/38785858828); local native/package evidence below already passed |
+| Hosted Ubuntu matrix | [Running on validation source 962d2ef](https://github.com/atmarachchige0081/Tang-FPGA-Studio/actions/runs/38787507635); local native/package evidence below already passed |
 | Six open-source board families | Bitstreams and timing passed; `evidence/release-3.5.0/board-builds.json` |
 | Windows MSVC NSIS installation | Passed: [MSVC NSIS install/smoke/uninstall run](https://github.com/atmarachchige0081/Tang-FPGA-Studio/actions/runs/38780505263) for application source `07acdf9` |
 | Complete Windows one-file installer | Validation running: [pinned installer build/install/workspace/toolchain/uninstall](https://github.com/atmarachchige0081/Tang-FPGA-Studio/actions/runs/38784739248); not yet counted as passed |
@@ -77,3 +77,10 @@ checksums differ from the historical 3.4.1 artifacts under `build/linux-evidence
 Historical artifacts in `build/linux-evidence/packages/` remain 3.4.1 development
 evidence. Use `build/release-3.5.0/packages/` for the newly checked Linux 3.5.0
 artifacts. Final tagged builds must still be tied to the reviewed final revision.
+
+The prior hosted run reached the native UI but failed FPGA lint because the test
+isolated `XDG_DATA_HOME`, hiding the default tool installation. The harness now
+preserves the original toolchain location before isolation. A fresh Ubuntu 26.04
+installed-package run without an explicit toolchain override passed all 17
+checkpoints; see `ubuntu26-default-tool-discovery-results.json`. The restarted
+hosted matrix above is still pending and is not counted as passed.

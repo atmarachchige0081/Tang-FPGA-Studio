@@ -62,7 +62,7 @@
   ],
   "publication": "Validation branches pushed; master unchanged; no tag or release",
   "applicationSource": "07acdf9918adcb437714b0c13d0d7d52143a5ccb",
-  "validationSource": "9b6c1e60055963099215909a0b7a71aae2e17ad3",
+  "validationSource": "962d2ef",
   "windowsMsvcPackage": {
     "status": "passed",
     "run": "https://github.com/atmarachchige0081/Tang-FPGA-Studio/actions/runs/38780505263",
@@ -78,5 +78,19 @@
     "connectedToCloud": false,
     "physicalTests": "pending"
   },
-  "tagReady": false
+  "tagReady": false,
+  "defaultToolDiscovery": {
+    "status": "passed",
+    "checkpoints": 17,
+    "explicitToolchainOverride": false,
+    "test": "Ubuntu 26.04 installed native package with caller XDG data home preserved before application isolation"
+  },
+  "ubuntuHostedMatrix": {
+    "status": "running",
+    "run": "https://github.com/atmarachchige0081/Tang-FPGA-Studio/actions/runs/38787507635"
+  },
+  "priorHostedFailure": {
+    "run": 38785858828,
+    "cause": "UI test isolated XDG_DATA_HOME and hid default tool installation; harness now preserves toolchain root before isolation"
+  }
 }
