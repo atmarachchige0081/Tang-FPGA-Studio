@@ -3,6 +3,7 @@ name: Complete Windows installer validation
 on:
   workflow_dispatch:
   push:
+    branches: [codex/windows-3.5.0-installer-validation]
     paths:
       - '.github/workflows/windows-installer-validation.yml'
       - 'scripts/test-windows-full-installer.ps1'

@@ -40,6 +40,8 @@ jobs:
           driver=webkit2gtk-driver
           if [[ '${{ matrix.os }}' == ubuntu-26.04 ]]; then driver=webkitgtk-webdriver; fi
           sudo apt-get install -y --no-install-recommends xvfb xauth dbus-x11 "$driver" scrot
+      - name: Install native WebDriver before FPGA tools alter PATH
+        run: bash scripts/run-ci-check.sh build/linux-evidence/driver-install.log cargo install tauri-driver --locked --version 2.0.4
       - name: Install pinned, checksum-verified FPGA tools
         run: bash scripts/setup-toolchain-linux.sh
       - name: Install locked frontend dependencies
@@ -58,31 +60,18 @@ jobs:
         working-directory: studio/src-tauri
         run: |
           node --input-type=module -e "import { prepareWorkspace } from '../scripts/stage-linux-workspace.mjs'; prepareWorkspace();"
-          mkdir -p ../../build/linux-evidence
-          set +e
-          (
-            set -e
+          bash ../../scripts/run-ci-check.sh ../../build/linux-evidence/rust-gates.log bash -euo pipefail -c '
             cargo fmt --check
             cargo test --locked --release
             cargo clippy --locked --release --all-targets -- -D warnings
-          ) 2>&1 | tee ../../build/linux-evidence/rust-gates.log
-          gate_status=${PIPESTATUS[0]}
-          if (( gate_status != 0 )); then
-            python3 - <<'PY'
-          from pathlib import Path
-          tail = Path('../../build/linux-evidence/rust-gates.log').read_text(errors='replace')[-1800:]
-          tail = tail.replace('%', '%25').replace('\r', '%0D').replace('\n', '%0A')
-          print('::error title=Rust release gate failed::' + tail)
-          PY
-          fi
-          exit "$gate_status"
+          '
       - name: Build native Linux distribution
         working-directory: studio
         run: npm run desktop:build
       - name: Validate installed package and native WebKit UI
         run: |
+          bash scripts/run-ci-check.sh build/linux-evidence/package-gates.log bash -euo pipefail -c '
           sudo apt-get install -y ./studio/src-tauri/target/release/bundle/deb/*.deb
-          cargo install tauri-driver --locked --version 2.0.4
           /usr/bin/fpga-studio --smoke-test --workspace "$GITHUB_WORKSPACE"
           for image in studio/src-tauri/target/release/bundle/appimage/*.AppImage; do
             APPIMAGE_EXTRACT_AND_RUN=1 "$image" --smoke-test --workspace "$GITHUB_WORKSPACE"
@@ -91,6 +80,7 @@ jobs:
           for image in studio/src-tauri/target/release/bundle/appimage/*.AppImage; do
             APPIMAGE_EXTRACT_AND_RUN=1 xvfb-run -a -s "-screen 0 1600x1200x24" dbus-run-session -- python3 scripts/test-linux-desktop.py "$image" --ui-only --output build/linux-evidence/appimage
           done
+          '
       - uses: actions/upload-artifact@v6
         if: always()
         with:
