@@ -1,6 +1,6 @@
 # Linux validation record
 
-Validation date: 2026-10-14. Base revision: `84e97ee7889e5edc0a26680dfdcd8ff5b03c7591`, with the Linux changes in this working tree. These are development artifacts, not a tagged release.
+Validation dates: 2026-10-14 and 2026-10-15. Base revision: `84e97ee7889e5edc0a26680dfdcd8ff5b03c7591`, with Linux implementation committed as `4b5a1cf`. These are development artifacts, not a tagged release.
 
 ## Environment and method
 
@@ -20,7 +20,7 @@ PowerShell 7.6.7 and checksum-verified OSS CAD Suite 2026-07-26 provide the shar
 | Paths and cleanup | External project path containing spaces, traversal rejection and safe cleanup passed |
 | Native Ubuntu 22.04 desktop | Full workflow and editor/hardware screenshots passed |
 | Native Ubuntu 24.04 desktop | Full workflow and editor/hardware screenshots passed |
-| Native Ubuntu 26.04 desktop | Earlier build passed full workflow; final rebuild reached 10 checks through analyzer-build before pausing. Resume the final full run. |
+| Native Ubuntu 26.04 desktop | Final installed package passed all 17 checkpoints on 2026-10-15; native screenshots and results committed under `docs/evidence/linux/`. |
 | AppImage | Built on 22.04; native UI, resource seeding, project save/read, offline Monaco and hardware guidance passed on 22.04, 24.04 and 26.04 |
 | Windows compile | GNU Windows target, release all-targets check passed; this is not MSVC or Windows execution evidence |
 

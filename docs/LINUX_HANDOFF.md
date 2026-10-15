@@ -10,7 +10,11 @@ Compact evidence is committed in `docs/evidence/linux/`: actual native screensho
 
 The final supported `npm run desktop:build` completed successfully. Final package checksums are saved in `docs/evidence/linux/SHA256SUMS`. The `.deb` passed all 17 native workflow checkpoints on Ubuntu 22.04 and 24.04. Final AppImages passed all seven UI checkpoints and headless smoke on 22.04, 24.04 and 26.04. Rust: 72 passed, 2 explicitly ignored; frontend: 57 passed; Python: 37 passed; Windows GNU cross-check and Clippy passed.
 
-## First task tomorrow
+## Resume update — 2026-10-15
+
+The final Ubuntu 26.04 installed package now passes all 17 checkpoints. Fresh results, screenshots, timing and experiment evidence are committed in `docs/evidence/linux/`. See `RELEASE_PREPARATION.md` for the next gates and `RELEASE_3.5.0.md` for proposed release notes. The Windows MSVC package workflow is prepared but has not been executed here. No version bump, tag or publication has occurred.
+
+## Original first task (completed on resume)
 
 Finish the **final Ubuntu 26.04 full `.deb` run**. An earlier build passed all 17 checkpoints, but the final rebuilt artifact reached 10 checkpoints, including analyzer instrumentation/build, before this pause. Optimization, Console 60K prerequisite checks and the final screenshots must finish in a fresh run. The running driver group was stopped at pause; do not count the partial JSON as a complete pass.
 
