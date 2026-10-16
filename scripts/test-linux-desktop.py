@@ -195,7 +195,7 @@ def main():
                 assert len(invoke('list_hdl_patterns', {'root': root})) >= 50
                 assert all(p['valid'] for p in invoke('list_plugins', {'root': root}))
                 passed('Bundled boards, HDL patterns and plugins loaded')
-                created = invoke('create_project', {'root': root, 'name': 'Linux evidence', 'location': '', 'templateId': 'uart_terminal', 'displayName': 'Linux evidence', 'boardId': 'tang_primer_20k'})
+                created = invoke('create_project', {'root': root, 'name': 'UART terminal', 'location': '', 'templateId': 'uart_terminal', 'displayName': 'UART terminal', 'boardId': 'tang_primer_20k'})
                 project = created['projectPath']
                 parameters = {'root': root, 'project': project}
                 path = project + '/rtl/top.sv'
@@ -313,6 +313,12 @@ def main():
                 def drag(selector, dx, dy):
                     rect = js("const r=document.querySelector(arguments[0]).getBoundingClientRect(); return {x:Math.round(r.x+r.width/2),y:Math.round(r.y+r.height/2)}", [selector])
                     request('POST', prefix + '/actions', {'actions':[{'type':'pointer','id':'panel-mouse','parameters':{'pointerType':'mouse'},'actions':[{'type':'pointerMove','duration':0,**rect},{'type':'pointerDown','button':0},{'type':'pointerMove','duration':300,'x':rect['x']+dx,'y':rect['y']+dy},{'type':'pointerUp','button':0}]}]})
+                # General product screenshots, before test commands or file edits.
+                screenshot('native-overview-dark.png')
+                press('\ue009','\ue008','l')
+                time.sleep(.3)
+                screenshot('native-overview-light.png')
+                press('\ue009','\ue008','l')
                 old_height = js("return document.querySelector('.bottom-dock').getBoundingClientRect().height")
                 drag('.resize-bottom',0,-90)
                 new_height = js("return document.querySelector('.bottom-dock').getBoundingClientRect().height")

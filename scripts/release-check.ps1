@@ -22,8 +22,7 @@ try {
     $requiredFiles = @(
         'LICENSE', 'SECURITY.md', 'CONTRIBUTING.md', 'CHANGELOG.md', 'INSTALL.md',
         'docs\DEPLOYMENT.md', 'docs\RELEASE_3.5.0.md', 'docs\LINUX.md', 'docs\HARDWARE_ANALYZER.md',
-        'docs\images\studio-main.png', 'docs\images\studio-main-light.png',
-        'docs\images\studio-file-review.png'
+        'docs\images\studio-main.png', 'docs\images\studio-main-light.png'
     )
     $missing = @($requiredFiles | Where-Object { -not (Test-Path -LiteralPath $_ -PathType Leaf) })
     if ($missing.Count) {

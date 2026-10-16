@@ -1,5 +1,13 @@
 # Tang FPGA Studio
 
+[![Tests](https://github.com/atmarachchige0081/Tang-FPGA-Studio/actions/workflows/quality-gates.yml/badge.svg)](https://github.com/atmarachchige0081/Tang-FPGA-Studio/actions/workflows/quality-gates.yml)
+[![Ubuntu](https://github.com/atmarachchige0081/Tang-FPGA-Studio/actions/workflows/linux.yml/badge.svg)](https://github.com/atmarachchige0081/Tang-FPGA-Studio/actions/workflows/linux.yml)
+[![Windows](https://github.com/atmarachchige0081/Tang-FPGA-Studio/actions/workflows/windows-package.yml/badge.svg)](https://github.com/atmarachchige0081/Tang-FPGA-Studio/actions/workflows/windows-package.yml)
+[![Python](https://img.shields.io/badge/Python-3776AB?logo=python&logoColor=white)](ide/)
+[![Rust](https://img.shields.io/badge/Rust-000000?logo=rust&logoColor=white)](studio/src-tauri/)
+[![Tauri](https://img.shields.io/badge/Tauri-24C8D8?logo=tauri&logoColor=black)](studio/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+
 **Arduino-style simplicity for FPGA development.**
 
 Pick a Tang board, open an example, and take your design from code to real
@@ -13,7 +21,7 @@ Free and open source. Available for Windows and Ubuntu 22.04 or newer.
 [Get started](INSTALL.md) · [Linux installation](docs/LINUX.md) ·
 [Examples](projects/) · [Report an issue](https://github.com/atmarachchige0081/Tang-FPGA-Studio/issues)
 
-![Tang FPGA Studio with a Verilog project and integrated terminal](docs/images/studio-main.png)
+![Tang FPGA Studio with a Verilog project open](docs/images/studio-main.png)
 
 ## From your first LED to your own hardware
 
@@ -44,11 +52,9 @@ make changes using project context. Review saved edits in a native before/after
 view, respond to approvals and steer the conversation as you work. The editor
 and FPGA tools also work without an AI account.
 
-| Review changes before moving on | Work in light or dark |
-|---|---|
-| ![Saved source changes in the native review view](docs/images/studio-file-review.png) | ![The same native workspace in the light theme](docs/images/studio-main-light.png) |
+![Tang FPGA Studio light workspace](docs/images/studio-main-light.png)
 
-Screenshots show the native Linux application with a local example project.
+Screenshots show the native Linux application with a UART example project.
 
 ## Get started
 
