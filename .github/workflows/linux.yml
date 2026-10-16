@@ -110,7 +110,10 @@ jobs:
           RELEASE_TAG: ${{ github.event.release.tag_name }}
         run: |
           mkdir release-assets
-          find verified-build -type f \( -name '*.deb' -o -name '*.AppImage' \) -exec cp -- {} release-assets/ \;
+          while IFS= read -r -d '' package; do
+            name=$(basename -- "$package")
+            cp -- "$package" "release-assets/${name// /.}"
+          done < <(find verified-build -type f \( -name '*.deb' -o -name '*.AppImage' \) -print0)
           cd release-assets
           sha256sum -- *.deb *.AppImage > SHA256SUMS
           gh release upload "$RELEASE_TAG" ./*.deb ./*.AppImage SHA256SUMS --repo "$GITHUB_REPOSITORY"

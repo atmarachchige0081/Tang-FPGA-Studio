@@ -1,0 +1,58 @@
+name: Verify release downloads and checksums
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Published Windows and Linux release to verify
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      RELEASE_TAG: ${{ inputs.tag }}
+    steps:
+      - name: Download published packages and build checksums
+        run: |
+          [[ "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          gh release download "$RELEASE_TAG" --dir assets \
+            --pattern '*.exe' --pattern '*.deb' --pattern '*.AppImage' --pattern 'SHA256SUMS*'
+      - name: Verify bytes against build checksums and normalize download filenames
+        run: |
+          python3 - <<'PY'
+          import hashlib
+          from pathlib import Path
+          import re
+          root = Path('assets')
+          for suffix in ['exe', 'deb', 'AppImage']:
+              assert list(root.glob('*.' + suffix)), 'Missing package: ' + suffix
+          verified = set()
+          for name in ['SHA256SUMS', 'SHA256SUMS-Windows.txt']:
+              manifest = root / name
+              lines = []
+              for line in manifest.read_text().splitlines():
+                  digest, filename = line.split('  ', 1)
+                  assert re.fullmatch('[0-9a-f]{64}', digest), 'Invalid SHA-256'
+                  assert '/' not in filename and '\\' not in filename
+                  filename = filename.replace(' ', '.')
+                  package = root / filename
+                  assert package.suffix in ['.exe', '.deb', '.AppImage']
+                  assert hashlib.sha256(package.read_bytes()).hexdigest() == digest, filename + ': checksum mismatch'
+                  verified.add(filename)
+                  lines.append(digest + '  ' + filename + '\n')
+                  print(filename + ': verified against build checksum')
+              assert lines, 'Empty build checksum manifest'
+              manifest.write_text(''.join(lines))
+          packages = {p.name for p in root.iterdir() if p.suffix in ['.exe', '.deb', '.AppImage']}
+          assert verified == packages, 'A published package has no build checksum'
+          PY
+      - name: Publish verified checksums with matching download filenames
+        run: |
+          gh release upload "$RELEASE_TAG" assets/SHA256SUMS assets/SHA256SUMS-Windows.txt --clobber

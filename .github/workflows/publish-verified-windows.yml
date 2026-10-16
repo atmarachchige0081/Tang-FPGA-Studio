@@ -52,7 +52,15 @@ jobs:
           mapfile -d '' installers < <(find verified -type f -path '*/bundle/nsis/*.exe' -print0)
           [[ "${#installers[@]}" == 1 ]]
           mkdir release-assets
-          cp -- "${installers[0]}" release-assets/
+          name=$(basename -- "${installers[0]}")
+          name=${name// /.}
+          cp -- "${installers[0]}" "release-assets/$name"
           cd release-assets
           sha256sum -- *.exe > SHA256SUMS-Windows.txt
-          gh release upload "$RELEASE_TAG" ./*.exe SHA256SUMS-Windows.txt
+          if gh release view "$RELEASE_TAG" --json assets --jq '.assets[].name' | grep -Fxq -- "$name"; then
+            gh release download "$RELEASE_TAG" --pattern "$name" --dir ../published
+            cmp -- "$name" "../published/$name"
+          else
+            gh release upload "$RELEASE_TAG" ./*.exe
+          fi
+          gh release upload "$RELEASE_TAG" SHA256SUMS-Windows.txt --clobber
