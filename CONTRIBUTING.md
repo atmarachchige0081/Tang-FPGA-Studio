@@ -2,6 +2,9 @@
 
 Thank you for helping make FPGA development more approachable.
 
+See the [3.5.1–3.5.4 roadmap](docs/ROADMAP.md) for prioritized reliability,
+onboarding and usability tasks, with acceptance criteria for each release.
+
 ## Development setup
 
 1. Use Windows 10/11 and Python 3.10 or later with Tk support.
