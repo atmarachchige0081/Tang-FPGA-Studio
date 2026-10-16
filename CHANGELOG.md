@@ -4,6 +4,13 @@ All notable user-facing changes are recorded here.
 
 ## 3.5.0 — Unreleased
 
+- Replace the placeholder terminal with a real project shell and recoverable PTY session.
+- Add persistent draggable Explorer, assistant and output-panel sizes.
+- Synchronize external/AI file edits into clean editor buffers; preserve conflicting unsaved work.
+- Add a provider-independent native file journal, persistent line markers and read-only before/after review for added, modified and deleted files.
+- Queue inline suggestions correctly, improve completion status and add offline HDL snippets.
+
+
 - Reworked the workbench with classic dark/light colors, readable text, flatter
   controls and a simpler project start screen; release notes no longer interrupt startup.
 - Added Open project folder (Ctrl+O), recognizing portable Studio metadata and

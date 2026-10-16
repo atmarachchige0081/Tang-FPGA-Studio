@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { PanelResizeHandle, usePanelLayout, panelLayoutStyle } from "./components/PanelResizeHandle";
 import { ActivityBar } from "./components/ActivityBar";
 import { BottomDock } from "./components/BottomDock";
 import { CommandBar } from "./components/CommandBar";
@@ -7,6 +8,7 @@ import { ErrorBoundary } from "./components/ErrorBoundary";
 import { Sidebar } from "./components/Sidebar";
 import { StatusBar } from "./components/StatusBar";
 import { TitleBar } from "./components/TitleBar";
+import { ProjectChangeReview } from "./components/ProjectChangeReview";
 import { OpenProjectDialog } from "./components/OpenProjectDialog";
 import { ProjectWizard } from "./components/ProjectWizard";
 import { ReleaseNotes } from "./components/ReleaseNotes";
@@ -17,6 +19,7 @@ import { VerificationView } from "./components/VerificationView";
 import { DesignHealthView, LogicAnalyzerView, TraceabilityView } from "./components/HardwareIntelligence";
 import { AiPanel } from "./ai/AiPanel";
 import { bridge } from "./lib/bridge";
+import { useProjectFileSync } from "./lib/file-sync";
 import { expectedCancellation } from "./lib/errors";
 import { hasUnsavedChanges } from "./lib/documents";
 import { useWorkbench } from "./store/workbench";
@@ -35,6 +38,8 @@ const viewComponents: Record<Exclude<WorkbenchView, "editor" | "verification" | 
 
 function Workbench(): React.JSX.Element {
   const store = useWorkbench();
+  useProjectFileSync();
+  const layout = usePanelLayout((state) => state.sizes);
   const [runtimeError, setRuntimeError] = useState<string | null>(null);
   const runLock = useRef(false);
   const saveLock = useRef(false);
@@ -219,6 +224,7 @@ function Workbench(): React.JSX.Element {
     if (saveLock.current) return;
     const active = store.tabs.find((tab) => tab.path === store.activePath);
     if (!active) return;
+    if (active.externalContent !== undefined && !window.confirm("This file changed on disk. Replace the disk version with your editor contents?")) return;
     saveLock.current = true;
     try {
       await bridge.writeText(store.root, active.path, active.content);
@@ -249,12 +255,12 @@ function Workbench(): React.JSX.Element {
         : store.view === "health"
           ? <DesignHealthView onRun={run} />
           : (() => { const View = viewComponents[store.view]; return <View />; })();
-  return <><div className="app-shell">
+  return <><div className="app-shell" style={panelLayoutStyle(layout)}>
     {runtimeError && <div className="runtime-notice" role="alert"><span>{runtimeError}</span><button onClick={() => { store.setBottomPanel("output"); setRuntimeError(null); }}>Show output</button><button aria-label="Dismiss error" onClick={() => setRuntimeError(null)}>Dismiss</button></div>}
     <ErrorBoundary label="Menu" compact><TitleBar onRun={(action) => void run(action)} onSave={() => void save()} /></ErrorBoundary>
     <div className="workbench-shell">
       <ErrorBoundary label="Navigation" compact><ActivityBar /></ErrorBoundary>
-      {store.sidebarOpen && <ErrorBoundary label="Sidebar" resetKey={store.projectPath} compact><Sidebar /></ErrorBoundary>}
+      {store.sidebarOpen && <><ErrorBoundary label="Sidebar" resetKey={store.projectPath} compact><Sidebar /></ErrorBoundary><PanelResizeHandle panel="sidebar"/></>}
       <main className="main-area">
         <ErrorBoundary label="Toolbar" compact><CommandBar onRun={(action) => void run(action)} onSave={() => void save()} onStop={() => void stop()} /></ErrorBoundary>
         <div className="content-and-dock"><div className="content-surface"><ErrorBoundary label="Workspace view" resetKey={`${store.projectPath}/${store.view}`}>{content}</ErrorBoundary></div><ErrorBoundary label="Output panel" resetKey={store.bottomPanel} compact><BottomDock /></ErrorBoundary></div>
@@ -262,7 +268,7 @@ function Workbench(): React.JSX.Element {
       {store.aiPanelOpen && <ErrorBoundary label="Assistant"><AiPanel /></ErrorBoundary>}
     </div>
     <ErrorBoundary label="Status bar" compact><StatusBar /></ErrorBoundary>
-  </div><ErrorBoundary label="Open project" compact><OpenProjectDialog /></ErrorBoundary><ErrorBoundary label="Project dialog" compact><ProjectWizard /></ErrorBoundary><ErrorBoundary label="Release notes" compact><ReleaseNotes /></ErrorBoundary><ErrorBoundary label="Command dialog" compact><QuickLauncher onRun={(action) => void run(action)} onSave={() => void save()} /></ErrorBoundary></>;
+  </div><ErrorBoundary label="Change review"><ProjectChangeReview/></ErrorBoundary><ErrorBoundary label="Open project" compact><OpenProjectDialog /></ErrorBoundary><ErrorBoundary label="Project dialog" compact><ProjectWizard /></ErrorBoundary><ErrorBoundary label="Release notes" compact><ReleaseNotes /></ErrorBoundary><ErrorBoundary label="Command dialog" compact><QuickLauncher onRun={(action) => void run(action)} onSave={() => void save()} /></ErrorBoundary></>;
 }
 
 export function App(): React.JSX.Element {

@@ -107,7 +107,15 @@ export function completionCandidates(
   const keywords = hdlKeywords
     .filter((keyword) => !inProceduralBlock || !["module", "package", "interface"].includes(keyword))
     .map((keyword) => ({ label: keyword, kind: "keyword" as const, detail: "SystemVerilog keyword", insertText: keyword }));
-  return unique([...symbols, ...keywords]);
+  const snippets: CompletionCandidate[] = [
+    { label: "always_ff", kind: "snippet", detail: "Clocked logic with reset", insertText: "always_ff @(posedge ${1:clk}) begin\n    if (${2:reset}) begin\n        ${3:value} <= '0;\n    end else begin\n        $0\n    end\nend", snippet: true },
+    { label: "always_comb", kind: "snippet", detail: "Combinational logic", insertText: "always_comb begin\n    $0\nend", snippet: true },
+    { label: "module", kind: "snippet", detail: "Module declaration", insertText: "module ${1:name} (\n    input logic ${2:clk}\n);\n    $0\nendmodule", snippet: true },
+    { label: "case", kind: "snippet", detail: "Case statement with default", insertText: "case (${1:state})\n    ${2:IDLE}: begin\n        $0\n    end\n    default: begin end\nendcase", snippet: true },
+    { label: "assign", kind: "snippet", detail: "Continuous assignment", insertText: "assign ${1:output_signal} = ${2:expression};$0", snippet: true },
+    { label: "generate", kind: "snippet", detail: "Generate loop", insertText: "for (genvar ${1:i} = 0; ${1:i} < ${2:COUNT}; ${1:i}++) begin : ${3:gen_block}\n    $0\nend", snippet: true },
+  ];
+  return unique([...symbols, ...snippets, ...keywords]);
 }
 
 export function symbolsFromBuffer(content: string, file: string): HdlSymbol[] {

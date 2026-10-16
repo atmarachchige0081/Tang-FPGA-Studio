@@ -1953,3 +1953,158 @@ mod tests {
         fs::remove_dir_all(root).unwrap();
     }
 }
+
+// Read-only refresh never changes active-project settings or conflicts with a running build.
+pub fn project_tree(root: &str, project: &str) -> Result<Vec<ProjectNode>, String> {
+    let root = canonical_workspace(root)?;
+    let directory = resolve_project_path(&root, project)?;
+    let mut seen = 0;
+    list_directory(&root, &directory, &directory, &mut seen)
+}
+#[derive(serde::Deserialize)]
+pub struct FileProbe {
+    pub path: String,
+    pub version: String,
+}
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FileUpdate {
+    pub path: String,
+    pub version: String,
+    pub content: Option<String>,
+    pub missing: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+}
+pub fn sync_files(
+    root: &str,
+    project: &str,
+    files: Vec<FileProbe>,
+) -> Result<Vec<FileUpdate>, String> {
+    if files.len() > 64 {
+        return Err("At most 64 open files can be synchronized at once".into());
+    }
+    let root = canonical_workspace(root)?;
+    let directory = resolve_project_path(&root, project)?;
+    Ok(files
+        .into_iter()
+        .map(|probe| {
+            let read = || -> Result<FileUpdate, String> {
+                let path = editable_file_path(&root, &probe.path)?;
+                if !path.starts_with(&directory) {
+                    return Err("File is outside the active project".into());
+                }
+                let metadata = match fs::metadata(&path) {
+                    Ok(value) => value,
+                    Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                        return Ok(FileUpdate {
+                            path: probe.path.clone(),
+                            version: "missing".into(),
+                            content: None,
+                            missing: true,
+                            error: None,
+                        })
+                    }
+                    Err(error) => return Err(error.to_string()),
+                };
+                if metadata.len() > 4 * 1024 * 1024 {
+                    return Err("File exceeds the 4 MiB editor limit".into());
+                }
+                let modified = metadata
+                    .modified()
+                    .ok()
+                    .and_then(|time| time.duration_since(std::time::UNIX_EPOCH).ok())
+                    .map(|value| value.as_nanos())
+                    .unwrap_or_default();
+                let version = format!("{}:{modified}", metadata.len());
+                let content = if version != probe.version {
+                    Some(fs::read_to_string(&path).map_err(|error| error.to_string())?)
+                } else {
+                    None
+                };
+                Ok(FileUpdate {
+                    path: probe.path.clone(),
+                    version,
+                    content,
+                    missing: false,
+                    error: None,
+                })
+            };
+            // One unavailable file must not prevent other open files from updating.
+            read().unwrap_or_else(|error| FileUpdate {
+                path: probe.path,
+                version: probe.version,
+                content: None,
+                missing: false,
+                error: Some(error),
+            })
+        })
+        .collect())
+}
+
+#[cfg(test)]
+mod synchronization_tests {
+    use super::*;
+    #[test]
+    fn refresh_detects_disk_changes_deletion_and_bounds_without_changing_workspace_state() {
+        let root = std::env::temp_dir().join(format!("tang-sync-{}", uuid::Uuid::new_v4()));
+        fs::create_dir_all(root.join("rtl")).unwrap();
+        fs::write(root.join("fpga.ps1"), "# fixture").unwrap();
+        fs::write(root.join("fpga.config.psd1"), "@{ Top = 'top' }").unwrap();
+        fs::write(root.join("rtl/top.sv"), "module top; endmodule").unwrap();
+        let probe = |version: String| {
+            vec![FileProbe {
+                path: "rtl/top.sv".into(),
+                version,
+            }]
+        };
+        let updates = sync_files(&root.to_string_lossy(), ".", probe(String::new())).unwrap();
+        assert_eq!(updates[0].content.as_deref(), Some("module top; endmodule"));
+        let version = updates[0].version.clone();
+        assert!(
+            sync_files(&root.to_string_lossy(), ".", probe(version.clone())).unwrap()[0]
+                .content
+                .is_none()
+        );
+        fs::write(root.join("rtl/top.sv"), "module changed; endmodule").unwrap();
+        assert_eq!(
+            sync_files(&root.to_string_lossy(), ".", probe(version)).unwrap()[0]
+                .content
+                .as_deref(),
+            Some("module changed; endmodule")
+        );
+        fs::remove_file(root.join("rtl/top.sv")).unwrap();
+        assert!(sync_files(&root.to_string_lossy(), ".", probe(String::new())).unwrap()[0].missing);
+        assert!(sync_files(
+            &root.to_string_lossy(),
+            ".",
+            vec![FileProbe {
+                path: "../outside.sv".into(),
+                version: String::new()
+            }]
+        )
+        .unwrap()[0]
+            .error
+            .is_some());
+        fs::write(root.join("rtl/top.sv"), "healthy file").unwrap();
+        let mixed = sync_files(
+            &root.to_string_lossy(),
+            ".",
+            vec![
+                FileProbe {
+                    path: "removed/folder/top.sv".into(),
+                    version: String::new(),
+                },
+                FileProbe {
+                    path: "rtl/top.sv".into(),
+                    version: String::new(),
+                },
+            ],
+        )
+        .unwrap();
+        assert!(mixed[0].error.is_some());
+        assert_eq!(mixed[1].content.as_deref(), Some("healthy file"));
+        assert!(!root.join(".fpga-studio/workspace.json").exists());
+        fs::remove_dir_all(root).unwrap();
+    }
+}

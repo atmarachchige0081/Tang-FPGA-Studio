@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import type { Activity, BoardProfile, BottomPanel, BuildEvent, BuildSummary, Diagnostic, GitStatus, HdlIndex, OpenFile, ProjectNode, ThemeMode, WorkbenchView } from "../types";
+import type { ProjectFileChange, Activity, BoardProfile, BottomPanel, BuildEvent, BuildSummary, Diagnostic, GitStatus, HdlIndex, OpenFile, ProjectNode, ThemeMode, WorkbenchView } from "../types";
 
 interface NavigationTarget {
   path: string;
@@ -36,6 +36,14 @@ interface WorkbenchState {
   board: BoardProfile | null;
   git: GitStatus | null;
   projectWizardOpen: boolean;
+  fileChanges: ProjectFileChange[];
+  fileChangeRevision: number;
+  changeTrackingLimited: boolean;
+  changeReviewOpen: boolean;
+  changeReviewPath: string | null;
+  setFileChanges: (changes: ProjectFileChange[], limited: boolean, revision?: number) => void;
+  openChangeReview: (path?: string) => void;
+  closeChangeReview: () => void;
   setWorkspace: (root: string, project: string, projectPath: string, tree: ProjectNode[], recentProjects?: string[]) => void;
   refreshProjectTree: (tree: ProjectNode[]) => void;
   setActivity: (activity: Activity) => void;
@@ -50,6 +58,8 @@ interface WorkbenchState {
   closeFile: (path: string) => void;
   updateFile: (path: string, content: string) => void;
   markSaved: (path: string, persistedContent?: string) => void;
+  syncFile: (path: string, content: string | null, missing: boolean) => void;
+  keepLocalFile: (path: string) => void;
   reloadFile: (path: string, content: string) => void;
   appendOutput: (event: BuildEvent) => void;
   clearOutput: () => void;
@@ -114,7 +124,11 @@ export const useWorkbench = create<WorkbenchState>((set) => ({
   board: null,
   git: null,
   projectWizardOpen: false,
-  setWorkspace: (root, project, projectPath, tree, recentProjects = []) => set({ root, project, projectPath, tree, recentProjects, ready: true, tabs: [], activePath: null, editorSelection: "", editorCursor: null, view: "welcome", hdlIndex: null, intelligenceStatus: "idle", navigation: null }),
+  fileChanges: [], fileChangeRevision: 0, changeTrackingLimited: false, changeReviewOpen: false, changeReviewPath: null,
+  setFileChanges: (fileChanges,changeTrackingLimited,revision) => set((s) => revision !== undefined && revision < s.fileChangeRevision ? s : {fileChanges,changeTrackingLimited,fileChangeRevision:revision ?? s.fileChangeRevision}),
+  openChangeReview: (path) => set((s) => ({changeReviewOpen:true,changeReviewPath:path ?? s.fileChanges[0]?.path ?? null})),
+  closeChangeReview: () => set({changeReviewOpen:false}),
+  setWorkspace: (root, project, projectPath, tree, recentProjects = []) => set({ root, project, projectPath, tree, recentProjects, ready: true, fileChanges: [], fileChangeRevision: 0, changeReviewOpen: false, changeReviewPath: null, changeTrackingLimited: false, tabs: [], activePath: null, editorSelection: "", editorCursor: null, view: "welcome", hdlIndex: null, intelligenceStatus: "idle", navigation: null }),
   refreshProjectTree: (tree) => set({ tree, hdlIndex: null, intelligenceStatus: "idle" }),
   setActivity: (activity) => set({ activity, sidebarOpen: true }),
   setView: (view) => set({ view }),
@@ -139,8 +153,17 @@ export const useWorkbench = create<WorkbenchState>((set) => ({
     return { tabs, activePath: state.activePath === path ? fallback : state.activePath, view: tabs.length ? state.view : "welcome" };
   }),
   updateFile: (path, content) => set((state) => ({ tabs: state.tabs.map((tab) => tab.path === path ? { ...tab, content } : tab) })),
-  markSaved: (path, persistedContent) => set((state) => ({ tabs: state.tabs.map((tab) => tab.path === path ? { ...tab, savedContent: persistedContent ?? tab.content } : tab) })),
-  reloadFile: (path, content) => set((state) => ({ tabs: state.tabs.map((tab) => tab.path === path ? { ...tab, content, savedContent: content } : tab) })),
+  markSaved: (path, persistedContent) => set((state) => ({ tabs: state.tabs.map((tab) => tab.path === path ? { ...tab, savedContent: persistedContent ?? tab.content, externalContent: undefined, externalMissing: false } : tab) })),
+  syncFile: (path, content, missing) => set((state) => ({ tabs: state.tabs.map((tab) => {
+    if (tab.path !== path) return tab;
+    if (missing) return { ...tab, externalMissing: true };
+    if (content === null) return tab;
+    if (content === tab.savedContent) return tab.externalMissing || tab.externalContent !== undefined ? { ...tab, externalMissing: false, externalContent: undefined } : tab;
+    if (tab.content !== tab.savedContent && tab.content !== content) return { ...tab, externalContent: content, externalMissing: false };
+    return { ...tab, content, savedContent: content, externalContent: undefined, externalMissing: false, externallyUpdated: Date.now() };
+  }) })),
+  keepLocalFile: (path) => set((state) => ({ tabs: state.tabs.map((tab) => tab.path === path ? { ...tab, savedContent: tab.externalContent ?? tab.savedContent, externalContent: undefined } : tab) })),
+  reloadFile: (path, content) => set((state) => ({ tabs: state.tabs.map((tab) => tab.path === path ? { ...tab, content, savedContent: content, externalContent: undefined, externalMissing: false } : tab) })),
   appendOutput: (event) => set((state) => {
     const previous = state.output.at(-1);
     if (previous && previous.jobId === event.jobId && previous.phase === event.phase && previous.stream === event.stream && previous.message === event.message) return state;

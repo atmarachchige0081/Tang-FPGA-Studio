@@ -1,0 +1,19 @@
+PASS: Startup has no automatic release-notes dialog
+PASS: Packaged React UI rendered inside native WebKit; no Vite server
+PASS: Installed resources seeded a writable per-user workspace
+PASS: Native folder recognition and existing-project dialog opened a real configured project
+PASS: Bundled boards, HDL patterns and plugins loaded
+PASS: Project creation with spaces, native save/read, HDL indexing, search and Git discovery
+PASS: Packaged Monaco editor opened actual RTL source offline
+PASS: Real pointer drags resized the bottom dock and Explorer; layout dimensions persisted
+PASS: Assistant pointer resizing preserved usable controls and saved its width
+PASS: Native xterm keyboard input executed a real Bash command through the PTY
+PASS: Terminal interrupt stopped a running child command and subsequent input still worked
+PASS: Shell edits became visible in Monaco while the AI panel was closed
+PASS: Native file journal tracked unopened and added files; before/after review rendered in both themes without source writes
+PASS: Concurrent external edits preserved the dirty buffer and offered explicit conflict resolution
+PASS: Terminal remount retained the same session without replaying commands
+PASS: Inline AI control stays off; no real provider or account is invoked
+PASS: Native desktop screenshot captured
+PASS: Native Linux hardware guidance screenshot captured
+Native desktop evidence saved to /workspace/Tang-FPGA-Studio/build/workbench-refinement/native-no-ai-final

@@ -1,6 +1,7 @@
 mod ai;
 mod analyzer;
 mod boards;
+mod changes;
 mod design_graph;
 mod git;
 mod hardware;
@@ -14,6 +15,7 @@ mod project;
 mod reports;
 mod runner;
 mod security;
+mod terminal;
 mod verification;
 mod waveform;
 
@@ -41,6 +43,94 @@ where
     })
         .await
         .map_err(|error| format!("{label} worker stopped unexpectedly: {error}"))?
+}
+
+#[tauri::command]
+async fn poll_project_changes(
+    registry: State<'_, changes::ChangeRegistry>,
+    root: String,
+    project: String,
+    since: Option<u64>,
+) -> Result<changes::ChangeSnapshot, String> {
+    let registry = registry.inner().clone();
+    blocking("Project change journal", move || {
+        registry.poll(&root, &project, since)
+    })
+    .await
+}
+#[tauri::command]
+async fn mark_change_reviewed(
+    registry: State<'_, changes::ChangeRegistry>,
+    root: String,
+    project: String,
+    path: String,
+    revision: u64,
+) -> Result<(), String> {
+    let registry = registry.inner().clone();
+    blocking("Change review", move || {
+        registry.reviewed(&root, &project, &path, revision)
+    })
+    .await
+}
+#[tauri::command]
+async fn terminal_open(
+    app: AppHandle,
+    registry: State<'_, std::sync::Arc<terminal::TerminalRegistry>>,
+    root: String,
+    project: String,
+    cols: u16,
+    rows: u16,
+) -> Result<terminal::TerminalEvent, String> {
+    let registry = registry.inner().clone();
+    blocking("Terminal startup", move || {
+        registry.open(app, &root, &project, cols, rows)
+    })
+    .await
+}
+#[tauri::command]
+async fn terminal_write(
+    registry: State<'_, std::sync::Arc<terminal::TerminalRegistry>>,
+    id: String,
+    data: String,
+) -> Result<(), String> {
+    let registry = registry.inner().clone();
+    blocking("Terminal input", move || registry.write(&id, &data)).await
+}
+#[tauri::command]
+async fn terminal_resize(
+    registry: State<'_, std::sync::Arc<terminal::TerminalRegistry>>,
+    id: String,
+    cols: u16,
+    rows: u16,
+) -> Result<(), String> {
+    let registry = registry.inner().clone();
+    blocking("Terminal resize", move || registry.resize(&id, cols, rows)).await
+}
+#[tauri::command]
+async fn terminal_close(
+    registry: State<'_, std::sync::Arc<terminal::TerminalRegistry>>,
+    id: String,
+) -> Result<(), String> {
+    let registry = registry.inner().clone();
+    blocking("Terminal close", move || registry.close(&id)).await
+}
+#[tauri::command]
+async fn sync_project_files(
+    root: String,
+    project: String,
+    files: Vec<project::FileProbe>,
+) -> Result<Vec<project::FileUpdate>, String> {
+    blocking("File synchronization", move || {
+        project::sync_files(&root, &project, files)
+    })
+    .await
+}
+#[tauri::command]
+async fn project_tree(root: String, project: String) -> Result<Vec<models::ProjectNode>, String> {
+    blocking("Project refresh", move || {
+        project::project_tree(&root, &project)
+    })
+    .await
 }
 
 #[tauri::command]
@@ -716,10 +806,15 @@ pub fn run() -> Result<(), String> {
             Ok(())
         })
         .manage(JobRegistry::default())
+        .manage(changes::ChangeRegistry::default())
         .manage(SerialRegistry::default())
         .manage(AiRegistry::default())
+        .manage(std::sync::Arc::new(terminal::TerminalRegistry::default()))
         .invoke_handler(tauri::generate_handler![
             workspace_snapshot,
+            poll_project_changes, mark_change_reviewed,
+            terminal_open, terminal_write, terminal_resize, terminal_close,
+            sync_project_files, project_tree,
             open_project,
             recognize_project_folder,
             read_text_file,

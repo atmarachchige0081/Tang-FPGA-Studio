@@ -9,7 +9,8 @@ import type { GitStatus, HdlPattern, PluginInfo, ProjectNode } from "../types";
 
 function TreeNode({ node, depth = 0 }: { node: ProjectNode; depth?: number }): React.JSX.Element {
   const [expanded, setExpanded] = useState(depth < 1);
-  const { root, openFile, appendOutput } = useWorkbench();
+  const { root, openFile, appendOutput, fileChanges } = useWorkbench();
+  const change = fileChanges.find((item) => item.path === node.path);
   const activate = async () => {
     if (node.kind === "directory") return setExpanded((value) => !value);
     try {
@@ -21,7 +22,7 @@ function TreeNode({ node, depth = 0 }: { node: ProjectNode; depth?: number }): R
   };
   return <div><button className="tree-row" style={{ paddingLeft: `${8 + depth * 14}px` }} onClick={() => void activate()} title={node.path}>
     {node.kind === "directory" ? (expanded ? <ChevronDown size={13}/> : <ChevronRight size={13}/>) : <span className="tree-indent"/>}
-    {node.kind === "directory" ? (expanded ? <FolderOpen size={15} className="folder-icon"/> : <Folder size={15} className="folder-icon"/>) : <FileCode2 size={14} className={node.name.endsWith(".sv") ? "hdl-icon" : "file-icon"}/>}<span>{node.name}</span>
+    {node.kind === "directory" ? (expanded ? <FolderOpen size={15} className="folder-icon"/> : <Folder size={15} className="folder-icon"/>) : <FileCode2 size={14} className={node.name.endsWith(".sv") ? "hdl-icon" : "file-icon"}/>}<span>{node.name}</span>{change && <b className={`tree-change change-kind ${change.kind}`} title={`${change.kind} · Review file changes`}>{change.kind === "added" ? "A" : "M"}</b>}
   </button>{expanded && node.children?.map((child) => <TreeNode node={child} depth={depth + 1} key={child.path}/>)}</div>;
 }
 

@@ -66,3 +66,9 @@ complete Windows installer run 38784739248 was cancelled, so it is not a pass.
 New work is documented in `AGENT_AND_PROJECT_RECOVERY.md` and current evidence
 under `docs/evidence/agent-reliability/`. Recheck authenticated assistant behavior
 and AI sign-in while programming on the user's Windows workstation before tagging.
+
+## Workbench debugging follow-up
+
+See [WORKBENCH_DEBUGGING.md](WORKBENCH_DEBUGGING.md) for the real terminal,
+resizable panels, live file synchronization, completion fixes and Windows checks.
+No release tag is created; older packaged artifacts predate these source changes.

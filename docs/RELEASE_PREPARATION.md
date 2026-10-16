@@ -5,6 +5,12 @@ record, not authorization to publish an unverified release. No tag is created.
 
 ## Current workbench update
 
+The subsequent terminal/live-edit/resizing refinement is documented in
+[WORKBENCH_DEBUGGING.md](WORKBENCH_DEBUGGING.md). Its source and evidence supersede
+the earlier workbench UI where indicated; new platform packaging and workstation
+acceptance are still required before tagging.
+
+
 The assistant/recovery, existing-project opening, opt-in inline suggestions and
 classic UI changes are described in [AGENT_AND_PROJECT_RECOVERY.md](AGENT_AND_PROJECT_RECOVERY.md).
 Current results and reviewed screenshots are in `evidence/agent-reliability/`:

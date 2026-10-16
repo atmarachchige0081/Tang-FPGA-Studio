@@ -54,7 +54,10 @@ for line in sys.stdin:
         if threads[thread]['inline']:
             # Exercise rejection of tool calls in the isolated suggestion thread.
             send({'id': 777, 'method': 'item/tool/call', 'params': {'threadId': thread, 'tool': 'tang_run', 'arguments': {'action': 'flash'}}})
-            notify('item/agentMessage/delta', {'threadId': thread, 'itemId': 'inline', 'delta': 'assign led = counter[23];'})
+            if 'FINAL_ONLY_FIXTURE' in params['input'][0]['text']:
+                notify('item/completed', {'threadId': thread, 'item': {'type': 'agentMessage', 'id': 'inline', 'text': 'assign led = counter[23];'}})
+            else:
+                notify('item/agentMessage/delta', {'threadId': thread, 'itemId': 'inline', 'delta': 'assign led = counter[23];'})
             notify('turn/completed', {'threadId': thread, 'turn': {'id': 'fixture-turn', 'status': 'completed'}})
         else:
             pending[222] = thread

@@ -1,0 +1,48 @@
+PASS: Startup has no automatic release-notes dialog
+PASS: Packaged React UI rendered inside native WebKit; no Vite server
+PASS: Installed resources seeded a writable per-user workspace
+PASS: Native folder recognition and existing-project dialog opened a real configured project
+PASS: Bundled boards, HDL patterns and plugins loaded
+PASS: Project creation with spaces, native save/read, HDL indexing, search and Git discovery
+PASS: Packaged Monaco editor opened actual RTL source offline
+PASS: Real pointer drags resized the bottom dock and Explorer; layout dimensions persisted
+PASS: Assistant pointer resizing preserved usable controls and saved its width
+PASS: Native xterm keyboard input executed a real Bash command through the PTY
+Traceback (most recent call last):
+  File "/workspace/Tang-FPGA-Studio/scripts/test-linux-desktop.py", line 540, in <module>
+    main()
+    ~~~~^^
+  File "/workspace/Tang-FPGA-Studio/scripts/test-linux-desktop.py", line 359, in main
+    shell_type("printf 'INT_%s\\n' 'OK'")
+    ~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/workspace/Tang-FPGA-Studio/scripts/test-linux-desktop.py", line 346, in shell_type
+    request('POST',prefix+'/element/'+element_id+'/value',{'text':text})
+    ~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/workspace/Tang-FPGA-Studio/scripts/test-linux-desktop.py", line 49, in request
+    with urllib.request.urlopen(req, timeout=600) as response:
+         ~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.14/urllib/request.py", line 187, in urlopen
+    return opener.open(url, data, timeout)
+           ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.14/urllib/request.py", line 487, in open
+    response = self._open(req, data)
+  File "/usr/lib/python3.14/urllib/request.py", line 504, in _open
+    result = self._call_chain(self.handle_open, protocol, protocol +
+                              '_open', req)
+  File "/usr/lib/python3.14/urllib/request.py", line 464, in _call_chain
+    result = func(*args)
+  File "/usr/lib/python3.14/urllib/request.py", line 1350, in http_open
+    return self.do_open(http.client.HTTPConnection, req)
+           ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.14/urllib/request.py", line 1325, in do_open
+    r = h.getresponse()
+  File "/usr/lib/python3.14/http/client.py", line 1459, in getresponse
+    response.begin()
+    ~~~~~~~~~~~~~~^^
+  File "/usr/lib/python3.14/http/client.py", line 336, in begin
+    version, status, reason = self._read_status()
+                              ~~~~~~~~~~~~~~~~~^^
+  File "/usr/lib/python3.14/http/client.py", line 305, in _read_status
+    raise RemoteDisconnected("Remote end closed connection without"
+                             " response")
+http.client.RemoteDisconnected: Remote end closed connection without response

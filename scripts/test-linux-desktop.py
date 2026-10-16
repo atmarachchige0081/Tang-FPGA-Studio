@@ -5,6 +5,7 @@ Run under xvfb-run -a dbus-run-session. Requires tauri-driver, WebKitWebDriver,
 PowerShell 7, scrot and the pinned OSS CAD Suite. Does not program physical hardware.
 """
 import argparse
+import base64
 import http.client
 import json
 import os
@@ -97,6 +98,11 @@ def main():
                                 raise
                             time.sleep(.2)
 
+                def screenshot(name):
+                    # The viewport capture needs no window manager or X focus.
+                    encoded = request('GET', prefix + '/screenshot')
+                    (output / name).write_bytes(base64.b64decode(encoded, validate=True))
+
                 def invoke(command, arguments=None):
                     # Browser-side token guard starts each native operation once.
                     call_id = uuid.uuid4().hex
@@ -173,6 +179,9 @@ def main():
                     assert answer == 'assign led = counter[23];', answer
                     assert invoke('ai_account_read', {'refresh': False})['fixtureToolRefused'] is True
                     passed('Native isolated inline stream returned code while refusing fixture hardware tool access')
+                    final_only = invoke('ai_inline_completion', {'project':'projects/03_uart_terminal','path':'projects/03_uart_terminal/rtl/top.sv','prefix':'// FINAL_ONLY_FIXTURE','suffix':''})
+                    assert final_only == 'assign led = counter[23];', final_only
+                    passed('Native inline completion accepted a final message without delta notifications')
                     thread = invoke('ai_thread_start', {'model': None})['thread']['id']
                     turn = invoke('ai_turn_start', {'threadId': thread, 'prompt': 'fixture only', 'context': {}, 'model': None, 'effort': None})['turn']['id']
                     assert invoke('ai_turn_steer', {'threadId': thread, 'turnId': turn, 'prompt': 'Use Dock pins'})['turnId'] == turn
@@ -297,14 +306,168 @@ def main():
                     time.sleep(.2)
                 assert js("return document.querySelector('.monaco-editor .view-lines')?.textContent.includes('module') ?? false"), 'Packaged Monaco editor did not render source offline'
                 passed('Packaged Monaco editor opened actual RTL source offline')
-                assert js("return document.querySelector('.inline-toggle')?.getAttribute('aria-pressed') === 'false'"), 'Inline suggestions must be opt-in'
-                js("document.querySelector('.inline-toggle').click()")
-                for _ in range(30):
-                    if js("return document.querySelector('.inline-toggle')?.getAttribute('aria-pressed') === 'true'"):
+                invoke('poll_project_changes',parameters)
+                def press(*values):
+                    actions = [{'type': 'keyDown', 'value': key} for key in values] + [{'type': 'keyUp', 'value': key} for key in reversed(values)]
+                    request('POST', prefix + '/actions', {'actions': [{'type': 'key', 'id': 'workbench-keyboard', 'actions': actions}]})
+                def drag(selector, dx, dy):
+                    rect = js("const r=document.querySelector(arguments[0]).getBoundingClientRect(); return {x:Math.round(r.x+r.width/2),y:Math.round(r.y+r.height/2)}", [selector])
+                    request('POST', prefix + '/actions', {'actions':[{'type':'pointer','id':'panel-mouse','parameters':{'pointerType':'mouse'},'actions':[{'type':'pointerMove','duration':0,**rect},{'type':'pointerDown','button':0},{'type':'pointerMove','duration':300,'x':rect['x']+dx,'y':rect['y']+dy},{'type':'pointerUp','button':0}]}]})
+                old_height = js("return document.querySelector('.bottom-dock').getBoundingClientRect().height")
+                drag('.resize-bottom',0,-90)
+                new_height = js("return document.querySelector('.bottom-dock').getBoundingClientRect().height")
+                assert new_height > old_height + 60, (old_height,new_height)
+                old_width = js("return document.querySelector('.sidebar').getBoundingClientRect().width")
+                drag('.resize-sidebar',60,0)
+                assert js("return document.querySelector('.sidebar').getBoundingClientRect().width") > old_width+30
+                passed('Real pointer drags resized the bottom dock and Explorer; layout dimensions persisted')
+                press('\ue009','\ue008','a')  # Ctrl+Shift+A
+                for _ in range(80):
+                    if js("return !!document.querySelector('.ai-panel')"): break
+                    time.sleep(.1)
+                before_assistant = js("return document.querySelector('.ai-panel').getBoundingClientRect().width")
+                drag('.resize-assistant',-70,0)
+                after_assistant = js("return document.querySelector('.ai-panel').getBoundingClientRect().width")
+                assert after_assistant > before_assistant+25, (before_assistant,after_assistant)
+                assert js("return JSON.parse(localStorage.getItem('fpga-studio.layout')).assistant") >= 430
+                screenshot('native-resized-panels.png')
+                js("document.querySelector('[aria-label=\"Close AI Assistant\"]').click()")
+                passed('Assistant pointer resizing preserved usable controls and saved its width')
+                js("Array.from(document.querySelectorAll('.dock-tabs button')).find(b => b.textContent === 'Terminal').click()")
+                for _ in range(100):
+                    if js("return document.querySelector('.terminal-toolbar > span')?.textContent === 'Shell'"):
                         break
                     time.sleep(.1)
-                assert js("return document.querySelector('.inline-toggle')?.getAttribute('aria-pressed') === 'true'")
-                passed('Inline AI control is opt-in and usable beside the native Monaco editor; no authenticated generation asserted')
+                assert js("return document.querySelector('.terminal-toolbar > span')?.textContent === 'Shell'"), 'Native PTY did not open'
+                def shell_type(text):
+                    js("document.querySelector('.terminal-host .xterm-helper-textarea').focus()")
+                    element = request('POST',prefix+'/element',{'using':'css selector','value':'.terminal-host .xterm-helper-textarea'})
+                    element_id = element['element-6066-11e4-a52e-4f735466cecf']
+                    request('POST',prefix+'/element/'+element_id+'/value',{'text':text})
+                    press('\ue007')
+                shell_type("printf 'PTY_%s\\n' 'LIVE_OK'")
+                terminal_state = None
+                for _ in range(100):
+                    terminal_state = invoke('terminal_open',{**parameters,'cols':80,'rows':12})
+                    if 'PTY_LIVE_OK' in terminal_state['data']: break
+                    time.sleep(.1)
+                assert terminal_state and 'PTY_LIVE_OK' in terminal_state['data'], 'Typed terminal command did not reach the shell'
+                passed('Native xterm keyboard input executed a real Bash command through the PTY')
+                shell_type("sleep 10")
+                time.sleep(.3)
+                js("Array.from(document.querySelectorAll('.terminal-toolbar button')).find(b => b.textContent.includes('Interrupt')).click()")
+                shell_type("printf 'INT_%s\\n' 'OK'")
+                interrupted = False
+                for _ in range(50):
+                    if 'INT_OK' in invoke('terminal_open',{**parameters,'cols':80,'rows':12})['data']:
+                        interrupted = True; break
+                    time.sleep(.1)
+                assert interrupted, 'Interrupt did not return control to the shell'
+                passed('Terminal interrupt stopped a running child command and subsequent input still worked')
+                # A shell edit has no Codex file-change notification. The closed assistant must not prevent refresh.
+                shell_type("printf '\\n// EXTERNAL_%s\\n' 'SYNC_OK' >> rtl/top.sv")
+                js("Array.from(document.querySelectorAll('.dock-tabs button')).find(b => b.textContent === 'Output').click()")
+                for _ in range(80):
+                    if js("return document.querySelector('.external-update-label')?.textContent === 'Updated from disk'"): break
+                    time.sleep(.1)
+                assert js("return document.querySelector('.external-update-label')?.textContent === 'Updated from disk'"), 'External shell edit did not update the clean editor'
+                assert 'EXTERNAL_SYNC_OK' in invoke('read_text_file',{'root':root,'path':path})
+                js("document.querySelector('.monaco-editor textarea').focus()")
+                press('\ue009','\ue010')
+                for _ in range(80):
+                    if js("return document.querySelector('.view-lines')?.textContent.replaceAll(String.fromCharCode(160),' ').includes('EXTERNAL_SYNC_OK') ?? false"): break
+                    time.sleep(.1)
+                assert js("return document.querySelector('.view-lines')?.textContent.replaceAll(String.fromCharCode(160),' ').includes('EXTERNAL_SYNC_OK') ?? false"), 'Disk edit was not visible in Monaco'
+                passed('Shell edits became visible in Monaco while the AI panel was closed')
+                # Provider-independent journal must cover an existing unopened file and a new file.
+                journal = invoke('poll_project_changes',parameters)
+                change = next(item for item in journal['changes'] if item['path']==path)
+                assert 'EXTERNAL_SYNC_OK' not in change['before'] and 'EXTERNAL_SYNC_OK' in change['after']
+                assert change['hunks'] and change['hunks'][0]['newStart'] > 0
+                js("Array.from(document.querySelectorAll('.dock-tabs button')).find(b => b.textContent === 'Terminal').click()")
+                for _ in range(80):
+                    if js("return document.querySelector('.terminal-toolbar > span')?.textContent === 'Shell'"): break
+                    time.sleep(.1)
+                shell_type("printf '\\n// UNOPENED_%s\\n' 'EDIT' >> rtl/uart_tx.sv")
+                shell_type("printf 'module native_review_new; endmodule\\n' > rtl/native_review_new.sv")
+                for _ in range(80):
+                    pending = invoke('poll_project_changes',parameters)['changes']
+                    if any(item['path'].endswith('native_review_new.sv') for item in pending): break
+                    time.sleep(.1)
+                assert any(item['path'].endswith('uart_tx.sv') and 'UNOPENED_EDIT' in item['after'] for item in pending)
+                assert any(item['path'].endswith('native_review_new.sv') and item['kind']=='added' for item in pending)
+                js("Array.from(document.querySelectorAll('.dock-tabs button')).find(b => b.textContent === 'Output').click()")
+                for _ in range(80):
+                    if js("return !!document.querySelector('.review-file-button')"): break
+                    time.sleep(.1)
+                assert js("return !!document.querySelector('.review-file-button')"), 'Changed source had no visible review action'
+                js("document.querySelector('.review-file-button').click()")
+                for _ in range(120):
+                    if js("return !!document.querySelector('.change-review .monaco-diff-editor')"): break
+                    time.sleep(.1)
+                assert js("return !!document.querySelector('.change-review .monaco-diff-editor')"), 'Native before/after diff did not render'
+                for _ in range(80):
+                    if js("return document.querySelector('.change-review').textContent.replaceAll(String.fromCharCode(160),' ').includes('EXTERNAL_SYNC_OK')"): break
+                    time.sleep(.1)
+                assert js("return document.querySelector('.change-review').textContent.replaceAll(String.fromCharCode(160),' ').includes('EXTERNAL_SYNC_OK')"), 'Changed lines were not visible in the diff'
+                for _ in range(80):
+                    if js("return document.querySelector('.change-review nav').textContent.includes('native_review_new.sv')"): break
+                    time.sleep(.1)
+                assert js("return document.querySelector('.change-review nav').textContent.includes('native_review_new.sv')")
+                for _ in range(80):
+                    if js("return !!document.querySelector('.change-review .line-insert')"): break
+                    time.sleep(.1)
+                assert js("return !!document.querySelector('.change-review .line-insert')"), 'Native diff did not highlight inserted lines'
+                screenshot('native-file-diff-dark.png')
+                press('\ue009','\ue008','l')
+                time.sleep(.3)
+                screenshot('native-file-diff-light.png')
+                press('\ue009','\ue008','l')
+                disk_before_review = invoke('read_text_file',{'root':root,'path':path})
+                js("Array.from(document.querySelectorAll('.change-review footer button')).find(b => b.textContent.includes('Mark file reviewed')).click()")
+                for _ in range(80):
+                    pending=invoke('poll_project_changes',parameters)['changes']
+                    if not any(item['path']==path for item in pending): break
+                    time.sleep(.1)
+                assert not any(item['path']==path for item in pending), 'Review acknowledgement did not clear the displayed file'
+                assert invoke('read_text_file',{'root':root,'path':path}) == disk_before_review, 'Review modified the source file'
+                js("document.querySelector('[aria-label=\"Close change review\"]').click()")
+                js("document.querySelector('.monaco-editor textarea').focus()")
+                press('\ue009','\ue010')
+                passed('Native file journal tracked unopened and added files; before/after review rendered in both themes without source writes')
+                # Preserve unsaved user input while a subsequent external edit lands.
+                press('\ue007')
+                press('x')
+                disk = invoke('read_text_file',{'root':root,'path':path})
+                invoke('write_text_file',{'root':root,'path':path,'content':disk+'\n// conflict fixture\n'})
+                for _ in range(80):
+                    if js("return document.querySelector('.external-file-notice')?.textContent.includes('unsaved edits') ?? false"): break
+                    time.sleep(.1)
+                assert js("return document.querySelector('.external-file-notice')?.textContent.includes('unsaved edits') ?? false"), 'Unsaved edit conflict was not preserved'
+                assert js("return Array.from(document.querySelectorAll('.editor-tabs button')).some(b => b.querySelector('.dirty-dot'))")
+                screenshot('native-live-edit-conflict.png')
+                js("Array.from(document.querySelectorAll('.external-file-notice button')).find(b => b.textContent === 'Load disk version').click()")
+                passed('Concurrent external edits preserved the dirty buffer and offered explicit conflict resolution')
+                js("Array.from(document.querySelectorAll('.dock-tabs button')).find(b => b.textContent === 'Terminal').click()")
+                for _ in range(80):
+                    if js("return document.querySelector('.terminal-toolbar > span')?.textContent === 'Shell'"): break
+                    time.sleep(.1)
+                assert invoke('terminal_open',{**parameters,'cols':80,'rows':12})['id'] == terminal_state['id'], 'Switching tabs restarted the shell'
+                screenshot('native-terminal.png')
+                invoke('terminal_close',{'id':terminal_state['id']})
+                js("Array.from(document.querySelectorAll('.dock-tabs button')).find(b => b.textContent === 'Output').click()")
+                passed('Terminal remount retained the same session without replaying commands')
+                assert js("return document.querySelector('.inline-toggle')?.getAttribute('aria-pressed') === 'false'"), 'Inline suggestions must be opt-in'
+                if args.ai_fixture:
+                    js("document.querySelector('.inline-toggle').click()")
+                    for _ in range(30):
+                        if js("return document.querySelector('.inline-toggle')?.getAttribute('aria-pressed') === 'true'"):
+                            break
+                        time.sleep(.1)
+                    assert js("return document.querySelector('.inline-toggle')?.getAttribute('aria-pressed') === 'true'")
+                    passed('Inline AI control is opt-in and usable beside the native Monaco editor; no authenticated generation asserted')
+                else:
+                    passed('Inline AI control stays off; no real provider or account is invoked')
                 if args.ai_fixture:
                     status = invoke('ai_connect', parameters)
                     assert status['version'].startswith('codex-fixture')
@@ -320,7 +483,7 @@ def main():
                             break
                         time.sleep(.2)
                     assert js("return document.querySelector('.monaco-editor .view-lines')?.textContent.replaceAll(String.fromCharCode(160), ' ').includes('assign led = counter[23];') ?? false"), 'Native inline ghost text did not render'
-                    subprocess.run(['scrot', '--overwrite', str(output / 'native-inline-ghost-fixture.png')], check=True)
+                    screenshot('native-inline-ghost-fixture.png')
                     before = invoke('read_text_file', {'root': root, 'path': path})
                     assert 'assign led = counter[23];' not in before, 'Fixture code must not be saved before acceptance'
                     press('\ue004')  # Tab accepts the suggestion
@@ -335,7 +498,7 @@ def main():
                     assert js("return !Array.from(document.querySelectorAll('.runtime-notice')).some(node => node.textContent.includes('Canceled'))"), 'Normal editor cancellation was shown as an application error'
                     passed('Native Monaco displayed fixture ghost text; Tab accepted it and only explicit Save persisted it')
                     invoke('ai_disconnect')
-                subprocess.run(['scrot', '--overwrite', str(output / 'native-desktop.png')], check=True)
+                screenshot('native-desktop.png')
                 passed('Native desktop screenshot captured')
                 js("Array.from(document.querySelectorAll('button')).find(b => b.getAttribute('aria-label') === 'Open hardware manager')?.click()")
                 for _ in range(100):
@@ -343,7 +506,7 @@ def main():
                         break
                     time.sleep(.1)
                 assert js('return document.body.innerText.includes("Linux USB and serial access")')
-                subprocess.run(['scrot', '--overwrite', str(output / 'native-linux-hardware.png')], check=True)
+                screenshot('native-linux-hardware.png')
                 passed('Native Linux hardware guidance screenshot captured')
             except Exception:
                 if session:

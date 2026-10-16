@@ -34,6 +34,9 @@ const inlineService = new InlineSuggestionService(async (prefix, suffix) => {
   if (!state.activePath) return "";
   inlineStatus("Requesting suggestion…");
   try {
+    await bridge.aiConnect(state.root, state.projectPath);
+    const account = await bridge.aiAccount();
+    if (!account.account && account.requiresOpenaiAuth !== false) throw new Error("Sign in to Codex in the assistant to use AI suggestions.");
     const text = await bridge.aiInlineCompletion(state.projectPath, state.activePath, prefix, suffix);
     inlineStatus(text ? "Tab to accept · Esc to dismiss" : "No suggestion");
     return text;
@@ -216,7 +219,7 @@ const configureMonaco: BeforeMount = (monaco) => {
 
 export function EditorWorkspace(): React.JSX.Element {
   const {
-    root, projectPath, tree, tabs, activePath, theme, updateFile, closeFile, openFile, setDiagnostics,
+    root, projectPath, tree, tabs, activePath, theme, fileChanges, openChangeReview, updateFile, closeFile, openFile, setDiagnostics,
     setHdlIndex, navigation, clearNavigation, navigateTo, appendOutput, setEditorSelection, setEditorCursor,
   } = useWorkbench();
   const [inlineEnabled, setInlineEnabled] = useState(inlineSuggestionsEnabled);
@@ -224,9 +227,24 @@ export function EditorWorkspace(): React.JSX.Element {
   useEffect(() => { inlineStatus = setSuggestionStatus; return () => { inlineStatus = () => undefined; }; }, []);
   const [index, setIndex] = useState<HdlIndex>(liveIndex);
   const editorRef = useRef<MonacoEditor | null>(null);
+  const highlights = useRef<import("monaco-editor").editor.IEditorDecorationsCollection | null>(null);
   const active = tabs.find((tab) => tab.path === activePath);
+  const activeChange = fileChanges.find((change) => change.path === activePath);
   const savedRevision = tabs.map((tab) => `${tab.path}:${tab.savedContent}`).join("\u0000");
   const firstSource = firstSourceFile(tree);
+
+  useEffect(() => {
+    const frame=requestAnimationFrame(()=>{
+      const editor=editorRef.current;
+      if(!editor||!monacoApi||!active)return;
+      highlights.current?.clear();
+      if(!activeChange)return;
+      const count=editor.getModel()?.getLineCount() ?? 1;
+      highlights.current=editor.createDecorationsCollection(activeChange.hunks.map((hunk)=>({range:new monacoApi.Range(Math.min(count,hunk.newStart),1,Math.min(count,Math.max(hunk.newStart,hunk.newStart+hunk.newLines-1)),1),options:{isWholeLine:true,className:hunk.newLines===0?undefined:hunk.oldLines===0?"ai-updated-line":"disk-modified-line",linesDecorationsClassName:hunk.newLines===0?"disk-deleted-gutter":hunk.oldLines===0?"ai-updated-gutter":"disk-modified-gutter",hoverMessage:{value:"Unreviewed file change · Use Review changes for before/after"}}})));
+    });
+    return()=>cancelAnimationFrame(frame);
+  },[active?.path,activeChange,active?.content]);
+  useEffect(()=>()=>highlights.current?.clear(),[]);
 
   const openFirstSource = async () => {
     if (!firstSource) return;
@@ -284,6 +302,12 @@ export function EditorWorkspace(): React.JSX.Element {
       id: "fpga.inline-suggestion", label: "Request AI inline suggestion", keybindings: [monaco.KeyMod.Alt | monaco.KeyCode.Backslash],
       run: () => { if (inlineSuggestionsEnabled()) void editor.getAction("editor.action.inlineSuggest.trigger")?.run(); },
     });
+    editor.onMouseDown((event)=>{
+      if(event.target.type!==monaco.editor.MouseTargetType.GUTTER_LINE_DECORATIONS||!event.target.position)return;
+      const state=useWorkbench.getState(),line=event.target.position.lineNumber;
+      const change=state.fileChanges.find((file)=>file.path===state.activePath);
+      if(change?.hunks.some((hunk)=>line>=hunk.newStart&&line<=Math.max(hunk.newStart,hunk.newStart+hunk.newLines-1))) state.openChangeReview(state.activePath ?? undefined);
+    });
     editor.addCommand(monaco.KeyCode.F12, () => void openSymbol(editor));
     editor.onDidChangeCursorSelection(({ selection }) => {
       setEditorSelection((editor.getModel()?.getValueInRange(selection) ?? "").slice(0, 12_000));
@@ -298,9 +322,10 @@ export function EditorWorkspace(): React.JSX.Element {
         {tabs.map((tab) => <button role="tab" aria-selected={tab.path === activePath} className={tab.path === activePath ? "active" : ""} key={tab.path} onClick={() => openFile(tab)}><Code2 size={14}/><span>{tab.name}</span>{tab.content !== tab.savedContent && <span className="dirty-dot" title="Unsaved"/>}<X size={13} onClick={(event) => { event.stopPropagation(); if (confirmDiscardUnsaved([tab])) closeFile(tab.path); }}/></button>)}
       </div>
       {active ? <>
-        <div className="breadcrumbs"><button className="inline-toggle" aria-pressed={inlineEnabled} title="Use your connected Codex account for HDL ghost text. Sends nearby code only when enabled. Tab accepts, Esc dismisses, Alt+\\ requests a suggestion." onClick={() => { const next = !inlineEnabled; setInlineEnabled(next); setInlineSuggestions(next); setSuggestionStatus(next ? "Tab accepts · Esc dismisses" : ""); }}>AI suggestions {inlineEnabled ? "on" : "off"}</button>{inlineEnabled && suggestionStatus && <span className="inline-status" title={suggestionStatus}>{suggestionStatus}</span>}<span>{active.path.replaceAll("/", "  ›  ")}</span><span className="breadcrumb-symbol">◇ {index.top} · {index.symbols.length} symbols · F12 definition · Shift+F12 references</span></div>
+        {(active.externalContent !== undefined || active.externalMissing) && <div className="external-file-notice" role="alert"><span>{active.externalMissing ? "This file was removed outside Studio. Your editor buffer is preserved." : "This file changed on disk. Your unsaved edits are preserved."}</span>{active.externalContent !== undefined && <><button onClick={() => useWorkbench.getState().reloadFile(active.path,active.externalContent!)}>Load disk version</button><button onClick={() => useWorkbench.getState().keepLocalFile(active.path)}>Keep my edits</button></>}</div>}
+        <div className="breadcrumbs"><button className="inline-toggle" aria-pressed={inlineEnabled} title="Use your connected Codex account for HDL ghost text. Sends nearby code only when enabled. Tab accepts, Esc dismisses, Alt+\\ requests a suggestion." onClick={() => { const next = !inlineEnabled; setInlineEnabled(next); setInlineSuggestions(next); setSuggestionStatus(next ? "Tab accepts · Esc dismisses" : ""); }}>AI suggestions {inlineEnabled ? "on" : "off"}</button>{inlineEnabled && <button className="inline-toggle" title="Request ghost text (Alt+Backslash)" onClick={() => { editorRef.current?.focus(); void editorRef.current?.getAction("editor.action.inlineSuggest.trigger")?.run(); }}>Suggest</button>}{inlineEnabled && suggestionStatus && <span className="inline-status" title={suggestionStatus}>{suggestionStatus}</span>}<span>{active.path.replaceAll("/", "  ›  ")}</span>{active.externallyUpdated && <span className="external-update-label" title="Clean editor buffers follow changes from the assistant and other tools">Updated from disk</span>}{activeChange && <button className="inline-toggle review-file-button" onClick={()=>openChangeReview(active.path)}><GitCompareArrows size={13}/> Review changes</button>}<span className="breadcrumb-symbol" title={`${index.symbols.length} symbols · F12 definition · Shift+F12 references`}>◇ {index.top}</span></div>
         <div className="editor-area">
-          <Editor beforeMount={configureMonaco} onMount={mounted} path={active.path} language={active.language} value={active.content} theme={theme === "light" ? "light" : "vs-dark"} onChange={(value) => updateFile(active.path, value ?? "")} options={{ inlineSuggest: { enabled: inlineEnabled }, fontFamily: "'JetBrains Mono', 'Cascadia Code', Consolas, monospace", fontSize: 13, lineHeight: 21, minimap: { enabled: true, scale: 1 }, smoothScrolling: true, cursorSmoothCaretAnimation: "on", renderWhitespace: "selection", bracketPairColorization: { enabled: true }, guides: { bracketPairs: true, indentation: true }, padding: { top: 12 }, automaticLayout: true, formatOnPaste: true, scrollBeyondLastLine: false, wordWrap: "off", quickSuggestions: { other: true, comments: false, strings: false }, suggestOnTriggerCharacters: true, folding: true, multiCursorModifier: "alt" }}/>
+          <Editor beforeMount={configureMonaco} onMount={mounted} path={active.path} language={active.language} value={active.content} theme={theme === "light" ? "light" : "vs-dark"} onChange={(value) => updateFile(active.path, value ?? "")} options={{ inlineSuggest: { enabled: inlineEnabled, suppressSuggestions: true }, fontFamily: "'JetBrains Mono', 'Cascadia Code', Consolas, monospace", fontSize: 13, lineHeight: 21, minimap: { enabled: true, scale: 1 }, smoothScrolling: true, cursorSmoothCaretAnimation: "on", renderWhitespace: "selection", bracketPairColorization: { enabled: true }, guides: { bracketPairs: true, indentation: true }, padding: { top: 12 }, automaticLayout: true, formatOnPaste: true, scrollBeyondLastLine: false, wordWrap: "off", snippetSuggestions: "top", tabCompletion: "on", quickSuggestionsDelay: 100, quickSuggestions: { other: true, comments: false, strings: false }, suggestOnTriggerCharacters: true, folding: true, multiCursorModifier: "alt" }}/>
         </div>
       </> : <div className="empty-editor"><CircleX size={30}/><h2>No source file open</h2><p>Select a file from Explorer or create a module.</p><button className="secondary-button" disabled={!firstSource} onClick={() => void openFirstSource()}><GitCompareArrows size={15}/> Open first HDL source</button></div>}
     </section>

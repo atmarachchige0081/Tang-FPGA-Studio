@@ -71,6 +71,9 @@ export interface ProjectNode {
 }
 
 export interface OpenFile {
+  externalContent?: string;
+  externalMissing?: boolean;
+  externallyUpdated?: number;
   path: string;
   name: string;
   language: string;
@@ -681,4 +684,9 @@ export interface OptimizationSummary {
   experiments: OptimizationExperiment[];
   snapshots: DesignSnapshot[];
   regressions: PerformanceRegression[];
+}
+
+export interface ProjectFileChange {
+  path: string; before: string; after: string; kind: "added" | "modified" | "deleted"; revision: number;
+  hunks: Array<{ oldStart: number; oldLines: number; newStart: number; newLines: number }>;
 }

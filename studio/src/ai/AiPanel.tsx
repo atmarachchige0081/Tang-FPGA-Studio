@@ -1,3 +1,4 @@
+import { PanelResizeHandle } from "../components/PanelResizeHandle";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertTriangle, Bot, Check, ChevronDown, ChevronRight, CircleStop, Code2,
@@ -270,25 +271,9 @@ export function AiPanel(): React.JSX.Element {
     }
   }, []);
 
-  const refreshChangedFiles = useCallback(async (paths: string[]) => {
-    try {
-      const snapshot = await bridge.openProject(workbench.root, workbench.projectPath);
-      workbench.refreshProjectTree(snapshot.tree);
-    } catch { /* The editor refresh below still keeps open files synchronized. */ }
-    for (const path of paths) {
-      const tab = useWorkbench.getState().tabs.find((value) => value.path === path);
-      if (!tab || tab.content !== tab.savedContent) continue;
-      try {
-        const content = await bridge.readText(workbench.root, path);
-        useWorkbench.getState().reloadFile(path, content);
-      } catch {
-        useWorkbench.getState().closeFile(path);
-      }
-    }
-    window.dispatchEvent(new Event("fpga-studio:analysis-refresh"));
-    window.dispatchEvent(new Event("fpga-studio:verification-refresh"));
-    window.dispatchEvent(new Event("fpga-studio:intelligence-refresh"));
-  }, [workbench.root, workbench.projectPath]);
+  const refreshChangedFiles = useCallback(async (_paths: string[]) => {
+    window.dispatchEvent(new Event("fpga-studio:files-changed"));
+  }, []);
 
   useEffect(() => {
     let disposed = false;
@@ -647,7 +632,7 @@ export function AiPanel(): React.JSX.Element {
     return rows;
   }, [conversation.timeline, conversation.messages, conversation.activities]);
 
-  return <aside className="ai-panel" aria-label="AI Assistant">
+  return <aside className="ai-panel" aria-label="AI Assistant"><PanelResizeHandle panel="assistant"/>
     <header className="ai-panel-header"><div><Bot size={17}/><strong>AI Assistant</strong><span>{status?.connected ? accountLabel(account) : "Local provider"}</span></div><nav>
       <button aria-label="New AI conversation" title="New conversation" disabled={conversation.running} onClick={newConversation}><MessageSquarePlus size={15}/></button>
       <button aria-label="AI conversation history" title="Conversation history" onClick={() => setHistoryOpen((value) => !value)}><History size={15}/></button>

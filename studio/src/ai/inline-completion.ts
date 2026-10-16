@@ -18,16 +18,20 @@ export function completionText(value: string): string {
 
 /** One request at a time. A changed cursor/buffer can never receive an old edit. */
 export class InlineSuggestionService {
-  private busy = false;
+  private pending: Promise<unknown> = Promise.resolve();
   constructor(private readonly request: (prefix: string, suffix: string) => Promise<string>) {}
 
   async suggest(source: string, offset: number, current: () => boolean): Promise<string> {
-    if (this.busy || !current()) return "";
-    this.busy = true;
-    try {
+    // A newer cursor waits for the active request rather than losing its trigger.
+    const previous = this.pending;
+    const result = (async () => {
+      await previous.catch(() => undefined);
+      if (!current()) return "";
       const context = inlineContext(source, offset);
       const text = completionText(await this.request(context.prefix, context.suffix));
       return current() ? text : "";
-    } finally { this.busy = false; }
+    })();
+    this.pending = result;
+    return result;
   }
 }

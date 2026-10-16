@@ -1,0 +1,46 @@
+{
+  "version": "3.5.0",
+  "releaseTagCreated": false,
+  "frontend": {
+    "testsPassed": 80,
+    "testFiles": 26,
+    "typeCheck": "passed",
+    "productionBuild": "passed"
+  },
+  "native": {
+    "testsPassed": 80,
+    "ignored": 2,
+    "releaseClippy": "passed",
+    "productionBuild": "passed",
+    "binarySha256": "4823b12cba3104f4f250b87544858ab9e622611a3c1855fab9848b2a91b7cf0b"
+  },
+  "headlessSmoke": {
+    "platform": "Ubuntu 26.04",
+    "exitCode": 0
+  },
+  "desktop": {
+    "platform": "Ubuntu 26.04",
+    "checkpointsPassed": 24,
+    "provider": "local unauthenticated protocol fixture",
+    "realShellKeyboardAndPointer": true,
+    "actualFileWritesAndNativeDiffReview": true,
+    "screenshotsInspected": true,
+    "sourceWritesDuringReview": false
+  },
+  "assets": {
+    "bytes": 15619382,
+    "sourceMaps": 0
+  },
+  "limitations": [
+    "Windows ConPTY GUI acceptance pending",
+    "No attached physical Tang board",
+    "Real authenticated model generation and latency not established by fixture",
+    "Original Windows AI-sign-in-while-flashing exit not reproduced here",
+    "Earlier Linux package artifacts precede these source changes"
+  ],
+  "desktopNoAi": {
+    "checkpointsPassed": 18,
+    "status": "passed",
+    "realProviderInvoked": false
+  }
+}

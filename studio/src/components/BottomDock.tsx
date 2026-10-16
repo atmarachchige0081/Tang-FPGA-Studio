@@ -1,3 +1,5 @@
+import { PanelResizeHandle } from "./PanelResizeHandle";
+import { TerminalPane } from "./TerminalPane";
 import { useState } from "react";
 import { CheckCircle2, ChevronDown, ChevronUp, CircleAlert, CircleX, Copy, Eraser, Info, Search, TerminalSquare } from "lucide-react";
 import { openWorkspaceLocation } from "../lib/navigation";
@@ -10,17 +12,18 @@ const panels: Array<{ id: BottomPanel; label: string }> = [
 
 export function BottomDock(): React.JSX.Element {
   const { bottomPanel, bottomOpen, setBottomPanel, toggleBottom, diagnostics, clearOutput, output } = useWorkbench();
-  const copyOutput = () => void navigator.clipboard.writeText(output.map((event) => `[${event.phase}] ${event.message}`).join("\n")).catch(() => undefined);
+  const copyOutput = () => { if (bottomPanel === "terminal") { window.dispatchEvent(new Event("fpga-studio:terminal-copy")); return; } void navigator.clipboard.writeText(output.map((event) => `[${event.phase}] ${event.message}`).join("\n")).catch(() => undefined); };
   return <section className={`bottom-dock ${bottomOpen ? "open" : "closed"}`}>
+    {bottomOpen && <PanelResizeHandle panel="bottom"/>}
     <div className="dock-tabs">
       {panels.map((panel) => <button className={panel.id === bottomPanel ? "active" : ""} key={panel.id} onClick={() => setBottomPanel(panel.id)}>{panel.label}{panel.id === "problems" && diagnostics.length > 0 && <span className="count-badge">{diagnostics.length}</span>}</button>)}
       <span className="dock-spacer" />
-      <button className="dock-icon" onClick={clearOutput} title="Clear output"><Eraser size={14}/></button>
-      <button className="dock-icon" title="Copy output" onClick={copyOutput} disabled={!output.length}><Copy size={14}/></button>
+      <button className="dock-icon" onClick={() => bottomPanel === "terminal" ? window.dispatchEvent(new Event("fpga-studio:terminal-clear")) : clearOutput()} title={bottomPanel === "terminal" ? "Clear terminal" : "Clear output"}><Eraser size={14}/></button>
+      <button className="dock-icon" title={bottomPanel === "terminal" ? "Copy terminal" : "Copy output"} onClick={copyOutput} disabled={bottomPanel !== "terminal" && !output.length}><Copy size={14}/></button>
       <button className="dock-icon" onClick={toggleBottom} title={bottomOpen ? "Collapse panel" : "Expand panel"}>{bottomOpen ? <ChevronDown size={15}/> : <ChevronUp size={15}/>}</button>
     </div>
     {bottomOpen && <div className="dock-content">
-      {bottomPanel === "problems" ? <Problems/> : bottomPanel === "terminal" ? <Terminal/> : <Output/>}
+      {bottomPanel === "problems" ? <Problems/> : bottomPanel === "terminal" ? <TerminalPane/> : <Output/>}
     </div>}
   </section>;
 }
@@ -51,9 +54,5 @@ function Output(): React.JSX.Element {
   const allVisible = technical ? output : output.filter((event) => !isTechnical(event.message));
   const omitted = Math.max(0, allVisible.length - 400);
   const visible = allVisible.slice(-400);
-  return <div className="output-view"><div className="output-options"><span>{technical ? "Complete tool output" : "Beginner-friendly output"}{omitted > 0 ? ` · ${omitted} older lines kept off-screen for performance` : ""}</span>{hidden > 0 && <button onClick={() => setTechnical((value) => !value)}>{technical ? "Hide technical details" : `Show ${hidden} technical detail${hidden === 1 ? "" : "s"}`}</button>}</div><div className="output-lines" aria-live="polite">{visible.map((event, index) => <div className={event.stream} key={`${event.timestamp}-${index}`}><span>{new Date(event.timestamp).toLocaleTimeString([], { hour12: false })}</span><strong>{event.phase}</strong><code>{event.message}</code></div>)}</div></div>;
-}
-
-function Terminal(): React.JSX.Element {
-  return <div className="mini-terminal"><div><span className="prompt">PS</span> FPGA_DEV_ENV&gt; <span className="command">.\fpga.ps1 doctor</span></div><div className="terminal-ok"><CheckCircle2 size={13}/> Toolchain ready · Tang Primer 20K profile loaded</div><div><span className="prompt">PS</span> FPGA_DEV_ENV&gt; <span className="terminal-caret">▌</span></div></div>;
+  return <div className="output-view"><div className="output-options"><span>{technical ? "Complete tool output" : "Tool output"}{omitted > 0 ? ` · ${omitted} older lines kept off-screen for performance` : ""}</span>{hidden > 0 && <button onClick={() => setTechnical((value) => !value)}>{technical ? "Hide technical details" : `Show ${hidden} technical detail${hidden === 1 ? "" : "s"}`}</button>}</div><div className="output-lines" aria-live="polite">{visible.map((event, index) => <div className={event.stream} key={`${event.timestamp}-${index}`}><span>{new Date(event.timestamp).toLocaleTimeString([], { hour12: false })}</span><strong>{event.phase}</strong><code>{event.message}</code></div>)}</div></div>;
 }

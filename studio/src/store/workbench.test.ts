@@ -42,6 +42,42 @@ describe("workbench document state", () => {
     expect(tab?.content).not.toBe(tab?.savedContent);
   });
 
+  it("shows external edits immediately in a clean buffer", () => {
+    useWorkbench.getState().openFile(source);
+    useWorkbench.getState().syncFile(source.path, "module ai_edit; endmodule", false);
+    const tab = useWorkbench.getState().tabs[0];
+    expect(tab?.content).toBe("module ai_edit; endmodule");
+    expect(tab?.savedContent).toBe(tab?.content);
+    expect(tab?.externallyUpdated).toBeGreaterThan(0);
+  });
+  it("preserves unsaved edits and exposes an explicit conflict choice", () => {
+    useWorkbench.getState().openFile(source);
+    useWorkbench.getState().updateFile(source.path, "my local edits");
+    useWorkbench.getState().syncFile(source.path, "external changes", false);
+    expect(useWorkbench.getState().tabs[0]?.content).toBe("my local edits");
+    expect(useWorkbench.getState().tabs[0]?.externalContent).toBe("external changes");
+    useWorkbench.getState().keepLocalFile(source.path);
+    expect(useWorkbench.getState().tabs[0]?.content).toBe("my local edits");
+    expect(useWorkbench.getState().tabs[0]?.savedContent).toBe("external changes");
+    expect(useWorkbench.getState().tabs[0]?.externalContent).toBeUndefined();
+  });
+  it("keeps a deleted file's buffer and accepts a later recreated disk version", () => {
+    useWorkbench.getState().openFile(source);
+    useWorkbench.getState().syncFile(source.path, null, true);
+    expect(useWorkbench.getState().tabs[0]?.content).toBe(source.content);
+    expect(useWorkbench.getState().tabs[0]?.externalMissing).toBe(true);
+    useWorkbench.getState().syncFile(source.path, "recreated", false);
+    expect(useWorkbench.getState().tabs[0]?.externalMissing).toBe(false);
+    expect(useWorkbench.getState().tabs[0]?.content).toBe("recreated");
+  });
+
+  it("does not resurrect an already reviewed change from an older polling response", () => {
+    useWorkbench.setState({fileChanges:[],fileChangeRevision:5});
+    useWorkbench.getState().setFileChanges([{path:"rtl/top.sv",before:"old",after:"new",kind:"modified",revision:4,hunks:[]}],false,4);
+    expect(useWorkbench.getState().fileChanges).toHaveLength(0);
+    expect(useWorkbench.getState().fileChangeRevision).toBe(5);
+  });
+
   it("bounds streamed output to 2,000 entries", () => {
     for (let index = 0; index < 2_050; index += 1) {
       useWorkbench.getState().appendOutput({ jobId: "test", phase: "sim", stream: "stdout", message: String(index), timestamp: new Date(0).toISOString() });
