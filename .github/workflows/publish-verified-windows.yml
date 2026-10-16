@@ -1,0 +1,58 @@
+name: Publish verified Windows installer
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing Studio release tag
+        required: true
+        type: string
+      run_id:
+        description: Successful Windows MSVC package validation run for that tag's commit
+        required: true
+        type: string
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      RELEASE_TAG: ${{ inputs.tag }}
+      SOURCE_RUN: ${{ inputs.run_id }}
+    steps:
+      - name: Validate input
+        run: |
+          [[ "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          [[ "$SOURCE_RUN" =~ ^[0-9]+$ ]]
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.tag }}
+      - name: Require successful package validation at the exact release commit
+        run: |
+          gh api "repos/$GH_REPO/actions/runs/$SOURCE_RUN" > run.json
+          jq -e --arg sha "$(git rev-parse HEAD)" --arg repo "$GH_REPO" '
+            .status == "completed" and .conclusion == "success" and
+            .head_sha == $sha and .head_repository.full_name == $repo and
+            .path == ".github/workflows/windows-package.yml"
+          ' run.json
+          gh release view "$RELEASE_TAG" --json tagName --jq .tagName
+      - uses: actions/download-artifact@v6
+        with:
+          github-token: ${{ github.token }}
+          run-id: ${{ inputs.run_id }}
+          name: windows-msvc-package-and-evidence
+          path: verified
+      - name: Attach the tested installer and checksum
+        run: |
+          mapfile -d '' installers < <(find verified -type f -path '*/bundle/nsis/*.exe' -print0)
+          [[ "${#installers[@]}" == 1 ]]
+          mkdir release-assets
+          cp -- "${installers[0]}" release-assets/
+          cd release-assets
+          sha256sum -- *.exe > SHA256SUMS-Windows.txt
+          gh release upload "$RELEASE_TAG" ./*.exe SHA256SUMS-Windows.txt
