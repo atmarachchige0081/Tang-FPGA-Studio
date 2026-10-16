@@ -23,3 +23,6 @@ studio/src-tauri/icons/icon.png
 studio/src-tauri/icons/64x64.png
 
 studio/src-tauri/resources/
+
+# Generated validation reports belong in build/ or CI artifacts.
+/docs/evidence/

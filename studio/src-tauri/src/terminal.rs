@@ -297,7 +297,8 @@ mod tests {
         let mut child = pty.slave.spawn_command(command).unwrap();
         drop(pty.slave);
         let mut reader = pty.master.try_clone_reader().unwrap();
-        let mut writer = pty.master.take_writer().unwrap();
+        let writer = Arc::new(Mutex::new(pty.master.take_writer().unwrap()));
+        let terminal_reply = writer.clone();
         let (ready_tx, ready_rx) = std::sync::mpsc::channel();
         let (tx, rx) = std::sync::mpsc::channel();
         std::thread::spawn(move || {
@@ -308,7 +309,18 @@ mod tests {
                 if count == 0 {
                     break;
                 }
+                let previous_len = bytes.len();
                 bytes.extend_from_slice(&chunk[..count]);
+                // ConPTY inherits the cursor and waits for a terminal response.
+                // Production xterm supplies it; this headless test is the terminal.
+                for _ in bytes[previous_len.saturating_sub(3)..]
+                    .windows(4)
+                    .filter(|value| *value == b"\x1b[6n")
+                {
+                    let mut reply = terminal_reply.lock().unwrap();
+                    reply.write_all(b"\x1b[1;1R").unwrap();
+                    reply.flush().unwrap();
+                }
                 let output = String::from_utf8_lossy(&bytes);
                 // Wait for the interactive prompt before sending keys: PowerShell's
                 // line editor can discard input received during initialization.
@@ -330,8 +342,9 @@ mod tests {
             "printf 'TANG_%s\\n' 'PTY_OK'; pwd\n"
         };
         if ready.is_ok() {
-            writer.write_all(command.as_bytes()).unwrap();
-            writer.flush().unwrap();
+            let mut input = writer.lock().unwrap();
+            input.write_all(command.as_bytes()).unwrap();
+            input.flush().unwrap();
         }
         let result = rx.recv_timeout(std::time::Duration::from_secs(30));
         let _ = child.kill();

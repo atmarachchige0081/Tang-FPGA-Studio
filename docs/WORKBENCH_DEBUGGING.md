@@ -94,4 +94,3 @@ npm run desktop
    Wait for the status, accept with Tab, or dismiss with Esc. Verify ordinary
    HDL completions with Ctrl+Space even when AI suggestions are disabled.
 6. Repeat the previous AI sign-in while programming check on the Primer 20K Dock.
-

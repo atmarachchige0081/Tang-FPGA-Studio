@@ -1,92 +1,107 @@
 # Tang FPGA Studio
 
-An open-source FPGA workbench for Sipeed Tang boards, available on Windows and
-Ubuntu 22.04 or newer. Write Verilog and SystemVerilog, simulate, inspect
-waveforms, build a bitstream and program your board from one workspace.
+**Arduino-style simplicity for FPGA development.**
 
-[Download releases](https://github.com/atmarachchige0081/Tang-FPGA-Studio/releases/latest) ·
-[Installation](INSTALL.md) · [Ubuntu setup](docs/LINUX.md) ·
-[AI assistant](docs/AI_ASSISTANT.md) · [Changelog](CHANGELOG.md)
+Pick a Tang board, open an example, and take your design from code to real
+hardware in one desktop workspace. Tang FPGA Studio brings editing, simulation,
+building and programming together so you can spend more time learning digital
+design and making things.
 
-![Tang FPGA Studio 3.5 native desktop with a project terminal](docs/images/studio-main.png)
+Free and open source. Available for Windows and Ubuntu 22.04 or newer.
+
+[Download](https://github.com/atmarachchige0081/Tang-FPGA-Studio/releases/latest) ·
+[Get started](INSTALL.md) · [Linux installation](docs/LINUX.md) ·
+[Examples](projects/) · [Report an issue](https://github.com/atmarachchige0081/Tang-FPGA-Studio/issues)
+
+![Tang FPGA Studio with a Verilog project and integrated terminal](docs/images/studio-main.png)
+
+## From your first LED to your own hardware
+
+If you have used Arduino and want to explore FPGAs, Studio gives you a familiar
+place to start: choose your board, open a project, edit, build and upload.
+You write Verilog or SystemVerilog to describe digital hardware, with examples
+and tools that help you understand what your circuit is doing.
+
+Start with a blinking LED, work through buttons and PWM, then build a UART
+interface or a serial command console. Each example includes source code,
+board constraints and a simulation testbench you can inspect and change.
+
+## One place to work
+
+**Write your design.** Use a source editor with HDL completion, symbol navigation
+and diagnostics. Open existing Studio projects, organize files and work in a
+compact desktop layout with adjustable panels and dark or light themes.
+
+**See how it behaves.** Run simulations and inspect waveforms before touching
+the board. Explore synthesized logic, timing and resource use as your design grows.
+
+**Run it on hardware.** Build a bitstream, upload it to SRAM for testing, or flash
+it for use after power-off. JTAG checks, a UART terminal and an on-chip analyzer
+help connect the code on screen to the circuit on your desk.
+
+**Get help when you need it.** An optional AI assistant can explain code and help
+make changes using project context. Review saved edits in a native before/after
+view, respond to approvals and steer the conversation as you work. The editor
+and FPGA tools also work without an AI account.
+
+| Review changes before moving on | Work in light or dark |
+|---|---|
+| ![Saved source changes in the native review view](docs/images/studio-file-review.png) | ![The same native workspace in the light theme](docs/images/studio-main-light.png) |
+
+Screenshots show the native Linux application with a local example project.
 
 ## Get started
 
-**Windows:** the [one-file installer](https://github.com/atmarachchige0081/Tang-FPGA-Studio-Installer/releases/latest)
-sets up the app and offers the FPGA toolchain. Check its version matches the
-Studio release; installer publication runs separately. The Studio release also
-provides the native application installer. Follow [INSTALL.md](INSTALL.md) for
-first-board setup. Unsigned installers may display an Unknown publisher prompt.
+1. **Install Studio.** On Windows, use the
+   [guided one-file installer](https://github.com/atmarachchige0081/Tang-FPGA-Studio-Installer/releases/latest)
+   for the app and FPGA toolchain setup. On Ubuntu, choose the `.deb` or AppImage
+   from [Studio releases](https://github.com/atmarachchige0081/Tang-FPGA-Studio/releases/latest)
+   and follow the [Linux setup guide](docs/LINUX.md).
+2. **Choose a board and an example.** Create a project in Studio, or open an
+   existing project folder with `Ctrl+O`. The board package supplies the target
+   configuration and matching pin constraints.
+3. **Simulate, build and upload.** Check the example in simulation, build it,
+   then upload to SRAM and try it on your board. Use Flash when you are ready
+   to keep the design after power-off.
 
-**Ubuntu:** download the x86_64 `.deb` or AppImage from the release, then follow
-[the Linux guide](docs/LINUX.md) for system libraries, PowerShell 7, FPGA tools
-and USB permissions. Linux uses udev/libusb for JTAG and dialout for serial access.
-The application packages do not bundle the FPGA toolchain.
+The [installation guide](INSTALL.md) covers your first connection and driver
+setup. The [IDE guide](ide/README.md) explains everyday commands and shortcuts.
+FPGA tools are installed separately from the native application packages; the
+Windows guided installer offers that setup for you. Check its release version,
+since the installer is published through a separate pipeline.
 
-Choose **New project** for a board-specific example, or **Open project folder**
-(`Ctrl+O`) for an existing Studio project. Build and simulate before programming.
-Use SRAM upload for the normal test loop; Flash writes persistent configuration.
+## Supported Tang boards
 
-## The workspace
-
-- Verilog/SystemVerilog editing with project symbols, diagnostics, navigation,
-  module-port completion and optional AI inline suggestions.
-- A real PowerShell or Bash terminal, separate build output and resizable panels.
-- Live file updates from external tools, with explicit choices when unsaved edits conflict.
-- Native before/after review for saved changes, including files changed by an AI.
-  Changes remain marked until reviewed; this journal resets when the app restarts.
-- Optional Codex assistant with your own account, project context, approvals,
-  steering and stop controls. Normal editing and FPGA tools need no AI account.
-- Simulation, waveforms, netlist inspection, implementation reports, JTAG,
-  UART and an SRAM-only on-chip analyzer.
-
-Dark and light themes use the same compact layout. Drag panel dividers to resize;
-double-click a divider to reset it.
-
-| Review saved file changes | Light theme |
+| Family | Board packages |
 |---|---|
-| ![Native file review in the dark theme](docs/images/studio-file-review.png) | ![Native file review in the light theme](docs/images/studio-main-light.png) |
+| Tang Nano | 1K, 4K, 9K and 20K |
+| Tang Primer | 20K with Dock; 20K Core / Lite with user-defined carrier I/O |
+| Tang Console | 60K and 138K C revision |
 
-These screenshots show the native Linux application exercising a local test
-project. They demonstrate the UI, not a connected board or an authenticated AI response.
+Most targets use the open-source [OSS CAD Suite](https://github.com/YosysHQ/oss-cad-suite-build).
+Console 60K requires Gowin EDA for place and route. Always choose the package
+that matches your board revision and carrier; see the [board definitions](boards/).
+Supported build targets and physical hardware test results are documented
+separately in [validation scope](docs/LINUX_VALIDATION.md).
 
-## Supported boards
+## Learn by building
 
-| Board package | FPGA | Programmer alias | Build route / pin package |
-|---|---|---|---|
-| Tang Nano 1K | `GW1NZ-LV1QN48C6/I5` | `tangnano1k` | Open-source build |
-| Tang Nano 4K | `GW1NSR-LV4CQN48PC6/I5` | `tangnano4k` | Open-source build |
-| Tang Nano 9K | `GW1NR-LV9QN88PC6/I5` | `tangnano9k` | Open-source build; UART pin package |
-| Tang Nano 20K | `GW2AR-LV18QN88C8/I7` | `tangnano20k` | Open-source build; UART pin package |
-| Tang Primer 20K + Dock | `GW2A-LV18PG256C8/I7` | `tangprimer20k` | Open-source build; Dock JTAG/UART and I/O profile |
-| Tang Primer 20K Core / Lite | `GW2A-LV18PG256C8/I7` | `tangprimer20k` | Open-source build; carrier pins user-defined |
-| Tang Console 60K | `GW5AT-LV60PG484AC1/I0` | `tangconsole` | Gowin EDA required for place/route |
-| Tang Console 138K (C revision) | `GW5AST-LV138PG484AC1/I0` | `tangmega138k` | Open-source build with `GW5AST-138C` database |
+| Example | What you will explore |
+|---|---|
+| [Buttons, LEDs and PWM](projects/01_button_led_pwm) | Inputs, debouncing, counters and brightness control |
+| [UART terminal](projects/03_uart_terminal) | Serial communication between your FPGA and computer |
+| [Serial command console](projects/05_serial_command_console) | A small command interface running in hardware |
+| [Hardware intelligence](projects/06_hardware_intelligence) | Inspecting implementation and internal signals |
 
-Board packages describe supported build targets and pin mappings, not physical
-acceptance of every board. Check your board revision and carrier before using
-constraints. Console 60K requires Gowin EDA; other listed targets use the pinned
-[OSS CAD Suite](https://github.com/YosysHQ/oss-cad-suite-build).
+For assistant setup, see the [AI guide](docs/AI_ASSISTANT.md). For internal
+signal capture, see the [analyzer guide](docs/HARDWARE_ANALYZER.md).
 
-For the Primer 20K Dock, enable the core with DIP switch 1 down and connect the
-Dock's **JTAG/UART** USB-C port. On Windows, WinUSB belongs on **Interface 0 / MI_00**
-only; keep Interface 1's serial driver for UART. See [installation](INSTALL.md).
+## Contribute
 
-## Learn and contribute
+Bug reports, documentation improvements, examples and code contributions are
+welcome. Start with [Contributing](CONTRIBUTING.md); build and release checks
+are described in [Deployment](docs/DEPLOYMENT.md). See the [Changelog](CHANGELOG.md)
+for release history and [Security](SECURITY.md) for reporting vulnerabilities.
 
-Start with the [button/LED lesson](projects/01_button_led_pwm),
-[UART example](projects/03_uart_terminal), or
-[serial command console](projects/05_serial_command_console).
-The [IDE guide](ide/README.md) covers everyday commands and shortcuts.
-
-Contributors need Node.js 24, Rust and the platform's Tauri prerequisites:
-
-```sh
-cd studio
-npm ci
-npm run desktop
-```
-
-See [Contributing](CONTRIBUTING.md), [deployment and checks](docs/DEPLOYMENT.md),
-[validation scope](docs/LINUX_VALIDATION.md) and [security reporting](SECURITY.md).
-Source code is available under the [MIT license](LICENSE).
+Tang FPGA Studio is an independent project, licensed under [MIT](LICENSE).
+It is not affiliated with Arduino.
