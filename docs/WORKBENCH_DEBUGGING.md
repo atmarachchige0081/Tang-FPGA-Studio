@@ -1,7 +1,6 @@
 # Workbench refinement and debugging
 
-This update stays at the prepared 3.5.0 version. It is committed to `master` for
-workstation testing; no release tag is created.
+Workbench behavior and troubleshooting for version 3.5.0.
 
 ## Fixes
 
@@ -96,16 +95,3 @@ npm run desktop
    HDL completions with Ctrl+Space even when AI suggestions are disabled.
 6. Repeat the previous AI sign-in while programming check on the Primer 20K Dock.
 
-## Evidence boundaries
-
-Saved logs and inspected screenshots are in `evidence/workbench-refinement/`.
-Linux desktop checks use a local Codex protocol fixture, not real account
-inference. A real PTY, real keyboard input, real pointer drags and actual file
-writes are exercised. No cloud physical-board or Windows ConPTY GUI pass is
-claimed. Model latency/quality still depends on the selected account/provider.
-The previous Windows sign-in-while-flashing exit needs workstation acceptance.
-
-Verified in this update: 80 frontend tests, 80 native tests (two ignored), release
-Clippy, final production frontend/native builds, 24 native desktop checkpoints
-with the local protocol fixture and 18 native checkpoints with AI disabled.
-See the saved validation manifest and native screenshots for scope and limitations.

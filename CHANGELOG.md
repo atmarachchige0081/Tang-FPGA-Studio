@@ -2,7 +2,7 @@
 
 All notable user-facing changes are recorded here.
 
-## 3.5.0 — Unreleased
+## 3.5.0 — 2026-10-16
 
 - Replace the placeholder terminal with a real project shell and recoverable PTY session.
 - Add persistent draggable Explorer, assistant and output-panel sizes.
@@ -30,9 +30,8 @@ All notable user-facing changes are recorded here.
 - Verified native Linux workflows and AppImage UI across the three Ubuntu LTS
   versions; prepared Windows MSVC install/smoke/uninstall validation.
 - Aligned application metadata at 3.5.0.
-- Publication remains pending Windows runtime, physical-board and applicable
-  vendor-tool acceptance. Existing 3.4.1 artifacts are development evidence,
-  not final 3.5.0 release packages. See [release preparation](docs/RELEASE_PREPARATION.md).
+- Updated repository screenshots and documentation; removed generated development logs and obsolete handoffs.
+- Corrected native diff-model disposal and the Windows PTY regression-test lifecycle.
 
 ## 3.4.1 — 2026-10-14
 

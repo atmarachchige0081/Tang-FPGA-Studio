@@ -1,70 +1,26 @@
-# Linux validation record
+# Validation scope
 
-Validation dates: 2026-10-14 and 2026-10-15. Base revision: `84e97ee7889e5edc0a26680dfdcd8ff5b03c7591`, with Linux implementation committed as `4b5a1cf`. Fresh 3.5.0 candidate artifacts were built and checked on 2026-10-15; the application source is `07acdf9`, with validation fixes on `codex/release-3.5.0-validation`. No release tag has been created.
+The release workflows retain logs, test results, packages and generated FPGA
+artifacts in GitHub Actions rather than committing them to the source tree.
 
-## Environment and method
+- [Quality gates](https://github.com/atmarachchige0081/Tang-FPGA-Studio/actions/workflows/quality-gates.yml): frontend, Rust, Python, PowerShell and HDL checks.
+- [Ubuntu native application](https://github.com/atmarachchige0081/Tang-FPGA-Studio/actions/workflows/linux.yml): Ubuntu 22.04, 24.04 and 26.04, native packages, WebDriver UI checks and FPGA build workflows.
+- [Windows package validation](https://github.com/atmarachchige0081/Tang-FPGA-Studio/actions/workflows/windows-package.yml): MSVC build, NSIS installation, application smoke test and uninstallation.
 
-The production executable and packages were built on Ubuntu 22.04 x86_64. Runtime checks use Ubuntu 22.04, 24.04 and 26.04 containers, ordinary users, Xvfb, real WebKitGTK and native Tauri IPC. The embedded production UI runs without Vite. Containers permit WebKit's own process sandbox; no WebKit sandbox-disabling switch is used. This validates userspace behavior, not workstation USB access or a complete desktop distribution.
+Select the run for the release tag or its exact commit. A successful build on
+one platform does not establish runtime compatibility on another.
 
-PowerShell 7.6.7 and checksum-verified OSS CAD Suite 2026-07-26 provide the shared FPGA runner. Ubuntu 26.04 uses the verified upstream portable PowerShell runtime because its Microsoft APT feed does not supply the package.
+The native UI checks exercise editor saves, a real shell, panel resizing,
+external-file synchronization, unsaved conflicts and before/after file review.
+Optional AI-fixture checks use a local protocol fixture, not a real account or
+model. Authenticated AI behavior requires a user's own account.
 
-## Completed checks
+Cloud runners do not have a Tang board attached. JTAG detection, SRAM upload,
+persistent flash, UART traffic and analyzer captures require a separate physical
+board test. The maintainer reported successful detection and flashing on a
+Windows 11 laptop with a Tang Primer 20K Dock during development; this does not
+certify every board, OS or release artifact. Console 60K vendor place/route
+also requires the separately installed Gowin EDA tools.
 
-| Check | Result |
-| --- | --- |
-| Frontend | 57 tests passed across 19 files; TypeScript and production build passed |
-| Python | 37 tests passed |
-| Native Rust, Ubuntu 22.04 | 72 passed, 2 explicitly ignored; formatting and release Clippy with warnings denied passed |
-| Dependency audit | No reported vulnerabilities |
-| Shared PowerShell runner | Eight examples linted and self-checking simulations passed; full implementation and timing check passed |
-| Paths and cleanup | External project path containing spaces, traversal rejection and safe cleanup passed |
-| Native Ubuntu 22.04 desktop | Full workflow and editor/hardware screenshots passed |
-| Native Ubuntu 24.04 desktop | Full workflow and editor/hardware screenshots passed |
-| Native Ubuntu 26.04 desktop | Final installed package passed all 17 checkpoints on 2026-10-15; native screenshots and results committed under `docs/evidence/linux/`. |
-| AppImage | Built on 22.04; native UI, resource seeding, project save/read, offline Monaco and hardware guidance passed on 22.04, 24.04 and 26.04 |
-| Windows compile | Windows MSVC production NSIS install, installed headless smoke and uninstall passed in [Actions](https://github.com/atmarachchige0081/Tang-FPGA-Studio/actions/runs/38780505263). Windows 11 GUI/hardware acceptance remains pending. |
-
-The full native desktop test exercises writable packaged resources, boards/patterns/plugins, project creation, save/read, HDL indexing/search, Git discovery, lint, simulation, bitstream/timing reports, waveform/netlist/traceability APIs, analyzer configuration and instrumented bitstream generation, and a measured optimization experiment. Serial enumeration and AI provider status are checked without asserting hardware or authenticated service access. Console 60K lint, simulation, Yosys synthesis and Gowin project generation pass; absent vendor implementation is an expected prerequisite failure.
-
-The two ignored Rust tests are retained fixture-based tests; the native desktop workflow separately exercises real analyzer-build and optimization operations. They are not counted as passing tests.
-
-## Board implementation evidence
-
-All six open-source device families produced nonempty packed bitstreams and met the indicated clock constraint. These are implementation timing estimates, not measured board clocks. Primer Core/Lite share the verified device family; external carrier pins remain user-defined.
-
-| Board family | Achieved MHz | Constraint MHz |
-| --- | ---: | ---: |
-| Nano 1K | 245.52 | 27 |
-| Nano 4K | 245.52 | 27 |
-| Nano 9K | 245.52 | 27 |
-| Nano 20K | 446.23 | 27 |
-| Primer 20K | 427.72 | 27 |
-| Console 138K C | 458.51 | 50 |
-
-Raw reports and bitstreams are under `build/linux-evidence/` and `.fpga-studio/board-smoke/`. Native screenshots are `docs/evidence/release-3.5.0/ubuntu26-native-desktop.png` and `docs/evidence/release-3.5.0/ubuntu26-native-linux-hardware.png`; earlier files in `previews/` are explicitly browser previews, not package or hardware evidence. Logs are retained in `build/linux-evidence/logs/`.
-
-## Compatibility issues addressed
-
-- The frontend declared a Windows-only Tauri binary as a direct dependency, preventing normal Linux installation. Tauri's platform-selecting optional dependencies now choose the host binary; the Windows wrapper remains in use on Windows.
-- PowerShell paths, executable names, external-project guards and environment setup assumed Windows. The shared runner now selects native Linux tools, preserves Linux filename case and supports spaces without relaxing path validation.
-- Installed application resources are read-only. Linux packages seed a writable per-user workspace and preserve existing edits rather than building inside `/usr` or the AppImage mount.
-- Windows USB repair advice was inappropriate on Linux. The hardware panel and native errors now explain udev/libusb and dialout; privilege changes remain explicit.
-- Cancelling a Linux tool job must also stop its child tools. The runner owns and terminates its Unix process group.
-- Mixing bundled Ubuntu 22.04 libraries with newer host GIO/graphics modules broke the AppImage GUI on 26.04 despite a passing headless smoke test. AppImage finalization now retains application resources and uses the host desktop libraries; its native UI is validated separately.
-- New Verilator warnings, FUSE-less AppImage builders, a missing `file` packaging prerequisite, Ubuntu 26.04's renamed WebDriver package, and its absent PowerShell APT package were reproduced and addressed.
-- Packaged-editor verification encountered a WebKit reload race. The test now waits for the new document and opens the exact RTL path. WebDriver transport resets are handled with read-only retries and uniquely identified IPC result polling; mutating build commands are never replayed.
-
-## Development packages
-
-The reviewed `.deb` and `.AppImage` are copied to `build/linux-evidence/packages/` with `SHA256SUMS`. Verify the exact downloaded files against that manifest; repackaging changes the checksums.
-
-The historical folder contains 3.4.1 evidence. Fresh 3.5.0 Linux packages are in `build/release-3.5.0/packages/`, with the manifest committed in `docs/evidence/release-3.5.0/SHA256SUMS`. Final tagged artifacts must identify the eventual reviewed revision and receive matching checksums.
-
-## Remaining release gates
-
-- The automated Windows/MSVC NSIS gate passed; complete Windows 11 GUI and the external complete one-file installer acceptance on the confirmed Dock test host.
-- On real supported hardware, record JTAG identity, SRAM programming and observed behavior, explicit flash write and power-cycle persistence, UART transmit/receive, and actual on-chip analyzer capture. No USB board is connected to this cloud environment.
-- Supply Linux Gowin EDA and any required license for Console 60K place/route and programming evidence.
-- Verify authenticated AI operations with the user's own Codex CLI installation and credentials if claiming that integration as release-tested.
-
-Do not create a dual-platform release tag until the applicable gates have recorded results. See [LINUX.md](LINUX.md) for installation and repeatable commands and `.github/workflows/linux.yml` for the Ubuntu CI matrix. A configured workflow is not evidence of a remote CI run.
+See [Linux setup](LINUX.md), [Windows acceptance steps](WINDOWS11_PRIMER20K_ACCEPTANCE.md)
+and [workbench troubleshooting](WORKBENCH_DEBUGGING.md).

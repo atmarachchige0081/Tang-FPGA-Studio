@@ -298,31 +298,49 @@ mod tests {
         drop(pty.slave);
         let mut reader = pty.master.try_clone_reader().unwrap();
         let mut writer = pty.master.take_writer().unwrap();
-        let command = if cfg!(windows) {
-            "Write-Output ('TANG_' + 'PTY_OK'); exit\r\n"
-        } else {
-            "printf 'TANG_%s\\n' 'PTY_OK'; exit\n"
-        };
-        writer.write_all(command.as_bytes()).unwrap();
-        writer.flush().unwrap();
+        let (ready_tx, ready_rx) = std::sync::mpsc::channel();
         let (tx, rx) = std::sync::mpsc::channel();
         std::thread::spawn(move || {
             let mut bytes = Vec::new();
             let mut chunk = [0u8; 1024];
+            let mut reported = false;
             while let Ok(count) = reader.read(&mut chunk) {
                 if count == 0 {
                     break;
                 }
                 bytes.extend_from_slice(&chunk[..count]);
-                if String::from_utf8_lossy(&bytes).contains("TANG_PTY_OK") {
-                    break;
+                let output = String::from_utf8_lossy(&bytes);
+                // Wait for the interactive prompt before sending keys: PowerShell's
+                // line editor can discard input received during initialization.
+                if output.contains("> ") || output.contains("$ ") || output.contains("# ") {
+                    let _ = ready_tx.send(());
                 }
+                if !reported && output.contains("TANG_PTY_OK") {
+                    let _ = tx.send(output.into_owned());
+                    reported = true;
+                }
+                // Keep draining even after success. Closing ConPTY with unread
+                // output can block ClosePseudoConsole indefinitely on Windows.
             }
-            let _ = tx.send(String::from_utf8_lossy(&bytes).into_owned());
         });
-        let result = rx.recv_timeout(std::time::Duration::from_secs(15));
+        let ready = ready_rx.recv_timeout(std::time::Duration::from_secs(30));
+        let command = if cfg!(windows) {
+            "Write-Output ('TANG_' + 'PTY_OK'); (Get-Location).Path\r"
+        } else {
+            "printf 'TANG_%s\\n' 'PTY_OK'; pwd\n"
+        };
+        if ready.is_ok() {
+            writer.write_all(command.as_bytes()).unwrap();
+            writer.flush().unwrap();
+        }
+        let result = rx.recv_timeout(std::time::Duration::from_secs(30));
         let _ = child.kill();
         let _ = child.wait();
-        assert!(result.unwrap().contains("TANG_PTY_OK"));
+        drop(writer);
+        drop(pty.master);
+        assert!(ready.is_ok(), "Shell did not reach its interactive prompt");
+        assert!(result
+            .expect("Shell did not execute the typed command")
+            .contains("TANG_PTY_OK"));
     }
 }

@@ -7,11 +7,9 @@ It installs the Tauri/Rust application under Program Files and prepares a
 writable, version-matched workspace under Documents. A complete repository
 checkout remains supported for contributors.
 
-Ubuntu 22.04/24.04/26.04 x86_64 `.deb` and AppImage distributions are prepared
-for the proposed dual-platform release. See the [Linux guide](LINUX.md),
-[validation evidence](LINUX_VALIDATION.md), and [remaining release gates](RELEASE_PREPARATION.md).
-Local Linux development packages are not proof that a dual-platform release has
-been published or that physical hardware acceptance is complete.
+Ubuntu 22.04/24.04/26.04 x86_64 packages are available as `.deb` and AppImage.
+See the [Linux guide](LINUX.md) and [validation scope](LINUX_VALIDATION.md).
+Software/package checks and physical-board acceptance are separate.
 
 Requirements:
 

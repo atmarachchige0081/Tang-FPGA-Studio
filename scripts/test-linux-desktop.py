@@ -498,6 +498,7 @@ def main():
                     assert js("return !Array.from(document.querySelectorAll('.runtime-notice')).some(node => node.textContent.includes('Canceled'))"), 'Normal editor cancellation was shown as an application error'
                     passed('Native Monaco displayed fixture ghost text; Tab accepted it and only explicit Save persisted it')
                     invoke('ai_disconnect')
+                assert not js("return Array.from(document.querySelectorAll('.runtime-notice')).some(node => node.textContent.includes('TextModel got disposed'))"), 'Diff review disposal raised a runtime error'
                 screenshot('native-desktop.png')
                 passed('Native desktop screenshot captured')
                 js("Array.from(document.querySelectorAll('button')).find(b => b.getAttribute('aria-label') === 'Open hardware manager')?.click()")
