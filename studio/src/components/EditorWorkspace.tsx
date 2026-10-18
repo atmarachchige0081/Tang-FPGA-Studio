@@ -319,7 +319,7 @@ export function EditorWorkspace(): React.JSX.Element {
   return (
     <section className="editor-workspace">
       <div className="editor-tabs" role="tablist">
-        {tabs.map((tab) => <button role="tab" aria-selected={tab.path === activePath} className={tab.path === activePath ? "active" : ""} key={tab.path} onClick={() => openFile(tab)}><Code2 size={14}/><span>{tab.name}</span>{tab.content !== tab.savedContent && <span className="dirty-dot" title="Unsaved"/>}<X size={13} onClick={(event) => { event.stopPropagation(); if (confirmDiscardUnsaved([tab])) closeFile(tab.path); }}/></button>)}
+        {tabs.map((tab) => <button role="tab" aria-selected={tab.path === activePath} className={tab.path === activePath ? "active" : ""} key={tab.path} onClick={() => openFile(tab)}><Code2 size={14}/><span>{tab.name}</span>{tab.content !== tab.savedContent && <span className="dirty-dot" title="Unsaved"/>}<X size={13} onClick={async (event) => { event.stopPropagation(); if (await confirmDiscardUnsaved([tab])) closeFile(tab.path); }}/></button>)}
       </div>
       {active ? <>
         {(active.externalContent !== undefined || active.externalMissing) && <div className="external-file-notice" role="alert"><span>{active.externalMissing ? "This file was removed outside Studio. Your editor buffer is preserved." : "This file changed on disk. Your unsaved edits are preserved."}</span>{active.externalContent !== undefined && <><button onClick={() => useWorkbench.getState().reloadFile(active.path,active.externalContent!)}>Load disk version</button><button onClick={() => useWorkbench.getState().keepLocalFile(active.path)}>Keep my edits</button></>}</div>}

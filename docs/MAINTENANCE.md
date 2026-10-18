@@ -1,5 +1,58 @@
 # Maintenance log
 
+## 2026-10-18 — Terminal teardown, resizing and native confirmations
+
+- **Workflow:** open/switch the terminal, resize the window/panel, and confirm
+  destructive actions. Reviewed recent changes and the preceding maintenance log.
+- **Evidence:** a real Chromium/React/xterm regression reproduced the reported
+  `Cannot read properties of undefined (reading 'dimensions')` repeatedly across
+  25 panel-switch/resize cycles. Stack traces identified a delayed xterm viewport
+  callback reading a renderer after disposal, including StrictMode cleanup.
+  The terminal also performed layout-changing fitting synchronously inside
+  ResizeObserver delivery, a feedback-loop risk matching the reported warning.
+- **Confirmation cause:** the installed dialog 2.7.3 initialization script makes
+  `window.confirm` asynchronous and invokes the removed `dialog|confirm` command.
+  Synchronous boolean checks could interpret its Promise as approval. Only file-
+  open permission was granted; supported confirmations require message permission.
+- **Changes:** all application confirmation callers now await a shared helper
+  using the supported native API, with browser fallback. Dialog failure cancels
+  the action and reports an actionable output error. Existing confirmation wording
+  and safeguards remain. Replace all rechecks scope/dirty buffers after approval;
+  save/restart retain locks during the prompt. Minimal message permission added.
+  Terminal fitting is scheduled outside observer delivery, deduplicated by size,
+  and cancelled on teardown. A pinned, source-checked, idempotent xterm workaround
+  prevents disposed viewport synchronization; install/dev/build hooks apply it.
+- **Verification:** native IPC tests exercise the real JavaScript dialog API with
+  mocked IPC, checking `dialog|message` and both answers. Focused tests cover pending
+  approval, cancellation and dialog failure. The previous replacement race test
+  now explicitly waits for native replacement to start before simulating typing,
+  preserving its intended regression after asynchronous approval was introduced.
+  `scripts/test-terminal-lifecycle.py` exercises real React/xterm with simulated
+  PTY I/O; all 25 cycles passed with no browser errors and resize calls recorded.
+  Typed input reached the simulated PTY; cancelling Restart left the shell intact.
+  Screenshot inspected at `build/terminal-safety/terminal.png`; generated evidence
+  remains untracked. Full frontend check passed: type checking, production build
+  and 95 tests across 28 files. Patch application/repeat verification and Python
+  compilation passed; `git diff --check` passed.
+- **Limits:** the exact ResizeObserver warning did not reproduce locally; its
+  terminal feedback path was removed without filtering global errors. Native
+  Windows dialogs/PTY and physical hardware were not exercised. No hardware or
+  shell commands were executed by the browser fixture; no dependency upgrades,
+  release tags or UI redesign.
+- **Real-user check:** on Windows, open the terminal, resize it and switch panels
+  repeatedly. Press Restart and Cancel: the existing shell must remain. Modify a
+  file, close it and Cancel: its text must remain, without dialog errors.
+- **New report / next priority:** user reports an AI explanation prompt preceded
+  an app restart. Supplied Windows log shows successful compilation, bulk frontend
+  source-change notifications and native restart on `app-icon.svg` change; no AI
+  exception or native panic is included. Inspected request error handling and
+  Assistant boundary: neither deliberately restarts Vite/the app. Existing
+  explanation/streaming regression passes with preview provider; authenticated
+  Windows cause remains unconfirmed pending project path, approval/edit history
+  and crash/error lines. Do not attribute this to a provider or change watchers
+  without evidence. Native Windows confirmation/terminal check remains required;
+  save/file-sync ordering remains the subsequent maintenance priority.
+
 ## 2026-10-18 — Replace all preserves concurrent editor work
 
 - **Workflow:** project search → Replace all while typing or switching projects.

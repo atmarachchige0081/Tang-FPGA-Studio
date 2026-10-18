@@ -46,7 +46,7 @@ export function QuickLauncher({ onRun, onSave }: Props): React.JSX.Element | nul
   }, []);
 
   useEffect(() => {
-    const shortcuts = (event: KeyboardEvent) => {
+    const shortcuts = async (event: KeyboardEvent) => {
       if (!(event.ctrlKey || event.metaKey)) return;
       const key = event.key.toLowerCase();
       const state = useWorkbench.getState();
@@ -64,7 +64,7 @@ export function QuickLauncher({ onRun, onSave }: Props): React.JSX.Element | nul
       else if (key === "w" && state.activePath) {
         event.preventDefault();
         const active = state.tabs.find((tab) => tab.path === state.activePath);
-        if (!active || confirmDiscardUnsaved([active])) state.closeFile(state.activePath);
+        if (!active || await confirmDiscardUnsaved([active])) state.closeFile(state.activePath);
       }
       else if (event.key === "Tab" && state.tabs.length > 1) {
         event.preventDefault();

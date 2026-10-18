@@ -1,3 +1,4 @@
+import { confirmAction } from "../lib/documents";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AlertCircle, ArrowLeft, Braces, CaseSensitive, CheckCircle2, ChevronDown, ChevronRight, CirclePlus, FileCode2, FilePlus2, Files, Folder, FolderOpen, FolderPlus, GitBranch, MoreHorizontal, PackageCheck, RefreshCw, ReplaceAll, Search, Sparkles, X } from "lucide-react";
 import { bridge } from "../lib/bridge";
@@ -142,9 +143,14 @@ function WorkspaceSearch(): React.JSX.Element {
       setError("Save modified matching files before Replace all, so unsaved editor work is never overwritten.");
       return;
     }
-    if (!window.confirm(`Replace every occurrence of “${needle}” across the active project?`)) return;
     setReplacing(true); setError("");
     try {
+      if (!await confirmAction(`Replace every occurrence of “${needle}” across the active project?`)) return;
+      if (!current()) return;
+      if (useWorkbench.getState().tabs.some((tab) => matchedFiles.has(tab.path) && tab.content !== tab.savedContent)) {
+        setError("Save modified matching files before Replace all, so unsaved editor work is never overwritten.");
+        return;
+      }
       const summary = await bridge.replaceProject(root, projectPath, needle, replacement);
       for (const path of summary.files) {
         if (!current()) break;

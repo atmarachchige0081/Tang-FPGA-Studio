@@ -108,7 +108,7 @@ export function ProjectWizard(): React.JSX.Element | null {
   const create = async (event: React.FormEvent) => {
     event.preventDefault();
     if (!nameValid || !selectedBoard || loading || (mode === "template" ? !selectedTemplate : !customValid || !selectedTarget)) return;
-    if (!confirmDiscardUnsaved(useWorkbench.getState().tabs)) return;
+    if (!await confirmDiscardUnsaved(useWorkbench.getState().tabs)) return;
     setLoading(true);
     setError("");
     try {

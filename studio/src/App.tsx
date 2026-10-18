@@ -1,3 +1,4 @@
+import { confirmAction } from "./lib/documents";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { PanelResizeHandle, usePanelLayout, panelLayoutStyle } from "./components/PanelResizeHandle";
 import { ActivityBar } from "./components/ActivityBar";
@@ -224,9 +225,10 @@ function Workbench(): React.JSX.Element {
     if (saveLock.current) return;
     const active = store.tabs.find((tab) => tab.path === store.activePath);
     if (!active) return;
-    if (active.externalContent !== undefined && !window.confirm("This file changed on disk. Replace the disk version with your editor contents?")) return;
     saveLock.current = true;
     try {
+      if (active.externalContent !== undefined && !await confirmAction("This file changed on disk. Replace the disk version with your editor contents?")) return;
+      if (useWorkbench.getState().root !== store.root || useWorkbench.getState().projectPath !== store.projectPath) return;
       await bridge.writeText(store.root, active.path, active.content);
       store.markSaved(active.path, active.content);
       store.appendOutput({ jobId: "editor", phase: "save", stream: "system", message: `Saved ${active.path}`, timestamp: new Date().toISOString() });

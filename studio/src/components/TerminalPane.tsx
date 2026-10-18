@@ -1,3 +1,4 @@
+import { confirmAction } from "../lib/documents";
 import { useEffect, useRef, useState } from "react";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
@@ -20,6 +21,8 @@ export function TerminalPane(): React.JSX.Element {
     if (!root || !host.current) return;
     let disposed = false, stop: (() => void) | undefined, sequence = -1;
     let queue: TerminalEvent[] = [], writes = Promise.resolve();
+    let resizeFrame: number | undefined;
+    let lastWidth = -1, lastHeight = -1;
     session.current = null; setReady(false); setExited(false); setError("");
     const term = new Terminal({ fontFamily: "Consolas, 'Cascadia Code', monospace", fontSize: 13, lineHeight: 1.2, cursorBlink: true, scrollback: 3000, allowProposedApi: false });
     terminal.current = term;
@@ -44,7 +47,15 @@ export function TerminalPane(): React.JSX.Element {
       void navigator.clipboard.writeText(term.getSelection() || lines.join("\n")).catch((reason) => { if (!disposed) setError(String(reason)); });
     };
     window.addEventListener("fpga-studio:terminal-clear",clear); window.addEventListener("fpga-studio:terminal-copy",copy);
-    const observer = new ResizeObserver(resize); observer.observe(host.current);
+    // Fit changes the viewport layout; defer it beyond ResizeObserver delivery.
+    const observer = new ResizeObserver(([entry]) => {
+      if (disposed || !entry) return;
+      const { width, height } = entry.contentRect;
+      if (width === lastWidth && height === lastHeight) return;
+      lastWidth = width; lastHeight = height;
+      if (resizeFrame !== undefined) cancelAnimationFrame(resizeFrame);
+      resizeFrame = requestAnimationFrame(() => { resizeFrame = undefined; resize(); });
+    }); observer.observe(host.current);
     const input = term.onData((data) => {
       const id = session.current; if (!id || disposed) return;
       writes = writes.then(() => bridge.terminalWrite(id,data)).catch((reason) => { if (!disposed) setError(String(reason)); });
@@ -59,7 +70,7 @@ export function TerminalPane(): React.JSX.Element {
       term.write(snapshot.data); setExited(snapshot.exited); setReady(true);
       queue.forEach(receive); queue = []; resize();
     })().catch((reason) => { if (!disposed) setError(String(reason)); });
-    return () => { disposed = true; window.removeEventListener("fpga-studio:terminal-clear",clear); window.removeEventListener("fpga-studio:terminal-copy",copy); stop?.(); observer.disconnect(); input.dispose(); term.dispose(); terminal.current = null; session.current = null; };
+    return () => { disposed = true; window.removeEventListener("fpga-studio:terminal-clear",clear); window.removeEventListener("fpga-studio:terminal-copy",copy); stop?.(); observer.disconnect(); if (resizeFrame !== undefined) cancelAnimationFrame(resizeFrame); input.dispose(); term.dispose(); terminal.current = null; session.current = null; };
   }, [root, projectPath, generation]);
   useEffect(() => {
     if (!terminal.current || !host.current) return;
@@ -68,9 +79,14 @@ export function TerminalPane(): React.JSX.Element {
   }, [theme]);
   const restart = async () => {
     if (restarting) return;
-    if (session.current && !exited && !window.confirm("Restart this shell? Any commands running in it will stop.")) return;
+    const id = session.current;
     setRestarting(true);
-    try { if (session.current) await bridge.terminalClose(session.current); setGeneration((v) => v+1); }
+    try {
+      if (id && !exited && !await confirmAction("Restart this shell? Any commands running in it will stop.")) return;
+      if (session.current !== id) return;
+      if (id) await bridge.terminalClose(id);
+      setGeneration((v) => v+1);
+    }
     catch (reason) { setError(String(reason)); }
     finally { setRestarting(false); }
   };

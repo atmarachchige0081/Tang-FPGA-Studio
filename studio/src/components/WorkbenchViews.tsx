@@ -351,7 +351,7 @@ export function UartView(): React.JSX.Element {
 export function WelcomeView(): React.JSX.Element {
   const { setView, setActivity, openProjectWizard, project, projectPath, board, build, root, recentProjects, setWorkspace, setBuild, setBoard, appendOutput } = useWorkbench();
   const switchProject = async (path: string) => {
-    if (!confirmDiscardUnsaved(useWorkbench.getState().tabs)) return;
+    if (!await confirmDiscardUnsaved(useWorkbench.getState().tabs)) return;
     try {
       const snapshot = await bridge.openProject(root, path);
       setWorkspace(snapshot.root, snapshot.project, snapshot.projectPath, snapshot.tree, snapshot.recentProjects);

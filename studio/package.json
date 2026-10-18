@@ -14,9 +14,9 @@
     "desktop": "node scripts/run-tauri.mjs dev",
     "desktop:build": "node scripts/run-tauri.mjs build",
     "desktop:doctor": "node scripts/run-tauri.mjs check",
-    "postinstall": "node scripts/patch-monaco.mjs",
-    "predev": "node scripts/patch-monaco.mjs",
-    "prebuild": "node scripts/patch-monaco.mjs"
+    "postinstall": "node scripts/patch-monaco.mjs && node scripts/patch-xterm.mjs",
+    "predev": "node scripts/patch-monaco.mjs && node scripts/patch-xterm.mjs",
+    "prebuild": "node scripts/patch-monaco.mjs && node scripts/patch-xterm.mjs"
   },
   "dependencies": {
     "@monaco-editor/react": "4.7.0",

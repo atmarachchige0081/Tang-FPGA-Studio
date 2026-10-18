@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import * as documents from "../lib/documents";
 import { bridge } from "../lib/bridge";
 import { useWorkbench } from "../store/workbench";
 import type { ProjectReplaceSummary } from "../types";
@@ -24,13 +25,14 @@ beforeEach(async () => {
 });
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 
-async function startReplacement() {
+async function startReplacement(waitForStart = true) {
   const ui = render(<Sidebar/>);
   fireEvent.change(screen.getByLabelText("Find in project"), { target: { value: "before" } });
   await screen.findByText(source.content);
   fireEvent.click(screen.getByRole("button", { name: "Toggle Replace" }));
   fireEvent.change(screen.getByLabelText("Replace in project"), { target: { value: "after" } });
   fireEvent.click(screen.getByRole("button", { name: "Replace all matches" }));
+  if (waitForStart) await waitFor(() => expect(vi.mocked(bridge.replaceProject).mock.calls.length > 0 || screen.queryByText(/Save modified matching files/)).toBeTruthy());
   return ui;
 }
 async function completed() {
@@ -38,6 +40,17 @@ async function completed() {
 }
 
 describe("project replacement preserves live editor state", () => {
+  it("does not replace before approval or after cancellation", async () => {
+    const approval = deferred<boolean>();
+    vi.spyOn(documents, "confirmAction").mockReturnValue(approval.promise);
+    const replace = vi.spyOn(bridge, "replaceProject").mockResolvedValue(summary);
+    await startReplacement(false);
+    expect(replace).not.toHaveBeenCalled();
+    await act(async () => approval.resolve(false));
+    expect(replace).not.toHaveBeenCalled();
+    expect(useWorkbench.getState().tabs[0]).toEqual(source);
+  });
+
   it("refreshes a still-clean matching file", async () => {
     vi.spyOn(bridge, "replaceProject").mockResolvedValue(summary);
     vi.spyOn(bridge, "readText").mockResolvedValue(replaced);

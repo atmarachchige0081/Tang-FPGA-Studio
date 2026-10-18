@@ -41,7 +41,7 @@ export function OpenProjectDialog(): React.JSX.Element | null {
     if (!selected || lock.current) return;
     const state = useWorkbench.getState();
     if (state.runningJob) { setError("Wait for the current hardware or build task to finish before changing projects."); return; }
-    if (!confirmDiscardUnsaved(state.tabs)) return;
+    if (!await confirmDiscardUnsaved(state.tabs)) return;
     lock.current = true; setBusy(true); setError("");
     try {
       // Resolve everything before replacing the current editor state.
