@@ -86,3 +86,11 @@ it("ignores delayed events from a previous turn in the same thread",()=>{
  const next=reduceAiEvent(current,{method:"item/agentMessage/delta",params:{turnId:"old-turn",itemId:"old",delta:"obsolete answer"},timestamp:""});
  expect(next).toEqual(current);
 });
+
+it("restores structured user text and inline images without loading remote image URLs", () => {
+ const image="data:image/png;base64,iVBORw0KGgo=";
+ const messages=messagesFromThread({thread:{turns:[{items:[{type:"userMessage",id:"user-image",content:[{type:"text",text:"Explain this circuit"},{type:"image",url:image},{type:"image",url:"https://example.com/private.png"}]}]}]}});
+ expect(messages[0]?.text).toContain("Explain this circuit");
+ expect(messages[0]?.text).toContain("preview unavailable");
+ expect(messages[0]?.attachments).toEqual([{kind:"image",name:"image-1.png",dataUrl:image}]);
+});

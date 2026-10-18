@@ -1,10 +1,11 @@
-import type { AiEvent } from "../types";
+import type { AiAttachment, AiEvent } from "../types";
 
 export interface AiChatMessage {
   id: string;
   role: "user" | "assistant" | "system";
   text: string;
   streaming?: boolean;
+  attachments?: AiAttachment[];
 }
 
 export interface AiActivityItem {
@@ -292,9 +293,9 @@ export function reduceAiEvent(state: AiConversationState, event: AiEvent): AiCon
   return state;
 }
 
-export function appendUserMessage(state: AiConversationState, text: string): AiConversationState {
+export function appendUserMessage(state: AiConversationState, text: string, attachments?: AiAttachment[]): AiConversationState {
   const id = `user-${Date.now()}-${state.messages.length}`;
-  return { ...state, messages: [...state.messages, { id, role: "user", text }], timeline: [...state.timeline, { type: "message", id }] };
+  return { ...state, messages: [...state.messages, { id, role: "user", text, attachments }], timeline: [...state.timeline, { type: "message", id }] };
 }
 
 export function conversationWithHistory(messages: AiChatMessage[]): AiConversationState {
@@ -321,8 +322,20 @@ export function messagesFromThread(value: Record<string, unknown>): AiChatMessag
       const type = string(item.type);
       const id = string(item.id) ?? `history-${messages.length}`;
       if (type === "userMessage") {
-        const text = string(item.text) ?? string(item.message);
-        if (text) messages.push({ id, role: "user", text });
+        const content = Array.isArray(item.content) ? item.content.map(record) : [];
+        const attachments: AiAttachment[] = [];
+        const parts: string[] = [];
+        for (const input of content) {
+          if (input.type === "text" && typeof input.text === "string") parts.push(input.text);
+          if (input.type === "image" || input.type === "localImage") {
+            const url = string(input.url) ?? "";
+            const mime = /^data:image\/(png|jpeg|gif|webp);base64,/.exec(url)?.[1];
+            if (mime && url.length <= 2_796_240 && attachments.length < 6) attachments.push({ kind: "image", name: `image-${attachments.length + 1}.${mime === "jpeg" ? "jpg" : mime}`, dataUrl: url });
+            else parts.push("[Image attached to this earlier message; preview unavailable]");
+          }
+        }
+        const text = string(item.text) ?? string(item.message) ?? parts.join("\n\n");
+        if (text || attachments.length) messages.push({ id, role: "user", text, attachments: attachments.length ? attachments : undefined });
       } else if (type === "agentMessage") {
         const text = string(item.text) ?? string(item.message);
         if (text) messages.push({ id, role: "assistant", text });

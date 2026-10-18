@@ -1,5 +1,48 @@
 # Maintenance log
 
+## 2026-10-18 — Explicit AI image and source-file attachments
+
+**Scope/evidence:** user selected images and richer message attachments as the
+next Codex capability. The composer accepted text only and native turn/start
+always emitted one text input. Checked the official App Server UserInput schema:
+images use `{type:"image",url:<inline data URL>}`. Do not claim extension parity;
+`docs/AI_ASSISTANT.md` now records supported features and remaining gaps.
+
+**Changes:** add paperclip selection, clipboard file/image paste, image previews,
+removable filenames and sent-attachment entries. Send image bytes through Codex
+image input (avoiding Windows/Linux local-path translation); send UTF-8 source,
+constraints/logs/docs as labelled untrusted text. No new filesystem access or
+approval permissions. Bound count, per-file and total payload sizes; reject
+unsupported binaries, invalid image signatures, sensitive filenames and invalid
+UTF-8. Preserve attachments on send failure and Retry, clear project-scoped drafts
+and discard late reads after a project switch/unmount. Restore structured user
+history text/inline image previews without fetching remote URLs or old local paths.
+
+**Verification:** full frontend check passed production build, TypeScript, 150
+tests across 36 files and four startup regressions. Focused attachment/panel suite
+passed 21 tests; history coverage included in the full run. Rust formatting check
+passed. Installed Rust 1.85.0 in an external scratch location and compiled the
+actual attachment types, validator and three native regression functions in an
+isolated crate using pinned serde 1.0.228/serde_json 1.0.151: three tests passed.
+This validates native request-item construction, bounds/secret rejection and
+backward-compatible context decoding, not the complete Tauri runtime.
+
+**Browser evidence:** `python3 scripts/test-ai-attachments.py` passed chooser,
+paste, removal, unsupported-file rejection without losing earlier files, decoded
+image preview, captured image/text payload and sent entries, with no browser
+exceptions. Send remains visible at a 1000x850 viewport. Light/dark/narrow and
+sent-message screenshots inspected under ignored `build/ai-attachments/`.
+Provider output is simulated; no authentication, model inference or hardware test.
+
+**Limits/user check:** rebuild the native desktop app; frontend hot reload alone
+cannot update the Rust payload handling. Attach a non-sensitive board photo and
+saved RTL file, ask an image-capable model to explain both, then test failed-send
+Retry. PDFs/audio/other binaries, a skill/connector picker and complete VS Code
+extension parity remain unsupported. Full native Windows/Tauri build and real
+provider image understanding remain unverified. No hardware writes or tags.
+Next useful task: run that authenticated Windows image/RTL acceptance check before
+extending attachment formats or adding more integration controls.
+
 ## 2026-10-18 — AI response tables rendered as literal Markdown
 
 **Evidence:** user screenshot shows file/description mapping as pipe-delimited

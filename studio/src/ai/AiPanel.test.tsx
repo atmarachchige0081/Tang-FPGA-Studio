@@ -215,4 +215,46 @@ describe("native AI Assistant panel", () => {
     expect(screen.queryByText("STALE_ACCOUNT_ERROR")).toBeNull();
   });
 
+  it("previews and removes files before sending the selected image and RTL content", async () => {
+    const send = vi.spyOn(bridge, "aiTurnStart");
+    render(<AiPanel/>);
+    fireEvent.click(await screen.findByRole("button", { name: "Connect agent" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Sign in with ChatGPT" }));
+    await screen.findByRole("textbox", { name: "Ask AI about this project" });
+    const image = new File([new Uint8Array([137,80,78,71,13,10,26,10])], "board.png", {type:"image/png"});
+    const source = new File(["module top; endmodule"], "top.sv");
+    fireEvent.change(screen.getByLabelText("Attach images or text files"), {target:{files:[image, source]}});
+    await screen.findByRole("button", {name:"Remove attachment top.sv"});
+    expect(screen.getByAltText("Attachment: board.png")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", {name:"Remove attachment top.sv"}));
+    expect(screen.queryByRole("button", {name:"Remove attachment top.sv"})).toBeNull();
+    fireEvent.change(screen.getByLabelText("Attach images or text files"), {target:{files:[source]}});
+    await screen.findByRole("button", {name:"Remove attachment top.sv"});
+    fireEvent.change(screen.getByRole("textbox", {name:"Ask AI about this project"}), {target:{value:"Explain the wiring and source"}});
+    fireEvent.click(screen.getByRole("button", {name:"Send"}));
+    await waitFor(()=>expect(send).toHaveBeenCalled());
+    expect(send.mock.calls[0]?.[2].attachments).toEqual([
+      {kind:"image",name:"board.png",dataUrl:"data:image/png;base64,iVBORw0KGgo="},
+      {kind:"text",name:"top.sv",text:"module top; endmodule"},
+    ]);
+    await waitFor(()=>expect(screen.queryByRole("button",{name:"Remove attachment top.sv"})).toBeNull());
+    expect(screen.getByLabelText("Sent attachments")).toBeTruthy();
+  });
+
+  it("retains attachments after a failed send and includes them on Retry", async () => {
+    const send=vi.spyOn(bridge,"aiTurnStart").mockRejectedValueOnce(new Error("Provider temporarily unavailable"));
+    render(<AiPanel/>);
+    fireEvent.click(await screen.findByRole("button", {name:"Connect agent"}));
+    fireEvent.click(await screen.findByRole("button", {name:"Sign in with ChatGPT"}));
+    await screen.findByRole("textbox", {name:"Ask AI about this project"});
+    fireEvent.change(screen.getByLabelText("Attach images or text files"),{target:{files:[new File(["module top; endmodule"],"top.sv")]}});
+    await screen.findByRole("button",{name:"Remove attachment top.sv"});
+    fireEvent.click(screen.getByRole("button",{name:"Send"}));
+    await screen.findByRole("button",{name:"Retry"});
+    expect(screen.getByRole("button",{name:"Remove attachment top.sv"})).toBeTruthy();
+    fireEvent.click(screen.getByRole("button",{name:"Retry"}));
+    await waitFor(()=>expect(send).toHaveBeenCalledTimes(2));
+    expect(send.mock.calls[1]?.[2].attachments).toEqual(send.mock.calls[0]?.[2].attachments);
+  });
+
 });

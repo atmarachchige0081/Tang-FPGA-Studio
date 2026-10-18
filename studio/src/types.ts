@@ -50,7 +50,12 @@ export interface AiEvent {
   timestamp: string;
 }
 
+export type AiAttachment =
+  | { kind: "image"; name: string; dataUrl: string }
+  | { kind: "text"; name: string; text: string };
+
 export interface AiIdeContext {
+  attachments?: AiAttachment[];
   activeFile?: string;
   selectedText?: string;
   cursorLine?: number;

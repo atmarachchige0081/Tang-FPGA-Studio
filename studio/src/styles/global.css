@@ -1627,3 +1627,12 @@ button, input, select, textarea { border-radius: 1px; }
 .ai-table-scroll th { color: var(--text); background: var(--surface-raised); font-weight: 700; }
 .ai-table-scroll th + th, .ai-table-scroll td + td { border-left: 1px solid var(--line); }
 .ai-table-scroll tbody tr:last-child td { border-bottom: 0; }
+
+.ai-attachments { display: grid; gap: 5px; list-style: none; padding: 7px; margin: 0; max-height: 180px; overflow: auto; }
+.ai-attachments li { display: flex; align-items: center; gap: 8px; padding: 5px; border: 1px solid var(--line); background: var(--surface-raised); min-width: 0; }
+.ai-attachments img { width: 48px; height: 40px; object-fit: contain; flex-shrink: 0; }
+.ai-attachments li > span { flex: 1; min-width: 0; overflow-wrap: anywhere; font-size: 12px; }
+.ai-attachments small { display: block; color: var(--text-muted); }
+.ai-attachments button { flex-shrink: 0; }
+.ai-attachment-status { margin: 0; padding: 6px 9px; color: var(--text-muted); font-size: 12px; }
+.ai-attachment-status[role="alert"] { color: var(--red); }

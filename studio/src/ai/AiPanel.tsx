@@ -2,13 +2,16 @@ import { PanelResizeHandle } from "../components/PanelResizeHandle";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertTriangle, Bot, Check, ChevronDown, ChevronRight, CircleStop, Code2,
-  Copy, FileDiff, History, KeyRound, LoaderCircle, LogOut, MessageSquarePlus, Play,
+  Copy, Paperclip, FileDiff, History, KeyRound, LoaderCircle, LogOut, MessageSquarePlus, Play,
   RefreshCw, RotateCcw, Send, Settings2, ShieldCheck, TerminalSquare, UserRound, X,
 } from "lucide-react";
 import { bridge } from "../lib/bridge";
 import { openWorkspaceLocation } from "../lib/navigation";
 import { useWorkbench } from "../store/workbench";
-import type { AiAccountStatus, AiApprovalDecision, AiEvent, AiLoginResult, AiModel, AiProviderStatus } from "../types";
+import type { AiAccountStatus, AiAttachment, AiApprovalDecision, AiEvent, AiLoginResult, AiModel, AiProviderStatus } from "../types";
+import { AttachmentList } from "./AttachmentList";
+import { useAttachments } from "./useAttachments";
+import { ATTACHMENT_ACCEPT } from "./attachments";
 import { MarkdownMessage } from "./MarkdownMessage";
 import {
   appendUserMessage, conversationWithHistory, initialAiConversation, messagesFromThread, reduceAiEvent, removeApproval, removeQuestion,
@@ -202,6 +205,8 @@ export function AiPanel(): React.JSX.Element {
   const [threadId, setThreadId] = useState<string | null>(() => readActiveThread(`${workbench.root}/${workbench.projectPath}`));
   const [threads, setThreads] = useState<ThreadSummary[]>([]);
   const [prompt, setPrompt] = useState("");
+  const draft = useAttachments(`${workbench.root}/${workbench.projectPath}`);
+  const fileInput = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
   const [stopping, setStopping] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -468,7 +473,8 @@ export function AiPanel(): React.JSX.Element {
   };
 
   const newConversation = () => {
-    if (conversationRef.current.running || busy || operationLock.current) return;
+    if (conversationRef.current.running || busy || operationLock.current || draft.loading) return;
+    draft.clear();
     setThreadId(null);
     activeThreadRef.current = null;
     setConversation(initialAiConversation);
@@ -495,14 +501,18 @@ export function AiPanel(): React.JSX.Element {
     finally { if (epoch === generation.current) { operationLock.current = false; setBusy(false); } }
   };
 
-  const sendPrompt = async (override?: string) => {
-    const text = (override ?? prompt).trim();
-    if (!text || busy || operationLock.current) return;
-    if (conversation.running) { await steer(text); return; }
+  const sendPrompt = async (override?: string, retryAttachments?: AiAttachment[]) => {
+    const selectedAttachments = retryAttachments ?? (override === undefined ? draft.attachments : []);
+    const text = (override ?? prompt).trim() || (selectedAttachments.length ? "Please review the attached files." : "");
+    if (!text || busy || operationLock.current || draft.loading) return;
+    if (conversation.running) {
+      if (selectedAttachments.length) { setError("Wait for the current reply to finish before sending attachments."); return; }
+      await steer(text); return;
+    }
     operationLock.current = true;
     const epoch = generation.current;
     setPrompt(""); setError(null);
-    if (override === undefined) setConversation((current) => appendUserMessage(current, text));
+    if (override === undefined) setConversation((current) => appendUserMessage(current, text, selectedAttachments));
     setBusy(true);
     try {
       let activeThread = threadId;
@@ -521,6 +531,7 @@ export function AiPanel(): React.JSX.Element {
         ? [`Branch: ${workbench.git.branch ?? "unknown"}`, ...workbench.git.changes.slice(0, 100).map((change) => `${change.indexStatus}${change.worktreeStatus} ${change.path}`)].join("\n")
         : undefined;
       const response = await bridge.aiTurnStart(activeThread, text, {
+        attachments: selectedAttachments.length ? selectedAttachments : undefined,
         activeFile: workbench.activePath ?? undefined,
         selectedText: workbench.editorSelection || undefined,
         cursorLine: workbench.editorCursor?.line,
@@ -534,6 +545,7 @@ export function AiPanel(): React.JSX.Element {
       const turn = record(response.turn);
       const id = valueString(turn.id);
       if (epoch !== generation.current) return;
+      if (selectedAttachments.length && (override === undefined || draft.attachments === selectedAttachments)) draft.clear();
       if (id && !completedTurns.current.has(id)) setConversation((current) => ({ ...current, running: true, turnId: id }));
     } catch (caught) {
       if (epoch !== generation.current) return;
@@ -595,7 +607,7 @@ export function AiPanel(): React.JSX.Element {
 
   const retry = () => {
     const last = [...conversation.messages].reverse().find((message) => message.role === "user");
-    if (last) void sendPrompt(last.text);
+    if (last) void sendPrompt(last.text, last.attachments);
   };
 
   const disconnect = async () => {
@@ -683,7 +695,7 @@ export function AiPanel(): React.JSX.Element {
         <div className="ai-conversation">
           {!conversation.messages.length && <div className="ai-empty"><Code2 size={25}/><h3>Ask about your project</h3><p>Review code, diagnose a build error, or check timing.</p><div>{["Explain the active module", "Find and fix synthesis errors", "Review timing and suggest improvements"].map((value) => <button key={value} onClick={() => setPrompt(value)}>{value}</button>)}</div></div>}
           {timeline.map((row) => row.type === "message"
-            ? <article className={`ai-message ${row.message.role}`} key={row.id}><header>{row.message.role === "user" ? <UserRound size={13}/> : <Bot size={13}/>}<strong>{row.message.role === "user" ? "You" : "Codex"}</strong>{row.message.streaming && <LoaderCircle className="spin" size={11}/>}</header><MarkdownMessage text={row.message.text} onOpenFile={(path, line, column) => void openWorkspaceLocation(path, line, column)}/></article>
+            ? <article className={`ai-message ${row.message.role}`} key={row.id}><header>{row.message.role === "user" ? <UserRound size={13}/> : <Bot size={13}/>}<strong>{row.message.role === "user" ? "You" : "Codex"}</strong>{row.message.streaming && <LoaderCircle className="spin" size={11}/>}</header><MarkdownMessage text={row.message.text} onOpenFile={(path, line, column) => void openWorkspaceLocation(path, line, column)}/>{!!row.message.attachments?.length && <AttachmentList attachments={row.message.attachments}/>}</article>
             : <ActivityGroup activities={row.activities} key={row.id}/>)}
           {conversation.error && <div className="ai-retry"><AlertTriangle size={14}/><span>{conversation.error ?? error}</span><button onClick={retry}><RotateCcw size={12}/> Retry</button></div>}
           <div ref={conversationEnd}/>
@@ -693,8 +705,18 @@ export function AiPanel(): React.JSX.Element {
           {conversation.questions.map((question) => <QuestionCard key={String(question.requestId)} request={question} busy={resolving.includes(question.requestId)} onSubmit={(answers) => void answerQuestion(question, answers)}/>)}
         </section>}
         <div className="ai-composer">
-          <textarea aria-label="Ask AI about this project" value={prompt} disabled={stopping} onChange={(event) => setPrompt(event.target.value.slice(0, 100_000))} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); void sendPrompt(); } }} placeholder={conversation.running ? "Send a correction or follow-up…" : "Ask about this project…"}/>
-          <div><span>{workbench.activePath ? `${workbench.activePath}${workbench.editorSelection ? " · selection" : ""}` : "Project context"}</span>{conversation.running && <button className="ai-send" disabled={!prompt.trim() || busy || stopping} onClick={() => void sendPrompt()}><Send size={14}/> Send follow-up</button>}{conversation.running ? <button className="ai-stop" disabled={stopping} onClick={() => void stop()}>{stopping ? <LoaderCircle className="spin" size={14}/> : <CircleStop size={14}/>} {stopping ? "Stopping…" : "Stop"}</button> : <button className="ai-send" disabled={!prompt.trim() || busy} onClick={() => void sendPrompt()}><Send size={14}/> Send</button>}</div>
+          <input ref={fileInput} type="file" multiple accept={ATTACHMENT_ACCEPT} aria-label="Attach images or text files" hidden disabled={busy || stopping || draft.loading || conversation.running} onChange={(event) => { const files = Array.from(event.currentTarget.files ?? []); event.currentTarget.value = ""; void draft.add(files); }}/>
+          {!!draft.attachments.length && <AttachmentList attachments={draft.attachments} onRemove={draft.remove} disabled={busy || stopping || draft.loading}/>}
+          {draft.loading && <p className="ai-attachment-status" role="status">Reading attachments…</p>}
+          {draft.error && <p className="ai-attachment-status" role="alert">{draft.error}</p>}
+          <textarea aria-label="Ask AI about this project" value={prompt} disabled={stopping} onPaste={(event) => {
+            const files = Array.from(event.clipboardData.files);
+            if (!files.length) return;
+            event.preventDefault();
+            if (busy || stopping || conversation.running) { setError("Wait for the current reply to finish before attaching files."); return; }
+            void draft.add(files);
+          }} onChange={(event) => setPrompt(event.target.value.slice(0, 100_000))} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); void sendPrompt(); } }} placeholder={conversation.running ? "Send a correction or follow-up…" : "Ask about this project…"}/>
+          <div><button type="button" title="Attach images or text files" aria-label="Attach files" disabled={busy || stopping || draft.loading || conversation.running} onClick={() => fileInput.current?.click()}><Paperclip size={15}/></button><span>{workbench.activePath ? `${workbench.activePath}${workbench.editorSelection ? " · selection" : ""}` : "Project context"}</span>{conversation.running && <button className="ai-send" disabled={!prompt.trim() || busy || stopping} onClick={() => void sendPrompt()}><Send size={14}/> Send follow-up</button>}{conversation.running ? <button className="ai-stop" disabled={stopping} onClick={() => void stop()}>{stopping ? <LoaderCircle className="spin" size={14}/> : <CircleStop size={14}/>} {stopping ? "Stopping…" : "Stop"}</button> : <button className="ai-send" disabled={(!prompt.trim() && !draft.attachments.length) || busy || draft.loading} onClick={() => void sendPrompt()}><Send size={14}/> Send</button>}</div>
         </div>
         <footer className="ai-footer"><ShieldCheck size={12}/><span>Project: {workbench.project}</span><button title="Sign out" disabled={busy || conversation.running} onClick={() => void logout()}><LogOut size={12}/></button></footer>
       </>}

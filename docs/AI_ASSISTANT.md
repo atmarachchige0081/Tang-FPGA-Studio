@@ -49,6 +49,50 @@ non-sensitive panel preferences and the active thread identifier.
 Conversations are scoped to the active project. Changing projects disconnects
 the old provider session so project context cannot leak into the new workspace.
 
+## Images and file attachments
+
+Use the paperclip beside the message box to choose images or text/source files.
+You can also paste an image or file from the clipboard into the message box.
+Review the thumbnails and filenames, remove unwanted items with **X**, then send.
+Selection and paste read the chosen files locally; content is sent to the
+configured Codex provider only when you send the message.
+
+- PNG, JPEG, GIF and WebP: up to 2 MB per image.
+- UTF-8 text/source files (including RTL, constraints, logs and Markdown): up to
+  128 KB per file. The selected file's saved contents are sent; save editor changes
+  first if you want to attach the updated version.
+- Up to six attachments and 8 MB of encoded attachment content per message.
+- PDFs, archives, executables, other binary files and sensitive filenames such as
+  `.env`, credential files and private keys are rejected with an explanation.
+
+A failed send preserves the draft attachments. **Retry** includes the original
+attachments. Switching projects clears unsent attachments and ignores late file
+reads from the old project. Wait for the current reply to finish before attaching
+files; text follow-ups remain available during a running turn.
+
+Images use Codex image input rather than a filename in a text prompt. Text files
+are labelled as user-selected, untrusted content. Neither grants additional tool
+access or changes the existing approval policy. Image understanding depends on
+the selected model and account. Sent content may be retained in Codex history;
+image previews are restored when history provides an inline image, without
+fetching remote image URLs or reading historical local paths automatically.
+
+## Integration coverage
+
+Studio uses the official App Server, but its UI is maintained separately from
+the VS Code extension. Current coverage:
+
+| Capability | Studio support |
+| --- | --- |
+| Model and thinking selection | Provider model catalog and supported effort levels |
+| Project context | Active file/selection, cursor, open files, diagnostics and bounded output |
+| Tools and approvals | Command/file approval cards, questions, Stop and running-turn steering |
+| Edits | Native diffs, review and editor synchronization |
+| Responses | Tables, lists, headings, code, emphasis and clickable file references |
+| Attachments | Explicitly selected images and UTF-8 text/source files |
+| PDF, audio and arbitrary binary attachments | Not supported |
+| Skill picker, connector browser and complete extension UI parity | Not implemented |
+
 ## Security model
 
 - The native host canonicalizes the active project and gives Codex one
