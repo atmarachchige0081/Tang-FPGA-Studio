@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AlertCircle, ArrowLeft, Braces, CaseSensitive, CheckCircle2, ChevronDown, ChevronRight, CirclePlus, FileCode2, FilePlus2, Files, Folder, FolderOpen, FolderPlus, GitBranch, MoreHorizontal, PackageCheck, RefreshCw, ReplaceAll, Search, Sparkles, X } from "lucide-react";
 import { bridge } from "../lib/bridge";
 import { searchableSymbols } from "../lib/hdl-intelligence";
@@ -79,7 +79,7 @@ function flattenFiles(nodes: ProjectNode[]): ProjectNode[] {
 }
 
 function WorkspaceSearch(): React.JSX.Element {
-  const { root, projectPath, tree, tabs, hdlIndex, setHdlIndex, reloadFile, appendOutput } = useWorkbench();
+  const { root, projectPath, tree, hdlIndex, setHdlIndex, appendOutput } = useWorkbench();
   const [mode, setMode] = useState<SearchMode>("text");
   const [query, setQuery] = useState("");
   const [replacement, setReplacement] = useState("");
@@ -87,6 +87,9 @@ function WorkspaceSearch(): React.JSX.Element {
   const [textResults, setTextResults] = useState<Array<{ file: string; line: number; column: number; preview: string }>>([]);
   const [loading, setLoading] = useState(false);
   const [replacing, setReplacing] = useState(false);
+  const [searchRevision, setSearchRevision] = useState(0);
+  const scopeRevision = useRef(0);
+  useEffect(() => () => { scopeRevision.current += 1; }, [root, projectPath]);
   const [error, setError] = useState("");
   const files = useMemo(() => flattenFiles(tree), [tree]);
 
@@ -119,7 +122,7 @@ function WorkspaceSearch(): React.JSX.Element {
       void bridge.searchProject(root, projectPath, query).then((results) => { if (!disposed) setTextResults(results); }).catch((reason: unknown) => { if (!disposed) setError(reason instanceof Error ? reason.message : String(reason)); }).finally(() => { if (!disposed) setLoading(false); });
     }, 220);
     return () => { disposed = true; window.clearTimeout(timer); };
-  }, [mode, query, root, projectPath]);
+  }, [mode, query, root, projectPath, searchRevision]);
 
   const normalized = query.trim().toLowerCase();
   const fileResults = mode === "files" ? files.filter((file) => !normalized || file.path.toLowerCase().includes(normalized)).slice(0, 300) : [];
@@ -129,8 +132,13 @@ function WorkspaceSearch(): React.JSX.Element {
   const replaceAll = async () => {
     const needle = query.trim();
     if (!needle || replacing || !textResults.length) return;
+    const operationRevision = scopeRevision.current;
+    const current = () => {
+      const state = useWorkbench.getState();
+      return scopeRevision.current === operationRevision && state.root === root && state.projectPath === projectPath;
+    };
     const matchedFiles = new Set(textResults.map((result) => result.file));
-    if (tabs.some((tab) => matchedFiles.has(tab.path) && tab.content !== tab.savedContent)) {
+    if (useWorkbench.getState().tabs.some((tab) => matchedFiles.has(tab.path) && tab.content !== tab.savedContent)) {
       setError("Save modified matching files before Replace all, so unsaved editor work is never overwritten.");
       return;
     }
@@ -139,15 +147,23 @@ function WorkspaceSearch(): React.JSX.Element {
     try {
       const summary = await bridge.replaceProject(root, projectPath, needle, replacement);
       for (const path of summary.files) {
-        if (tabs.some((tab) => tab.path === path)) reloadFile(path, await bridge.readText(root, path));
+        if (!current()) break;
+        if (useWorkbench.getState().tabs.some((tab) => tab.path === path)) {
+          const content = await bridge.readText(root, path);
+          // The user can type while either native operation is awaiting I/O.
+          if (current()) useWorkbench.getState().syncFile(path, content, false);
+        }
       }
-      setHdlIndex(null, "idle");
-      setTextResults(await bridge.searchProject(root, projectPath, needle));
-      appendOutput({ jobId: "search", phase: "replace", stream: "system", message: `Replaced ${summary.replacements} match${summary.replacements === 1 ? "" : "es"} in ${summary.filesChanged} file${summary.filesChanged === 1 ? "" : "s"}.`, timestamp: new Date().toISOString() });
+      if (current()) {
+        setHdlIndex(null, "idle");
+        // Re-run the search effect with the latest query, not this handler's old one.
+        setSearchRevision((revision) => revision + 1);
+      }
+      appendOutput({ jobId: "search", phase: "replace", stream: "system", message: `Replaced ${summary.replacements} match${summary.replacements === 1 ? "" : "es"} in ${summary.filesChanged} file${summary.filesChanged === 1 ? "" : "s"} (${projectPath === "." ? root : projectPath}).`, timestamp: new Date().toISOString() });
     } catch (reason) {
       const message = reason instanceof Error ? reason.message : String(reason);
-      setError(message);
-      appendOutput({ jobId: "search", phase: "replace", stream: "stderr", message, timestamp: new Date().toISOString() });
+      if (current()) setError(message);
+      appendOutput({ jobId: "search", phase: "replace", stream: "stderr", message: `${projectPath === "." ? root : projectPath}: ${message}`, timestamp: new Date().toISOString() });
     } finally { setReplacing(false); }
   };
 

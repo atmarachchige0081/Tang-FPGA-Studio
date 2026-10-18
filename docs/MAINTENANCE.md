@@ -1,5 +1,38 @@
 # Maintenance log
 
+## 2026-10-18 — Replace all preserves concurrent editor work
+
+- **Workflow:** project search → Replace all while typing or switching projects.
+  Reviewed the previous maintenance entry, unsaved-work protections and current
+  search/store synchronization. Crash-draft recovery (R104) remains a separate
+  feature; this cycle fixes an existing data-loss path.
+- **Evidence:** deferred-I/O regression reproduced four failures before the fix:
+  text typed during replacement or its follow-up read was overwritten, and a late
+  read could replace a same-path buffer in another workspace or project. Clean
+  refresh and the existing dirty-file refusal passed as controls.
+- **Cause and fix:** replacement used captured tabs and unconditional buffer
+  reloads after asynchronous I/O. It now uses live tabs and the existing conflict-
+  preserving synchronization. Project/workspace and panel-lifetime guards reject
+  obsolete reads, including switching away and back. Search refresh uses the
+  latest query; output identifies the operation's project. Confirmation and
+  refusal to replace already-dirty matching files remain intact.
+- **Verification:** all nine focused Sidebar regressions passed, covering both
+  typing races, clean refresh, dirty refusal, workspace/project changes, returning
+  to the original project, panel unmount and changed queries. `npm --prefix studio
+  run check` passed: 89 tests across 27 files, type checking and production build.
+  A real Chromium/Monaco keyboard check with simulated delayed filesystem I/O
+  preserved typed text and displayed the existing conflict choices without browser
+  exceptions. Inspected `build/replacement-safety/preserved-unsaved-edits.png`;
+  generated evidence is kept outside tracked source. `git diff --check` passed.
+- **Limits:** filesystem calls were controlled in the regression/browser checks;
+  native Windows execution and physical hardware were not tested. No programming
+  or flash writes were performed. No UI redesign or dependency changes.
+- **Real-user check:** in a disposable project, run Replace all and immediately
+  type in a matching open file. Confirm new typing survives; if a conflict appears,
+  use Keep my edits and verify the buffer before saving.
+- **Next priority:** inspect asynchronous save/file-sync ordering and failure
+  reporting for another reproducible data-loss or misleading-success path.
+
 ## 2026-10-18 — Suggestions after closing file review
 
 - **Workflow:** open a project, inspect a file diff, close review and request
