@@ -1,3 +1,4 @@
+import { watchWorkspace } from "./workspace-operation";
 import { bridge } from "./bridge";
 import { fileName, languageForPath } from "./language";
 import { useWorkbench } from "../store/workbench";
@@ -16,16 +17,21 @@ export async function openWorkspaceLocation(file: string, line = 1, column = 1):
   const state = useWorkbench.getState();
   const preferred = workspacePath(state.root, state.projectPath, file);
   const candidates = preferred === file ? [preferred] : [preferred, file.replaceAll("\\", "/")];
-  let lastError: unknown;
-  for (const path of candidates) {
-    try {
-      const content = await bridge.readText(state.root, path);
-      state.openFile({ path, name: fileName(path), language: languageForPath(path), content, savedContent: content });
-      state.navigateTo(path, line, column);
-      return;
-    } catch (error) {
-      lastError = error;
+  const operation = watchWorkspace(state.root, state.projectPath);
+  try {
+    let lastError: unknown;
+    for (const path of candidates) {
+      try {
+        if (!operation.current()) return;
+        const content = await bridge.readText(state.root, path);
+        if (!operation.current()) return;
+        state.openFile({ path, name: fileName(path), language: languageForPath(path), content, savedContent: content });
+        state.navigateTo(path, line, column);
+        return;
+      } catch (error) {
+        lastError = error;
+      }
     }
-  }
-  throw lastError instanceof Error ? lastError : new Error(`Cannot open ${file}`);
+    throw lastError instanceof Error ? lastError : new Error(`Cannot open ${file}`);
+  } finally { operation.stop(); }
 }

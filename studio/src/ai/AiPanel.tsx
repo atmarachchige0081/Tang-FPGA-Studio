@@ -311,6 +311,10 @@ export function AiPanel(): React.JSX.Element {
         const paths = requestChanges(event, workbench.root);
         if (paths.length) void refreshChangedFiles(paths);
       }
+      if (event.method === "error" && event.params.willRetry === true) {
+        const message = valueString(record(event.params.error).message) ?? valueString(event.params.message) ?? "Temporary provider error";
+        workbench.appendOutput({ jobId: "ai", phase: "retry", stream: "stderr", message: `Codex is retrying: ${message}`, timestamp: event.timestamp });
+      }
       if (event.method === "provider/diagnostic") {
         const message = valueString(event.params.message);
         if (message) workbench.appendOutput({ jobId: "ai", phase: "provider", stream: "stderr", message, timestamp: event.timestamp });
@@ -464,7 +468,7 @@ export function AiPanel(): React.JSX.Element {
   };
 
   const newConversation = () => {
-    if (conversation.running) return;
+    if (conversationRef.current.running || busy || operationLock.current) return;
     setThreadId(null);
     activeThreadRef.current = null;
     setConversation(initialAiConversation);
@@ -473,16 +477,22 @@ export function AiPanel(): React.JSX.Element {
   };
 
   const openThread = async (id: string) => {
+    if (conversationRef.current.running || busy || operationLock.current) return;
+    const epoch = ++generation.current;
+    operationLock.current = true;
     setBusy(true); setError(null);
     try {
       await bridge.aiThreadResume(id);
+      if (epoch !== generation.current) return;
       const history = await bridge.aiThreadRead(id);
+      if (epoch !== generation.current) return;
+      activeThreadRef.current = id;
       setThreadId(id);
       writeActiveThread(`${workbench.root}/${workbench.projectPath}`, id);
       setConversation(conversationWithHistory(messagesFromThread(history)));
       setHistoryOpen(false);
-    } catch (caught) { setError(caught instanceof Error ? caught.message : String(caught)); }
-    finally { setBusy(false); }
+    } catch (caught) { if (epoch === generation.current) setError(caught instanceof Error ? caught.message : String(caught)); }
+    finally { if (epoch === generation.current) { operationLock.current = false; setBusy(false); } }
   };
 
   const sendPrompt = async (override?: string) => {
@@ -634,13 +644,13 @@ export function AiPanel(): React.JSX.Element {
 
   return <aside className="ai-panel" aria-label="AI Assistant"><PanelResizeHandle panel="assistant"/>
     <header className="ai-panel-header"><div><Bot size={17}/><strong>AI Assistant</strong><span>{status?.connected ? accountLabel(account) : "Local provider"}</span></div><nav>
-      <button aria-label="New AI conversation" title="New conversation" disabled={conversation.running} onClick={newConversation}><MessageSquarePlus size={15}/></button>
+      <button aria-label="New AI conversation" title="New conversation" disabled={busy || conversation.running} onClick={newConversation}><MessageSquarePlus size={15}/></button>
       <button aria-label="AI conversation history" title="Conversation history" onClick={() => setHistoryOpen((value) => !value)}><History size={15}/></button>
       <button aria-label="AI settings" title="AI settings" onClick={() => setSettingsOpen((value) => !value)}><Settings2 size={15}/></button>
       <button aria-label="Close AI Assistant" title="Close" onClick={() => workbench.setAiPanelOpen(false)}><X size={16}/></button>
     </nav></header>
 
-    {historyOpen && <section className="ai-popover ai-history"><header><strong>Project conversations</strong><button onClick={() => void refreshThreads()}><RefreshCw size={13}/></button></header>{threads.map((thread) => <button className={thread.id === threadId ? "active" : ""} key={thread.id} onClick={() => void openThread(thread.id)}><strong>{thread.name}</strong><span>{thread.preview || "Open conversation"}</span></button>)}{!threads.length && <p>No saved conversations for this project.</p>}</section>}
+    {historyOpen && <section className="ai-popover ai-history"><header><strong>Project conversations</strong><button onClick={() => void refreshThreads()}><RefreshCw size={13}/></button></header>{threads.map((thread) => <button className={thread.id === threadId ? "active" : ""} key={thread.id} disabled={busy || conversation.running} onClick={() => void openThread(thread.id)}><strong>{thread.name}</strong><span>{thread.preview || "Open conversation"}</span></button>)}{!threads.length && <p>No saved conversations for this project.</p>}</section>}
 
     {settingsOpen && <section className="ai-popover ai-settings"><header><strong>Agent settings</strong><button onClick={() => setSettingsOpen(false)}><X size={13}/></button></header>
       <small>Choose the model and thinking level below.</small>

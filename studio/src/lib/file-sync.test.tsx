@@ -39,3 +39,26 @@ it("keeps healthy files updating when another file cannot be read",async () => {
  await waitFor(()=>expect(useWorkbench.getState().tabs[0]?.content).toBe("healthy update"));
  expect(useWorkbench.getState().output.some((line)=>line.message.includes("Folder unavailable"))).toBe(true);
 });
+
+it("eventually polls tabs beyond the first 64",async () => {
+ vi.useFakeTimers();
+ try {
+  useWorkbench.setState({root:"fixture",projectPath:".",tabs:Array.from({length:65},(_,i)=>({...file,path:`rtl/file${i}.sv`})),tree:[]});
+  const read=vi.spyOn(bridge,"syncProjectFiles").mockResolvedValue([]);
+  vi.spyOn(bridge,"projectTree").mockResolvedValue([]);
+  render(<Sync/>);
+  await act(async()=>{await vi.advanceTimersByTimeAsync(2100);});
+  expect(read.mock.calls.flatMap(call=>call[2].map(item=>item.path))).toContain("rtl/file64.sv");
+ } finally { vi.useRealTimers(); }
+});
+it("ignores an old read after a file closes and reopens with the same path",async () => {
+ useWorkbench.setState({root:"fixture",projectPath:".",tabs:[file],tree:[]});
+ let finish!: (value:Awaited<ReturnType<typeof bridge.syncProjectFiles>>)=>void;
+ vi.spyOn(bridge,"syncProjectFiles").mockReturnValue(new Promise(resolve=>{finish=resolve;}));
+ vi.spyOn(bridge,"projectTree").mockResolvedValue([]);
+ render(<Sync/>);
+ act(()=>useWorkbench.getState().closeFile(file.path));
+ act(()=>useWorkbench.getState().openFile({...file,content:"reopened",savedContent:"reopened"}));
+ await act(async()=>finish([{path:file.path,version:"old",content:"stale read",missing:false}]));
+ expect(useWorkbench.getState().tabs[0]?.content).toBe("reopened");
+});

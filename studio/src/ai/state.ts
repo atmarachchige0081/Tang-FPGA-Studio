@@ -218,7 +218,8 @@ export function reduceAiEvent(state: AiConversationState, event: AiEvent): AiCon
     const id = string(item.id);
     const status = string(item.status);
     const activities = id ? state.activities.map((activity) => activity.id === id ? { ...activity, status: status === "failed" ? "failed" as const : status === "declined" ? "declined" as const : "completed" as const } : activity) : state.activities;
-    let messages = state.messages.map((message) => id && message.id === id ? { ...message, streaming: false } : message);
+    const finalText = string(item.type) === "agentMessage" ? string(item.text) ?? string(item.message) : undefined;
+    let messages = state.messages.map((message) => id && message.id === id ? { ...message, text: finalText ?? message.text, streaming: false } : message);
     if (id && string(item.type) === "agentMessage" && !messages.some((message) => message.id === id)) {
       const text = string(item.text) ?? string(item.message);
       if (text) messages = [...messages, { id, role: "assistant", text }];
@@ -277,12 +278,13 @@ export function reduceAiEvent(state: AiConversationState, event: AiEvent): AiCon
       } : item),
     };
   }
+  if (event.method === "error" && event.params.willRetry === true) return state;
   if (event.method === "error" || event.method === "provider/protocolError" || event.method === "provider/stopped") {
     return {
       ...state, running: false, turnId: null, approvals: [], questions: [],
       messages: state.messages.map((item) => ({ ...item, streaming: false })),
       activities: state.activities.map((item) => item.status === "running" ? { ...item, status: "failed" as const } : item),
-      error: string(event.params.message) ?? "The AI provider stopped unexpectedly.",
+      error: string(record(event.params.error).message) ?? string(event.params.message) ?? "The AI provider stopped unexpectedly.",
     };
   }
   return state;

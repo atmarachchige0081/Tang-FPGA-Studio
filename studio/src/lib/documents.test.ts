@@ -63,3 +63,13 @@ describe("native confirmation boundaries", () => {
     expect(useWorkbench.getState().output.at(-1)?.message).toContain("Action cancelled: confirmation could not open");
   });
 });
+
+it("does not discard edits made after a discard prompt was opened", async () => {
+ const original=file("top.sv","dirty","saved");
+ useWorkbench.setState({root:"one",projectPath:".",tabs:[original]});
+ let answer!: (value:boolean)=>void;
+ const pending=confirmDiscardUnsaved([original],()=>new Promise(resolve=>{answer=resolve;}));
+ useWorkbench.getState().updateFile(original.path,"newer edits");
+ answer(true);
+ expect(await pending).toBe(false);
+});

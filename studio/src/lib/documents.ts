@@ -1,3 +1,4 @@
+import { watchWorkspace } from "./workspace-operation";
 import { confirm as nativeConfirm } from "@tauri-apps/plugin-dialog";
 import { isTauri } from "@tauri-apps/api/core";
 import { useWorkbench } from "../store/workbench";
@@ -29,5 +30,15 @@ export async function confirmDiscardUnsaved(
   if (!dirty.length) return true;
   const names = dirty.slice(0, 3).map((tab) => tab.name).join(", ");
   const remainder = dirty.length > 3 ? ` and ${dirty.length - 3} more` : "";
-  return await confirm(`Discard unsaved changes in ${names}${remainder}?`);
+  const state = useWorkbench.getState();
+  const tracked = tabs.filter((tab) => state.tabs.includes(tab));
+  const operation = watchWorkspace(state.root, state.projectPath);
+  try {
+    if (!await confirm(`Discard unsaved changes in ${names}${remainder}?`)) return false;
+    const current = useWorkbench.getState();
+    const unchanged = tracked.every((tab) => current.tabs.some((live) => live.path === tab.path && live.content === tab.content && live.savedContent === tab.savedContent));
+    if (operation.current() && unchanged) return true;
+    current.appendOutput({ jobId: "dialog", phase: "confirmation", stream: "stderr", message: "Action cancelled because the project or files changed while confirmation was open. Review your edits and try again.", timestamp: new Date().toISOString() });
+    return false;
+  } finally { operation.stop(); }
 }

@@ -12,20 +12,36 @@ export function useProjectFileSync(): void {
     let journalRevision: number | undefined;
     const versions = new Map<string, string>();
     const reported = new Set<string>();
+    const generations = new Map<string, number>();
+    let batchStart = 0;
+    const stopTabs = useWorkbench.subscribe((state, previous) => {
+      if (state.tabs === previous.tabs) return;
+      const openPaths = new Set(state.tabs.map((tab) => tab.path));
+      for (const tab of previous.tabs) if (!openPaths.has(tab.path)) {
+        generations.set(tab.path, (generations.get(tab.path) ?? 0) + 1);
+        versions.delete(tab.path); reported.delete(tab.path);
+      }
+    });
     const current = () => !disposed && useWorkbench.getState().root === root && useWorkbench.getState().projectPath === project;
     const sync = async () => {
       if (busy || !current()) return;
       busy = true;
-      const paths = useWorkbench.getState().tabs.slice(0, 64).map((tab) => tab.path);
-      for (const path of versions.keys()) if (!paths.includes(path)) versions.delete(path);
+      const allPaths = useWorkbench.getState().tabs.map((tab) => tab.path);
+      if (batchStart >= allPaths.length) batchStart = 0;
+      const paths = allPaths.slice(batchStart, batchStart + 64);
+      batchStart += paths.length;
+      const requested = new Map(paths.map((path) => [path, generations.get(path) ?? 0]));
+      for (const path of versions.keys()) if (!allPaths.includes(path)) versions.delete(path);
       try {
         const updates = await bridge.syncProjectFiles(root, project, paths.map((path) => ({ path, version: versions.get(path) ?? "" })));
         if (!current()) return;
         for (const update of updates) {
+          if (requested.has(update.path) && requested.get(update.path) !== (generations.get(update.path) ?? 0)) continue;
           if (update.error) {
             if (!reported.has(update.path)) { reported.add(update.path); useWorkbench.getState().appendOutput({jobId:"file-sync",phase:"refresh",stream:"stderr",message:`Cannot refresh ${update.path}: ${update.error}`,timestamp:new Date().toISOString()}); }
             continue;
           }
+          if (!useWorkbench.getState().tabs.some((tab) => tab.path === update.path)) continue;
           reported.delete(update.path);
           versions.set(update.path, update.version);
           if (update.missing || update.content !== null) useWorkbench.getState().syncFile(update.path, update.content, update.missing);
@@ -64,6 +80,6 @@ export function useProjectFileSync(): void {
       if (event.method === "item/completed" || event.method === "turn/completed" || event.method === "item/fileChange/outputDelta") refresh();
     }).then((unlisten) => { if (disposed) unlisten(); else stop = unlisten; }).catch(() => undefined);
     refresh();
-    return () => { disposed = true; stop?.(); clearInterval(interval); clearInterval(treeInterval); clearInterval(journalInterval); window.removeEventListener("focus", refresh); window.removeEventListener("fpga-studio:files-changed", refresh); };
+    return () => { disposed = true; stopTabs(); stop?.(); clearInterval(interval); clearInterval(treeInterval); clearInterval(journalInterval); window.removeEventListener("focus", refresh); window.removeEventListener("fpga-studio:files-changed", refresh); };
   }, [root, project]);
 }

@@ -160,4 +160,45 @@ describe("native AI Assistant panel", () => {
     expect(screen.getByText("echo restore-review")).toBeTruthy();
   });
 
+  async function readyWithHistory() {
+    vi.spyOn(bridge,"aiThreadList").mockResolvedValue({data:[{id:"saved-thread",name:"Saved conversation"}]});
+    render(<AiPanel/>);
+    fireEvent.click(await screen.findByRole("button",{name:/Connect agent/i}));
+    fireEvent.click(await screen.findByRole("button",{name:/Sign in with ChatGPT/i}));
+    await screen.findByRole("textbox",{name:"Ask AI about this project"});
+  }
+  it("prevents switching saved threads during a running turn",async()=>{
+    const resume=vi.spyOn(bridge,"aiThreadResume");
+    vi.spyOn(bridge,"aiTurnStart").mockResolvedValue({turn:{id:"running",status:"inProgress"}});
+    await readyWithHistory();
+    fireEvent.change(screen.getByRole("textbox",{name:"Ask AI about this project"}),{target:{value:"Explain"}});
+    fireEvent.click(screen.getByRole("button",{name:"Send"}));
+    await screen.findByRole("button",{name:"Stop"});
+    fireEvent.click(screen.getByRole("button",{name:"AI conversation history"}));
+    fireEvent.click(await screen.findByRole("button",{name:/Saved conversation/}));
+    expect(resume).not.toHaveBeenCalled();
+  });
+  it("ignores history returned after switching projects",async()=>{
+    let finish!: (value:Record<string,unknown>)=>void;
+    vi.spyOn(bridge,"aiThreadResume").mockResolvedValue({thread:{id:"saved-thread"}});
+    vi.spyOn(bridge,"aiThreadRead").mockReturnValue(new Promise(resolve=>{finish=resolve;}));
+    await readyWithHistory();
+    fireEvent.click(screen.getByRole("button",{name:"AI conversation history"}));
+    fireEvent.click(await screen.findByRole("button",{name:/Saved conversation/}));
+    await waitFor(()=>expect(bridge.aiThreadRead).toHaveBeenCalled());
+    useWorkbench.setState({projectPath:"projects/new",project:"New"});
+    await waitFor(()=>expect(screen.getByText("Project: New")).toBeTruthy());
+    finish({thread:{turns:[{items:[{type:"agentMessage",id:"old",text:"STALE_HISTORY"}]}]}});
+    await new Promise(resolve=>setTimeout(resolve,0));
+    expect(screen.queryByText("STALE_HISTORY")).toBeNull();
+  });
+  it("prevents clearing a conversation while its first thread is being created",async()=>{
+    vi.spyOn(bridge,"aiThreadStart").mockReturnValue(new Promise(()=>undefined));
+    await readyWithHistory();
+    fireEvent.change(screen.getByRole("textbox",{name:"Ask AI about this project"}),{target:{value:"Explain"}});
+    fireEvent.click(screen.getByRole("button",{name:"Send"}));
+    await waitFor(()=>expect(bridge.aiThreadStart).toHaveBeenCalled());
+    expect((screen.getByRole("button",{name:"New AI conversation"}) as HTMLButtonElement).disabled).toBe(true);
+  });
+
 });

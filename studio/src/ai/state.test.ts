@@ -62,3 +62,22 @@ describe("AI conversation protocol reducer", () => {
     expect(result).toBe(running);
   });
 });
+
+it("replaces partial streamed text with the authoritative completed message", () => {
+ let state=reduceAiEvent(initialAiConversation,{method:"item/agentMessage/delta",params:{itemId:"a",delta:"partial"},timestamp:""});
+ state=reduceAiEvent(state,{method:"item/completed",params:{item:{id:"a",type:"agentMessage",text:"complete final answer"}},timestamp:""});
+ expect(state.messages[0]?.text).toBe("complete final answer");
+});
+it("keeps a retrying provider turn active and preserves pending approvals", () => {
+ const state=reduceAiEvent({...initialAiConversation,running:true,turnId:"turn-1"},{method:"item/commandExecution/requestApproval",requestId:7,params:{command:"read source"},timestamp:""});
+ const next=reduceAiEvent(state,{method:"error",params:{error:{message:"Retrying connection"},willRetry:true},timestamp:""});
+ expect(next.running).toBe(true);
+ expect(next.turnId).toBe("turn-1");
+ expect(next.approvals).toEqual(state.approvals);
+});
+
+it("still reports a final provider error with its actual message",()=>{
+ const next=reduceAiEvent({...initialAiConversation,running:true,turnId:"t"},{method:"error",params:{error:{message:"Authentication expired"},willRetry:false},timestamp:""});
+ expect(next.running).toBe(false);
+ expect(next.error).toBe("Authentication expired");
+});

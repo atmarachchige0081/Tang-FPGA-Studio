@@ -1,3 +1,4 @@
+import { persistFile } from "./lib/save-file";
 import { confirmAction } from "./lib/documents";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { PanelResizeHandle, usePanelLayout, panelLayoutStyle } from "./components/PanelResizeHandle";
@@ -229,8 +230,7 @@ function Workbench(): React.JSX.Element {
     try {
       if (active.externalContent !== undefined && !await confirmAction("This file changed on disk. Replace the disk version with your editor contents?")) return;
       if (useWorkbench.getState().root !== store.root || useWorkbench.getState().projectPath !== store.projectPath) return;
-      await bridge.writeText(store.root, active.path, active.content);
-      store.markSaved(active.path, active.content);
+      if (!await persistFile(store.root, store.projectPath, active)) return;
       store.appendOutput({ jobId: "editor", phase: "save", stream: "system", message: `Saved ${active.path}`, timestamp: new Date().toISOString() });
       window.dispatchEvent(new Event("fpga-studio:analysis-refresh"));
       window.dispatchEvent(new Event("fpga-studio:verification-refresh"));

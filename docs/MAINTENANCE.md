@@ -1,5 +1,56 @@
 # Maintenance log
 
+## 2026-10-18 — Ten verified defects in document and AI workflows
+
+Scope: existing navigation, save, discard confirmation, file synchronization and
+AI conversation handling. Reviewed this log, the release comparison and the
+relevant implementations first. No root AGENTS.md exists; projects/AGENTS.md
+applies to HDL projects, which this cycle does not change. The user explicitly
+requested ten fixes for this cycle. Baseline: `1c4822c`.
+
+Each row records a distinct failing regression, its cause and the corresponding
+fix. Deferred promises reproduce asynchronous ordering deterministically; bridge
+calls are mocked, while React, Zustand and the application handlers are real.
+
+| ID | Problem and how it was found | Root cause and fix | Regression evidence |
+| --- | --- | --- | --- |
+| B01 | Start opening a source location, switch projects, then finish the read: old content opens in the new project. | Navigation used captured store actions without validating the workspace after I/O. A subscribed workspace guard invalidates late results, including switching away and back. | `navigation-safety.test.ts`: pending previous-project read; ordinary navigation remains functional. |
+| B02 | Open 65 tabs and advance multiple polling intervals: tab 65 is never requested. | Every poll took the same first 64 tabs. Rotate bounded batches through all tabs, retaining the native request size limit and cached versions. | `file-sync.test.tsx`: the 65th path must appear in subsequent requests. |
+| B03 | Start a file refresh, close/reopen that path, then finish the old read: reopened content is replaced. | Responses tracked only paths, not the open-file lifetime. Track close generations, clear cached versions on close and ignore obsolete responses. | `file-sync.test.tsx`: same-path reopen retains its new buffer; existing concurrent-typing conflict test still passes. |
+| B04 | Save in project A, switch to project B with the same file path, then complete A's write: B's saved baseline is changed. | Save acknowledgement called the live store's markSaved using only the path. Extracted the unchanged persistence sequence into a tested helper, then guarded acknowledgement by workspace/file lifetime. | `save-file.test.ts`: cross-project acknowledgement fails before the guard; successful concurrent typing stays dirty and failed writes stay unsaved. App.save now calls this helper. |
+| B05 | Open a discard prompt, type newer text while the answer is pending, then approve: the old answer authorizes discarding newer edits. | Confirmation returned the answer without checking its snapshot. Compare tracked content/baselines and workspace lifetime after approval; cancel with an actionable output message if changed. | `documents.test.ts`: edits made after the prompt prevent discard; clean navigation and explicit cancellation controls remain. |
+| B06 | Start an AI turn, open history and select a saved conversation: the panel resumes another thread while work is active. | History lacked the running-turn guard used for New conversation. Guard the handler and disable history entries during active work. | `AiPanel.test.tsx`: selecting history during a running turn must not call aiThreadResume. |
+| B07 | Begin loading saved AI history, change project, then finish the read: old messages enter the new project's panel. | History awaits lacked the generation checks used by the send/connect paths. Check after each await, including errors/finalization, and update the active thread only for the current generation. | `AiPanel.test.tsx`: delayed old history must not render STALE_HISTORY in the new project. |
+| B08 | Send the first prompt with thread creation pending: New conversation remains enabled and can clear state underneath that operation. | New checked only running, which is false until creation/start finishes. Include busy and the operation lock in handler/control guards. | `AiPanel.test.tsx`: New is disabled while aiThreadStart is unresolved. |
+| B09 | Stream a partial assistant message, then deliver the complete final message: only partial text remains visible. | Completion cleared the streaming flag but ignored final text for existing messages. Use the authoritative completed text when supplied, preserving deltas if absent. | `state.test.ts`: final full answer replaces a partial streamed fragment. |
+| B10 | Deliver a provider error with willRetry=true: the panel declares the turn stopped and clears approvals although Codex will continue. | Every error was terminal. Preserve live turn/approval state for explicit retries and log the diagnostic to Output; final errors still stop and expose their nested error.message. | `state.test.ts`: retry preserves turn and approvals; final authentication error still stops with its actual message. |
+
+**Before/after evidence:** six initial document/state regressions failed in one
+run, the isolated original save sequence failed its cross-project test, and all
+three corrected AI lifecycle regressions failed with behavioral assertions before
+their fixes. The focused post-fix run passed 37 tests across six files.
+`npm --prefix studio run check` passed: production build, TypeScript checking and
+109 tests across 30 files. `git diff --check` passed. A real Chromium application
+check with simulated provider requests/events verified pending-thread New
+protection, running-turn history protection, retry continuity and authoritative
+final-answer rendering, with no browser exceptions. Inspected screenshots at
+`build/maintenance-ten/pending-thread.png`, `running-history.png` and
+`completed-answer.png` (generated evidence, not tracked source).
+
+**Limits:** these tests do not authenticate to Codex, run native Windows dialogs
+or exercise a physical board. No hardware programming, flash writes, dependency
+upgrades or release tags. B06–B10 fix independently reproduced AI defects; they do
+not establish or claim to repair the user's provider-side aborted file reads.
+
+**Real-user checks:** on Windows, type while saving, switch projects during a
+source read, and verify no old-project buffer appears. In AI, start a prompt and
+confirm New/history switching is blocked until it finishes; completed answers
+should show full text. Use a disposable project for concurrency checks.
+
+**Next priority:** reproduce the authenticated Windows Codex aborted-read failure
+with the actual provider executable/version and a fresh conversation. Continue
+native save/file-sync concurrency verification after that.
+
 ## 2026-10-18 — Terminal teardown, resizing and native confirmations
 
 - **Workflow:** open/switch the terminal, resize the window/panel, and confirm
