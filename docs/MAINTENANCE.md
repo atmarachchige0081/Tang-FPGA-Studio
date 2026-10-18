@@ -1,5 +1,29 @@
 # Maintenance log
 
+## 2026-10-18 — Closing Studio blocked by window ACL
+
+**Evidence/root cause:** user reports `plugin:window|destroy not allowed by ACL`.
+Inspected App's close safeguards, the installed Tauri SDK and native window
+capability. SDK `onCloseRequested` automatically calls `destroy()` after the
+handler permits closure. `core:default` did not grant this command. A focused
+regression failed against the original capability for the missing permission;
+the prevented-close control passed.
+
+**Fix:** grant only `core:window:allow-destroy` in the existing main-window
+capability. Preserve the unsaved-file checks, running-job checks and native
+hardware-task guard; do not replace the close handler with forced shutdown.
+
+**Verification:** ten focused tests passed across three files, including the
+real SDK close-event flow with mocked IPC, prevented closure and existing
+unsaved-work/native-confirmation regressions. TypeScript/production frontend
+build checked separately. No visual changes or hardware operations.
+
+**Limit/check:** mocked IPC does not execute native ACL enforcement. Rust/Tauri
+build tools remain unavailable here. Rebuild the desktop app on Windows (Vite
+hot reload alone cannot update native permissions), save files, finish running
+jobs and close with X. Also verify a modified unsaved tab still blocks closure.
+Next useful task remains Windows AI explain/approval recovery testing.
+
 ## 2026-10-18 — Windows QA feedback and pending startup recovery guard
 
 **Workflow/evidence:** reviewed the supplied Windows native-runner QA report,
