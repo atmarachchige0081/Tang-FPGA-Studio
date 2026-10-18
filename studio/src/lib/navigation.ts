@@ -5,11 +5,21 @@ import { useWorkbench } from "../store/workbench";
 
 export function workspacePath(root: string, projectPath: string, file: string): string {
   const normalizedRoot = root.replaceAll("\\", "/").replace(/\/$/, "");
-  let normalized = file.replaceAll("\\", "/").replace(/^file:\/\/\//, "");
-  if (normalized.toLowerCase().startsWith(`${normalizedRoot.toLowerCase()}/`)) normalized = normalized.slice(normalizedRoot.length + 1);
-  normalized = normalized.replace(/^\.\//, "").replace(/^\//, "");
+  const windows = /^(?:[A-Za-z]:\/|\/\/)/.test(normalizedRoot);
+  const comparable = (value: string) => windows ? value.toLowerCase() : value;
+  let normalized = file.replaceAll("\\", "/");
+  if (/^file:/i.test(normalized)) {
+    const url = new URL(normalized);
+    normalized = decodeURIComponent(url.pathname);
+    if (url.hostname) normalized = `//${url.hostname}${normalized}`;
+    else if (/^\/[A-Za-z]:\//.test(normalized)) normalized = normalized.slice(1);
+  }
+  const absolute = /^(?:\/|[A-Za-z]:\/)/.test(normalized);
+  if (comparable(normalized).startsWith(`${comparable(normalizedRoot)}/`)) normalized = normalized.slice(normalizedRoot.length + 1);
+  else if (absolute) throw new Error(`Source path is outside the active workspace: ${file}`);
+  normalized = normalized.replace(/^\.\//, "");
   const project = projectPath.replaceAll("\\", "/").replace(/^\.\//, "").replace(/\/$/, "");
-  if (!project || project === "." || normalized === project || normalized.startsWith(`${project}/`)) return normalized;
+  if (!project || project === "." || comparable(normalized) === comparable(project) || comparable(normalized).startsWith(`${comparable(project)}/`)) return normalized;
   return `${project}/${normalized}`;
 }
 
@@ -19,6 +29,10 @@ export async function openWorkspaceLocation(file: string, line = 1, column = 1):
   const candidates = preferred === file ? [preferred] : [preferred, file.replaceAll("\\", "/")];
   const operation = watchWorkspace(state.root, state.projectPath);
   try {
+    const existing = state.tabs.find((tab) => candidates.includes(tab.path));
+    if (existing) {
+      state.openFile(existing); state.navigateTo(existing.path, line, column); return;
+    }
     let lastError: unknown;
     for (const path of candidates) {
       try {

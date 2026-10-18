@@ -36,3 +36,21 @@ describe("AI noncredential persistence", () => {
     expect(readActiveThread("project", blocked)).toBeNull();
   });
 });
+it("keeps case-distinct Linux projects in separate conversations",()=>{
+ const storage=memory();
+ writeActiveThread("/home/user/FPGA","upper",storage);
+ writeActiveThread("/home/user/fpga","lower",storage);
+ expect(readActiveThread("/home/user/FPGA",storage)).toBe("upper");
+});
+it("retains legacy Windows selection and removes it when starting a new conversation",()=>{
+ const storage=memory();
+ storage.values.set("fpga-studio.ai.thread.ca8edf8a","legacy-thread");
+ expect(readActiveThread("C:/FPGA/.",storage)).toBe("legacy-thread");
+ writeActiveThread("C:/FPGA/.",null,storage);
+ expect(readActiveThread("C:/FPGA/.",storage)).toBeNull();
+});
+it("normalizes Windows casing and separators for active conversation identity",()=>{
+ const storage=memory();
+ writeActiveThread("C:/FPGA/Demo","thread-win",storage);
+ expect(readActiveThread("c:\\fpga\\demo",storage)).toBe("thread-win");
+});

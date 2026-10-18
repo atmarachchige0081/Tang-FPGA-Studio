@@ -827,7 +827,7 @@ kbd { padding: 1px 5px; border: 1px solid var(--line); border-radius: 4px; backg
 .analyzer-topline { grid-template-columns: repeat(5, 1fr); }
 .analyzer-topline article { grid-template-columns: 24px 1fr auto; }
 .analyzer-topline article small { grid-column: 2 / 4; color: var(--text-muted); font-size: 12px; }
-.analyzer-layout { display: grid; grid-template-columns: minmax(315px, .8fr) minmax(560px, 1.5fr); gap: 10px; }
+.analyzer-layout { border: 0; margin: 0; padding: 0; min-inline-size: 0; display: grid; grid-template-columns: minmax(315px, .8fr) minmax(560px, 1.5fr); gap: 10px; }
 .signal-picker { height: 520px; display: flex; flex-direction: column; }
 .selection-count { padding: 3px 6px; border-radius: 999px; background: var(--accent-soft); color: var(--accent-strong); font-size: 12px; font-weight: 800; }
 .signal-picker > .inline-search { margin: 8px; background: var(--surface-2); }

@@ -81,3 +81,8 @@ it("still reports a final provider error with its actual message",()=>{
  expect(next.running).toBe(false);
  expect(next.error).toBe("Authentication expired");
 });
+it("ignores delayed events from a previous turn in the same thread",()=>{
+ const current={...initialAiConversation,running:true,turnId:"new-turn"};
+ const next=reduceAiEvent(current,{method:"item/agentMessage/delta",params:{turnId:"old-turn",itemId:"old",delta:"obsolete answer"},timestamp:""});
+ expect(next).toEqual(current);
+});

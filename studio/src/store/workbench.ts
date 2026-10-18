@@ -128,7 +128,7 @@ export const useWorkbench = create<WorkbenchState>((set) => ({
   setFileChanges: (fileChanges,changeTrackingLimited,revision) => set((s) => revision !== undefined && revision < s.fileChangeRevision ? s : {fileChanges,changeTrackingLimited,fileChangeRevision:revision ?? s.fileChangeRevision}),
   openChangeReview: (path) => set((s) => ({changeReviewOpen:true,changeReviewPath:path ?? s.fileChanges[0]?.path ?? null})),
   closeChangeReview: () => set({changeReviewOpen:false}),
-  setWorkspace: (root, project, projectPath, tree, recentProjects = []) => set({ root, project, projectPath, tree, recentProjects, ready: true, fileChanges: [], fileChangeRevision: 0, changeReviewOpen: false, changeReviewPath: null, changeTrackingLimited: false, tabs: [], activePath: null, editorSelection: "", editorCursor: null, view: "welcome", hdlIndex: null, intelligenceStatus: "idle", navigation: null }),
+  setWorkspace: (root, project, projectPath, tree, recentProjects = []) => set({ root, project, projectPath, tree, recentProjects, ready: true, build: null, board: null, git: null, diagnostics: [], fileChanges: [], fileChangeRevision: 0, changeReviewOpen: false, changeReviewPath: null, changeTrackingLimited: false, tabs: [], activePath: null, editorSelection: "", editorCursor: null, view: "welcome", hdlIndex: null, intelligenceStatus: "idle", navigation: null }),
   refreshProjectTree: (tree) => set({ tree, hdlIndex: null, intelligenceStatus: "idle" }),
   setActivity: (activity) => set({ activity, sidebarOpen: true }),
   setView: (view) => set({ view }),
@@ -144,13 +144,14 @@ export const useWorkbench = create<WorkbenchState>((set) => ({
   openFile: (file) => set((state) => ({
     tabs: state.tabs.some((tab) => tab.path === file.path) ? state.tabs : [...state.tabs, file],
     activePath: file.path,
+    ...(state.activePath !== file.path ? { editorSelection: "", editorCursor: null } : {}),
     view: "editor",
   })),
   closeFile: (path) => set((state) => {
     const index = state.tabs.findIndex((tab) => tab.path === path);
     const tabs = state.tabs.filter((tab) => tab.path !== path);
     const fallback = tabs[Math.max(0, index - 1)]?.path ?? tabs[0]?.path ?? null;
-    return { tabs, activePath: state.activePath === path ? fallback : state.activePath, view: tabs.length ? state.view : "welcome" };
+    return { tabs, ...(state.activePath === path ? { editorSelection: "", editorCursor: null } : {}), activePath: state.activePath === path ? fallback : state.activePath, view: tabs.length ? state.view : "welcome" };
   }),
   updateFile: (path, content) => set((state) => ({ tabs: state.tabs.map((tab) => tab.path === path ? { ...tab, content } : tab) })),
   markSaved: (path, persistedContent) => set((state) => ({ tabs: state.tabs.map((tab) => tab.path === path ? { ...tab, savedContent: persistedContent ?? tab.content, externalContent: undefined, externalMissing: false } : tab) })),

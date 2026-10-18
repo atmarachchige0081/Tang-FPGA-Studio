@@ -227,6 +227,7 @@ export function EditorWorkspace(): React.JSX.Element {
   useEffect(() => { inlineStatus = setSuggestionStatus; return () => { inlineStatus = () => undefined; }; }, []);
   const [index, setIndex] = useState<HdlIndex>(liveIndex);
   const editorRef = useRef<MonacoEditor | null>(null);
+  const [editorReady, setEditorReady] = useState(false);
   const highlights = useRef<import("monaco-editor").editor.IEditorDecorationsCollection | null>(null);
   const active = tabs.find((tab) => tab.path === activePath);
   const activeChange = fileChanges.find((change) => change.path === activePath);
@@ -280,7 +281,7 @@ export function EditorWorkspace(): React.JSX.Element {
     editorRef.current.revealPositionInCenter(position);
     editorRef.current.focus();
     clearNavigation();
-  }, [navigation, activePath, clearNavigation]);
+  }, [navigation, activePath, clearNavigation, editorReady]);
 
   const openSymbol = async (editor: MonacoEditor) => {
     const position = editor.getPosition();
@@ -314,6 +315,8 @@ export function EditorWorkspace(): React.JSX.Element {
       setEditorCursor(selection.positionLineNumber, selection.positionColumn);
     });
     applyHdlMarkers();
+    // Navigation may arrive before the asynchronously loaded editor mounts.
+    setEditorReady(true);
   };
 
   return (

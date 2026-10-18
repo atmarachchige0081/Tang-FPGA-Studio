@@ -50,7 +50,7 @@ function firstIndexAfter(signal: WaveSignal, time: number): number {
 
 export function scalarPoints(signal: WaveSignal, window: WaveWindow): string {
   const level = (value: string | undefined) => value === "1" ? 7 : value === "0" ? 30 : 19;
-  let previous = valueAt(signal, window.start) ?? signal.samples.find((sample) => sample.time >= window.start)?.value;
+  let previous = valueAt(signal, window.start);
   const points = [`0,${level(previous)}`];
   for (let index = firstIndexAfter(signal, window.start); index < signal.samples.length; index += 1) {
     const sample = signal.samples[index]!;

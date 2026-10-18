@@ -175,6 +175,8 @@ function approvalFromEvent(state: AiConversationState, event: AiEvent): AiApprov
 }
 
 export function reduceAiEvent(state: AiConversationState, event: AiEvent): AiConversationState {
+  const eventTurn = string(event.params.turnId);
+  if (state.turnId && eventTurn && eventTurn !== state.turnId) return state;
   if (event.method === "turn/started") {
     const turn = record(event.params.turn);
     return { ...state, running: true, turnId: string(turn.id) ?? state.turnId, error: null };

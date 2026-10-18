@@ -40,6 +40,17 @@ export function writeAiSettings(settings: AiSettings, storage?: Pick<Storage, "s
 }
 
 function threadKey(projectPath: string): string {
+  const path = projectPath.replaceAll("\\", "/").replace(/\/\.\//g, "/").replace(/\/$/, "");
+  const identity = /^(?:[A-Za-z]:\/|\/\/)/.test(path) ? path.toLowerCase() : path;
+  // Keep full identity: a case-folded 32-bit hash can merge different projects.
+  return `fpga-studio.ai.thread.v2.${encodeURIComponent(identity)}`;
+}
+
+// Legacy Windows keys are safe to retain across this migration: path casing is
+// not a project boundary there. Legacy POSIX keys cannot identify which of two
+// case-distinct projects owns them; saved provider history remains available.
+function legacyWindowsThreadKey(projectPath: string): string | null {
+  if (!/^(?:[A-Za-z]:[\\/]|\\\\)/.test(projectPath)) return null;
   let hash = 2166136261;
   for (const character of projectPath.toLowerCase()) {
     hash ^= character.charCodeAt(0);
@@ -50,7 +61,9 @@ function threadKey(projectPath: string): string {
 
 export function readActiveThread(projectPath: string, storage?: Pick<Storage, "getItem">): string | null {
   try {
-    const value = (storage ?? localStorage).getItem(threadKey(projectPath));
+    const target = storage ?? localStorage;
+    const legacy = legacyWindowsThreadKey(projectPath);
+    const value = target.getItem(threadKey(projectPath)) ?? (legacy ? target.getItem(legacy) : null);
     return value && /^[A-Za-z0-9_-]{1,128}$/.test(value) ? value : null;
   } catch {
     return null;
@@ -62,6 +75,8 @@ export function writeActiveThread(projectPath: string, threadId: string | null, 
     const target = storage ?? localStorage;
     if (threadId) target.setItem(threadKey(projectPath), threadId);
     else target.removeItem(threadKey(projectPath));
+    const legacy = legacyWindowsThreadKey(projectPath);
+    if (legacy) target.removeItem(legacy);
   } catch {
     // App Server retains history even if the active UI selection cannot be stored.
   }

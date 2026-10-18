@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { HdlIndex } from "../types";
-import { completionCandidates, definitionFor, referencesFor, searchableSymbols } from "./hdl-intelligence";
+import { completionCandidates, definitionFor, referencesFor, searchableSymbols, symbolsFromBuffer, fpgaTargetFromBoard } from "./hdl-intelligence";
 
 const index: HdlIndex = {
   top: "top",
@@ -53,4 +53,14 @@ describe("project-aware HDL intelligence", () => {
     expect(items.length).toBeGreaterThanOrEqual(5_000);
     expect(performance.now() - started).toBeLessThan(100);
   });
+});
+it("discovers packed vector declarations in the active HDL buffer",()=>{
+ expect(symbolsFromBuffer("logic [7:0] counter;\ninput wire [WIDTH-1:0] data;","rtl/top.sv").map(s=>s.name)).toEqual(["counter","data"]);
+});
+it("does not include the speed-grade prefix in the FPGA package",()=>{
+ expect(fpgaTargetFromBoard({vendor:"Gowin",family:"GW2A",device:"GW2A-LV18PG256C8/I7"})).toMatchObject({package:"PG256",speedGrade:"C8/I7"});
+});
+
+it.each([ ["GW1NR-LV9QN88PC6/I5","QN88P","C6/I5"], ["GW5AST-LV138PG484AC1/I0","PG484A","C1/I0"] ])("preserves package suffixes for %s",(device,pack,speedGrade)=>{
+ expect(fpgaTargetFromBoard({vendor:"Gowin",family:"GW",device})).toMatchObject({package:pack,speedGrade});
 });

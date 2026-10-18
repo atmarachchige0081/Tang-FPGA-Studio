@@ -1,3 +1,4 @@
+import { watchWorkspace } from "../lib/workspace-operation";
 import { useEffect, useRef, useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { FolderOpen, LoaderCircle, X } from "lucide-react";
@@ -24,7 +25,7 @@ export function OpenProjectDialog(): React.JSX.Element | null {
 
   const inspect = async (path: string) => {
     if (!path.trim() || lock.current) return;
-    lock.current = true; setBusy(true); setError(""); setProjects([]);
+    lock.current = true; setBusy(true); setError(""); setProjects([]); setSelected("");
     try {
       const recognized = await bridge.recognizeProjectFolder(path.trim());
       setProjects(recognized); setSelected(recognized[0]?.path ?? "");
@@ -43,15 +44,18 @@ export function OpenProjectDialog(): React.JSX.Element | null {
     if (state.runningJob) { setError("Wait for the current hardware or build task to finish before changing projects."); return; }
     if (!await confirmDiscardUnsaved(state.tabs)) return;
     lock.current = true; setBusy(true); setError("");
+    const operation = watchWorkspace(state.root, state.projectPath);
     try {
       // Resolve everything before replacing the current editor state.
       const snapshot = await bridge.openProject(state.root, selected);
+      if (!operation.current()) return;
       const [build, board] = await Promise.all([bridge.buildSummary(snapshot.root, snapshot.projectPath), bridge.activeBoard(snapshot.root, snapshot.projectPath)]);
+      if (!operation.current()) return;
       state.setWorkspace(snapshot.root, snapshot.project, snapshot.projectPath, snapshot.tree, snapshot.recentProjects);
       state.setBuild(build); state.setBoard(board); state.setView("editor");
       setVisible(false);
     } catch (caught) { setError(String(caught)); }
-    finally { lock.current = false; setBusy(false); }
+    finally { operation.stop(); lock.current = false; setBusy(false); }
   };
   if (!visible) return null;
   return <div className="release-overlay" onKeyDown={(event) => { if (event.key === "Escape" && !busy) setVisible(false); }}>

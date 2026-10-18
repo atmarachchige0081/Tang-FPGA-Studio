@@ -1,5 +1,69 @@
 # Maintenance log
 
+## 2026-10-18 — Twenty verified defects; end-of-day maintenance
+
+Baseline: `5b27af7`. Reviewed the prior maintenance cycle, current workflows and
+applicable instructions. The user explicitly requested twenty distinct fixes.
+The count below does not reuse the preceding ten or count multiple symptoms of
+one issue separately. All reproduction checks use real application logic with
+controlled bridge I/O; no FPGA workflows or physical programming are run.
+
+| ID | How the defect was found | Cause and fix | Regression |
+| --- | --- | --- | --- |
+| C01 | Persist separate conversations for `/home/user/FPGA` and `/home/user/fpga`: the second replaces the first. | Project keys lowercased every path and reduced it to 32 bits. Store full normalized identity, folding case only for Windows paths. | `persistence.test.ts`: case-distinct Linux projects; Windows separator/case and legacy-selection controls. |
+| C02 | Select text in one tab, switch files: AI context still contains the first file's selection/cursor. | Tab activation retained file-specific context. Clear selection/cursor when the active file changes or closes. | `workbench.test.ts`: cross-tab selection isolation. |
+| C03 | Set a new workspace after viewing diagnostics/Git: the old project's state remains. | Workspace reset omitted project metadata. Clear build, board, Git and diagnostics while preserving the running-job safeguard. | `workbench.test.ts`: stale project metadata reset. |
+| C04 | Search once, change the query, immediately Replace all: replacement uses old match results for its dirty-file preflight. | Results/button stayed active during the next search. Clear obsolete results and block replacement while loading. | `Sidebar.test.tsx`: replacement cannot run against stale results. |
+| C05 | Request an HDL index, switch project, resolve the old index last: the new project gets the old symbols. | Sidebar index loading lacked effect-lifetime checks. Ignore late success/failure after cleanup. | `Sidebar.test.tsx`: delayed old index cannot replace the new index. |
+| C06 | Navigate to an already-open unsaved file whose disk copy is gone: navigation throws instead of using the buffer. | Navigation always reread disk. Activate the existing buffer and use its contents without I/O. | `navigation-safety.test.ts`: deleted disk file with an open unsaved buffer. |
+| C07 | Open a diagnostic `file:///work/My%20Labs/...` link: the generated path contains `%20` and a duplicated root. | Ad-hoc URI stripping lost POSIX absolute-path semantics and never decoded escapes. Parse/decode file URIs before root mapping. | `navigation-path.test.ts`: POSIX and Windows escaped file URIs. |
+| C08 | Pass `/work/fpga/...` while the active POSIX root is `/work/FPGA`: it is incorrectly treated as inside the workspace. | Root matching lowercased POSIX paths. Use platform-appropriate comparison and reject absolute paths outside the active root. | `navigation-path.test.ts`: case-distinct POSIX root rejected; Windows case remains supported. |
+| C09 | Render a scalar whose first sample is at time 50 in a window starting at 0: its future value appears at time 0. | Rendering initialized from a future sample. Keep the pre-sample interval unknown until the first transition. | `waveform.test.ts`: exact unknown-to-high trace. |
+| C10 | Index `logic [7:0] counter` and `input wire [WIDTH-1:0] data`: vector symbols are missing or misidentified. | Active-buffer declaration matching did not consume packed dimensions. Match dimensions before the identifier. | `hdl-intelligence.test.ts`: packed-vector symbol discovery. |
+| C11 | Parse Primer 20K device `GW2A-LV18PG256C8/I7`: package becomes PG256C and speed grade loses C. | An optional package letter greedily consumed the grade prefix. Distinguish real package suffixes from the following C/I grade. | `hdl-intelligence.test.ts`: PG256/C8 plus QN88P and PG484A compatibility controls. |
+| C12 | Deliver an old turn's delayed message delta while a new turn is running in the same thread: obsolete text enters the new conversation state. | Event reduction checked completion IDs but not other explicit turn IDs. Reject events belonging to another active turn. | `state.test.ts`: stale-turn delta leaves current state unchanged. |
+| C13 | Start account refresh, switch projects, reject the old refresh: the new panel shows the previous project's error. | Background refresh failure handlers lacked the success path's generation checks. Scope account errors and history-clear failures to their generation. | `AiPanel.test.tsx`: delayed old account error stays out of the new project. |
+| C14 | With probes A=0, B=1, bus=2 and a trigger on B, remove A: the trigger silently moves to bus. | Probe IDs were renumbered without remapping trigger clauses. Remap old IDs to the surviving signal identities before serialization. | `analyzer-safety.test.tsx`: saved trigger still targets B after removing A. |
+| C15 | Change an edge-trigger clause from a one-bit probe to a bus: config retains unsupported rising/falling mode. | Channel selection changed the ID only. Convert edge operation to compare when the new channel is wider than one bit. | `analyzer-safety.test.tsx`: bus selection saves a valid compare clause. |
+| C16 | Start saving analyzer config: editable fields remain enabled and can be overwritten by the submitted save response. | Only action buttons were locked. Disable the editable configuration fieldset and refresh while busy/running; handlers also reject edits while locked. | `analyzer-safety.test.tsx`: clock input is disabled during pending save; browser confirms unlock after completion. |
+| C17 | Start opening a project, change to another workspace, finish the old open: the newer workspace is replaced. | Project loading committed captured results after I/O without scope validation. Guard each await and final commit with workspace lifetime. | `OpenProjectDialog.test.tsx`: delayed project open cannot replace the newer workspace. |
+| C18 | Recognize a project successfully, then repeat recognition and fail: Open project remains enabled for the old hidden candidate. | Recognition cleared displayed results but retained selected path. Clear both together before recognizing. | `OpenProjectDialog.test.tsx`: recognition failure leaves no actionable old selection. |
+| C19 | Queue terminal input behind a pending write, dispose the panel, complete the write: queued text still reaches the old shell. | Disposal was checked when input arrived, not when queued I/O ran. Check lifetime and session identity immediately before each native write. | `TerminalPane.test.tsx`: queued input is not replayed after disposal. |
+| C20 | Click a Traceability source row: it opens the file but never reaches the source line. | It emitted an event with no listener; the initial editor mount also needs to consume pending navigation. Use the shared navigation path and consume pending requests when Monaco mounts. | `analyzer-safety.test.tsx` and real-browser cursor/navigation verification. |
+
+**Evidence:** ten core regressions failed in a baseline run, five project/search/
+AI regressions failed in another, and terminal/analyzer/source-link regressions
+failed independently (probe-removal fixture corrected before its behavioral
+failure was counted). After fixes, 80 focused tests across 12 files passed.
+The browser regression additionally exposed pending navigation being missed on
+cold Monaco mount; it failed before the mount handoff fix and now reaches source
+line 6 with the pending request consumed. `scripts/test-analyzer-navigation.py`
+passed with no browser exceptions; it also verifies the saved trigger's signal
+identity and locked/unlocked configuration fields. Screenshots inspected at
+`build/maintenance-twenty/analyzer-saving.png` and `traceability-source.png`.
+Final `npm --prefix studio run check` passed: TypeScript checking, production
+build and 134 tests across 32 files. Python regression script compilation and
+`git diff --check` passed. Generated screenshots/reports remain untracked.
+
+**Compatibility:** no boards, programmer aliases, commands, dependencies or
+approval boundaries changed. Windows legacy active-thread selection is retained
+and removed correctly by New conversation. Legacy POSIX active-thread pointers
+cannot safely distinguish case-colliding owners and are ignored; saved provider
+history and account credentials are retained. Existing settings remain intact.
+
+**Limits:** native Windows execution, authenticated Codex file reads and physical
+boards were not exercised. The terminal scheduling test substitutes the xterm
+input source; the browser uses real React and Monaco with simulated config
+persistence. The provider-side `aborted` read report remains
+unresolved; these fixes do not claim to repair it. No hardware writes or tags.
+
+**Real-user check:** in a disposable analyzer config on Windows, trigger on the
+second probe, remove the first, and verify the trigger stays on the same signal.
+Save configuration only; hardware programming is unnecessary for this check.
+
+**Next task:** authenticated Windows Codex read-failure reproduction, followed by
+remaining asynchronous analysis-view refresh races. Stop after this verified cycle.
+
 ## 2026-10-18 — Ten verified defects in document and AI workflows
 
 Scope: existing navigation, save, discard confirmation, file synchronization and

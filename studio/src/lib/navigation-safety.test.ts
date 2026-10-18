@@ -21,3 +21,11 @@ it("still opens a location in the current project",async()=>{
  expect(useWorkbench.getState().tabs[0]?.path).toBe("demo/rtl/top.sv");
  expect(useWorkbench.getState().navigation).toMatchObject({path:"demo/rtl/top.sv",line:4,column:2});
 });
+it("can navigate an open unsaved buffer even when its disk file was deleted",async()=>{
+ const file={path:"demo/rtl/top.sv",name:"top.sv",language:"systemverilog",content:"unsaved",savedContent:"saved"};
+ useWorkbench.setState({root:"workspace",projectPath:"demo",tabs:[file],activePath:null});
+ const read=vi.spyOn(bridge,"readText").mockRejectedValue(Error("file missing"));
+ await openWorkspaceLocation("rtl/top.sv",8,2);
+ expect(read).not.toHaveBeenCalled();
+ expect(useWorkbench.getState().activePath).toBe(file.path);
+});

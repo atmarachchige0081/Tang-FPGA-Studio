@@ -134,3 +134,26 @@ describe("project replacement preserves live editor state", () => {
   });
 
 });
+
+it("blocks replacement while results still belong to an older query",async()=>{
+ const replace=vi.spyOn(bridge,"replaceProject").mockResolvedValue(summary);
+ vi.mocked(bridge.searchProject).mockImplementation(async (_r,_p,q)=>q==="before"?[{file:source.path,line:1,column:1,preview:source.content}]:new Promise(()=>undefined));
+ render(<Sidebar/>);
+ fireEvent.change(screen.getByLabelText("Find in project"),{target:{value:"before"}});
+ await screen.findByText(source.content);
+ fireEvent.click(screen.getByRole("button",{name:"Toggle Replace"}));
+ fireEvent.change(screen.getByLabelText("Find in project"),{target:{value:"another"}});
+ fireEvent.click(screen.getByRole("button",{name:"Replace all matches"}));
+ await act(async()=>{});
+ expect(replace).not.toHaveBeenCalled();
+});
+it("does not install an old project's late HDL index",async()=>{
+ const index=await bridge.hdlIndex("Browser preview",".");
+ let finish!: (value:typeof index)=>void;
+ vi.mocked(bridge.hdlIndex).mockReturnValueOnce(new Promise(resolve=>{finish=resolve;})).mockResolvedValue({...index,top:"new_top"});
+ useWorkbench.setState({hdlIndex:null});render(<Sidebar/>);
+ act(()=>useWorkbench.getState().setWorkspace("workspace-a","New","new",[]));
+ await waitFor(()=>expect(useWorkbench.getState().hdlIndex?.top).toBe("new_top"));
+ await act(async()=>finish({...index,top:"OLD_TOP"}));
+ expect(useWorkbench.getState().hdlIndex?.top).toBe("new_top");
+});

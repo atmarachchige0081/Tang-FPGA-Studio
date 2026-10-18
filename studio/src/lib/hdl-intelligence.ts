@@ -28,7 +28,7 @@ export interface SymbolLocation {
 }
 
 function targetPackage(device: string): { package: string; speedGrade: string } {
-  const match = /(?:PG|QN|UG|BG|CS|FN)\d+[A-Z]?/.exec(device);
+  const match = /(?:PG|QN|UG|BG|CS|FN)\d+(?:[A-Z](?=[CI]\d))?/.exec(device);
   return match
     ? { package: match[0], speedGrade: device.slice((match.index ?? 0) + match[0].length) }
     : { package: "registered-board-package", speedGrade: "profile-defined" };
@@ -119,7 +119,7 @@ export function completionCandidates(
 }
 
 export function symbolsFromBuffer(content: string, file: string): HdlSymbol[] {
-  const declaration = /^\s*(module|input|output|inout|logic|wire|reg|parameter|localparam|function|task|package|typedef)\b(?:\s+(?:logic|wire|reg|signed|unsigned|integer|automatic|enum|struct))*\s+([A-Za-z_]\w*)/;
+  const declaration = /^\s*(module|input|output|inout|logic|wire|reg|parameter|localparam|function|task|package|typedef)\b(?:\s+(?:logic|wire|reg|signed|unsigned|integer|automatic|enum|struct))*\s+(?:\[[^\]]+\]\s*)*([A-Za-z_]\w*)/;
   const symbols: HdlSymbol[] = [];
   content.split(/\r?\n/).forEach((line, index) => {
     const match = declaration.exec(line);

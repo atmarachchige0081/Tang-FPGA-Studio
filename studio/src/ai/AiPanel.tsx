@@ -251,12 +251,12 @@ export function AiPanel(): React.JSX.Element {
 
   const refreshAccount = useCallback(async () => {
     const epoch = generation.current;
-    try { const value = await bridge.aiAccount(false); if (epoch === generation.current) setAccount(value); } catch (caught) { setError(caught instanceof Error ? caught.message : String(caught)); }
+    try { const value = await bridge.aiAccount(false); if (epoch === generation.current) setAccount(value); } catch (caught) { if (epoch === generation.current) setError(caught instanceof Error ? caught.message : String(caught)); }
   }, []);
 
   const refreshThreads = useCallback(async () => {
     const epoch = generation.current;
-    try { const value = await bridge.aiThreadList(); if (epoch === generation.current) setThreads(threadSummaries(value)); } catch { setThreads([]); }
+    try { const value = await bridge.aiThreadList(); if (epoch === generation.current) setThreads(threadSummaries(value)); } catch { if (epoch === generation.current) setThreads([]); }
   }, []);
 
   const refreshModels = useCallback(async () => {

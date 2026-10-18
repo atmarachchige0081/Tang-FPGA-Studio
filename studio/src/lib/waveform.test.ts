@@ -27,3 +27,6 @@ describe("waveform rendering", () => {
     expect(formatVcdTime(523_000, "1 ps", 2_615_000)).toBe("0.523 µs");
   });
 });
+it("does not render a future first scalar sample as already present",()=>{
+ expect(scalarPoints(signal(1,[{time:50,value:"1"}]),{start:0,end:100})).toBe("0,19 240,19 240,7 480,7");
+});

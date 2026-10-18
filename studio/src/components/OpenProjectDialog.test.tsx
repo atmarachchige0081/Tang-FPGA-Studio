@@ -34,3 +34,19 @@ describe("open project folder", () => {
     expect((screen.getByRole("button", { name: "Open project" }) as HTMLButtonElement).disabled).toBe(true);
   });
 });
+it("clears the previous selection before a subsequent recognition failure",async()=>{
+ vi.spyOn(bridge,"recognizeProjectFolder").mockResolvedValueOnce([{path:"old",name:"Old candidate",identification:"Studio"}]).mockRejectedValueOnce(Error("Cannot inspect"));
+ render(<OpenProjectDialog/>);await selectFolder();await screen.findByText("Old candidate");
+ fireEvent.click(screen.getByRole("button",{name:"Find projects"}));await screen.findByRole("alert");
+ expect((screen.getByRole("button",{name:"Open project"}) as HTMLButtonElement).disabled).toBe(true);
+});
+it("does not overwrite a newer workspace when project loading completes late",async()=>{
+ let finish!: (value:Awaited<ReturnType<typeof bridge.openProject>>)=>void;
+ vi.spyOn(bridge,"openProject").mockReturnValue(new Promise(resolve=>{finish=resolve;}));
+ render(<OpenProjectDialog/>);await selectFolder();await screen.findByText("Preview project");
+ fireEvent.click(screen.getByRole("button",{name:"Open project"}));
+ await waitFor(()=>expect(bridge.openProject).toHaveBeenCalled());
+ act(()=>useWorkbench.getState().setWorkspace("elsewhere","Newer project",".",[]));
+ await act(async()=>finish({root:"old",project:"Late project",projectPath:".",tree:[],recentProjects:[]}));
+ expect(useWorkbench.getState().project).toBe("Newer project");
+});

@@ -101,3 +101,19 @@ describe("workbench theme persistence", () => {
     expect(() => writeStoredTheme("light", { setItem: () => { throw new Error("blocked"); } })).not.toThrow();
   });
 });
+
+it("clears file-specific AI selection and cursor when switching tabs",()=>{
+ useWorkbench.setState({tabs:[],activePath:null});
+ useWorkbench.getState().openFile(source);
+ useWorkbench.getState().setEditorSelection("private selection from first file");
+ useWorkbench.getState().setEditorCursor(40,7);
+ useWorkbench.getState().openFile({...source,path:"rtl/other.sv"});
+ expect(useWorkbench.getState().editorSelection).toBe("");
+ expect(useWorkbench.getState().editorCursor).toBeNull();
+});
+it("clears old project build, board, git and diagnostics when setting a new workspace",()=>{
+ useWorkbench.setState({diagnostics:[{file:"old.sv",line:1,column:1,severity:"error",message:"old diagnostic",source:"old"}],git:{available:true,repository:true,branch:"old",changes:[],ahead:0,behind:0,message:""}});
+ useWorkbench.getState().setWorkspace("new","New",".",[]);
+ expect(useWorkbench.getState().diagnostics).toEqual([]);
+ expect(useWorkbench.getState().git).toBeNull();
+});

@@ -201,4 +201,18 @@ describe("native AI Assistant panel", () => {
     expect((screen.getByRole("button",{name:"New AI conversation"}) as HTMLButtonElement).disabled).toBe(true);
   });
 
+  it("ignores an old account-refresh failure after switching projects",async()=>{
+    await readyWithHistory();
+    const account=await bridge.aiAccount(false);
+    let reject!: (reason:Error)=>void;
+    vi.spyOn(bridge,"aiAccount").mockReturnValueOnce(new Promise((_resolve,fail)=>{reject=fail;})).mockResolvedValue(account);
+    window.dispatchEvent(new CustomEvent("fpga-ai-demo",{detail:{method:"account/updated",params:{},timestamp:""}}));
+    await waitFor(()=>expect(bridge.aiAccount).toHaveBeenCalled());
+    useWorkbench.getState().setWorkspace("Browser preview","New account project","other",[]);
+    await screen.findByText("Project: New account project");
+    reject(Error("STALE_ACCOUNT_ERROR"));
+    await new Promise(resolve=>setTimeout(resolve,0));
+    expect(screen.queryByText("STALE_ACCOUNT_ERROR")).toBeNull();
+  });
+
 });

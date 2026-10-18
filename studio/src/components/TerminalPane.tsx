@@ -58,7 +58,7 @@ export function TerminalPane(): React.JSX.Element {
     }); observer.observe(host.current);
     const input = term.onData((data) => {
       const id = session.current; if (!id || disposed) return;
-      writes = writes.then(() => bridge.terminalWrite(id,data)).catch((reason) => { if (!disposed) setError(String(reason)); });
+      writes = writes.then(() => { if (!disposed && session.current === id) return bridge.terminalWrite(id,data); }).catch((reason) => { if (!disposed) setError(String(reason)); });
     });
     void (async () => {
       stop = await bridge.onTerminalEvent(receive);
