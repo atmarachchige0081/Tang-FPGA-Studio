@@ -33,14 +33,21 @@ on **Interface 0 only** for JTAG programming.
 
 ## Verify and use it
 
-From the repository root:
+In Studio, select this project and use **Lint**, **Simulate**, **Build**, and
+**Waveform**. Detect the board before using **SRAM** to upload.
+
+For command-line use, run from the workspace folder containing `fpga.ps1`.
+Replace `<project-path>` below with this project's actual path relative to that
+workspace, keeping the quotes for paths containing spaces. For the unchanged
+repository example it is `projects/03_uart_terminal`; a project created from this
+template has its own folder.
 
 ```powershell
-.\fpga.ps1 lint   -Project projects/03_uart_terminal
-.\fpga.ps1 sim    -Project projects/03_uart_terminal
-.\fpga.ps1 wave   -Project projects/03_uart_terminal
-.\fpga.ps1 build  -Project projects/03_uart_terminal
-.\fpga.ps1 upload -Project projects/03_uart_terminal
+.\fpga.ps1 lint   -Project "<project-path>"
+.\fpga.ps1 sim    -Project "<project-path>"
+.\fpga.ps1 wave   -Project "<project-path>"
+.\fpga.ps1 build  -Project "<project-path>"
+.\fpga.ps1 upload -Project "<project-path>"
 ```
 
 Then open **UART terminal** in Tang Primer Studio, select the COM port for

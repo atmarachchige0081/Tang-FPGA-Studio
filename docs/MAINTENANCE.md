@@ -1,5 +1,51 @@
 # Maintenance log
 
+## 2026-10-18 — Windows QA feedback and pending startup recovery guard
+
+**Workflow/evidence:** reviewed the supplied Windows native-runner QA report,
+runner result assembly, Problems rendering, UART template and shell selection.
+The report establishes build/simulation and connected JTAG detection in that
+session, not upload, UART, flash or circuit operation. The disconnected Detect
+result had an actionable failureMessage but no diagnostics. The implementation
+confirmed that only text containing error/warning became diagnostics, while an
+empty Problems panel claimed no problems. The UART template also copied fixed
+example-folder commands into newly named projects.
+
+**Changes:** failed native jobs now receive a fileless error containing their
+failure explanation when no error diagnostic already exists. Preserve warnings,
+existing source diagnostics, exit codes and hardware safeguards. Add native
+regressions for absent probes, warning preservation, deduplication and success.
+Add a frontend rendering regression for fileless failures. Make UART README
+commands explicitly use the active workspace-relative project path, retaining
+quoted paths and GUI verification steps. Document PowerShell search fallbacks:
+Windows already uses powershell.exe; rg and Windows pwsh are not requirements.
+Optional Python acceleration warnings remain visible and are not build failures.
+
+**Pending earlier startup work:** preserve and finish the source-graph preflight
+for development/build/doctor. The earlier supplied Vite log showed unresolved
+application imports; it did not prove a native production crash or establish why
+those local files were inaccessible. The guard reports missing source files and
+safe fresh-folder recovery before Vite runs. It never overwrites projects.
+Four Node regressions cover complete/missing imports, paths with spaces and the
+nonzero CLI result. No dependencies or package versions change.
+
+**Verification:** production frontend build and TypeScript checking passed;
+the existing 134-test suite and four startup tests passed. The final combined
+frontend run passed 135 tests across 33 files, including the added Problems
+rendering regression; incremental TypeScript checking also passed. Chromium
+rendered the real interface with an injected fileless failure; the explanation
+appears under ERROR without the clean-project message, and no browser exceptions
+occurred. Screenshot inspected at `build/qa-feedback/detect-failure.png` (ignored
+artifact). This browser fixture does not run the native job runner.
+
+**Limits/follow-up:** this cloud image has no cargo/rustc or native Tauri build
+prerequisites; the added Rust regressions and Windows build remain unrun here.
+No hardware was programmed. On Windows run `cargo test --manifest-path
+studio/src-tauri/Cargo.toml runner::tests`, rebuild Studio, disconnect the board
+and run Detect: Output and Problems should explain the missing programmer.
+Reconnect and repeat Detect. Next useful task: authenticated AI read/explain
+plus approval recovery on Windows, without concurrent hardware programming.
+
 ## 2026-10-18 — Twenty verified defects; end-of-day maintenance
 
 Baseline: `5b27af7`. Reviewed the prior maintenance cycle, current workflows and

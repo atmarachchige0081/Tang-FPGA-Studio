@@ -7,16 +7,16 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
-    "test": "vitest run --maxWorkers=2",
+    "test": "node --test scripts/check-source-regression.mjs && vitest run --maxWorkers=2",
     "test:watch": "vitest",
     "check": "npm run build && npm run test",
     "tauri": "tauri",
     "desktop": "node scripts/run-tauri.mjs dev",
     "desktop:build": "node scripts/run-tauri.mjs build",
-    "desktop:doctor": "node scripts/run-tauri.mjs check",
+    "desktop:doctor": "node scripts/check-source.mjs && node scripts/run-tauri.mjs check",
     "postinstall": "node scripts/patch-monaco.mjs && node scripts/patch-xterm.mjs",
-    "predev": "node scripts/patch-monaco.mjs && node scripts/patch-xterm.mjs",
-    "prebuild": "node scripts/patch-monaco.mjs && node scripts/patch-xterm.mjs"
+    "predev": "node scripts/check-source.mjs && node scripts/patch-monaco.mjs && node scripts/patch-xterm.mjs",
+    "prebuild": "node scripts/check-source.mjs && node scripts/patch-monaco.mjs && node scripts/patch-xterm.mjs"
   },
   "dependencies": {
     "@monaco-editor/react": "4.7.0",

@@ -101,3 +101,18 @@ This proves only the tested Windows 11/Dock combination. Linux USB permissions,
 programming, UART and captures need a physical Ubuntu test too before claiming
 hardware parity there. Other board families retain their separate build/hardware
 coverage status.
+
+## Shell and search prerequisites
+
+Windows jobs use the built-in `powershell.exe`; PowerShell 7 (`pwsh`) is not
+required on Windows. Linux jobs require `pwsh` (see [Linux setup](LINUX.md)).
+Ripgrep (`rg`) is optional for manual searches. If unavailable in PowerShell:
+
+```powershell
+Get-ChildItem -LiteralPath .\rtl -Recurse -File
+Get-ChildItem -LiteralPath .\rtl -Recurse -File | Select-String -SimpleMatch 'module'
+```
+
+Warnings about missing Numpy, Msgspec or fastcrc describe optional toolchain
+acceleration. Preserve the warnings; judge build success by the job result and
+reports. They do not establish a hardware failure.

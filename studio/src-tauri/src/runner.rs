@@ -241,10 +241,11 @@ fn run_blocking(
         }
     };
     registry.remove(&job_id);
-    let diagnostics = parse_diagnostics(&captured);
+    let mut diagnostics = parse_diagnostics(&captured);
     let success = exit_status.success() && !cancellation.load(Ordering::SeqCst);
     let duration_ms = started.elapsed().as_millis();
     let failure_message = (!success).then(|| friendly_failure(action, &captured));
+    include_failure_diagnostic(&mut diagnostics, failure_message.as_deref());
     if let Err(error) = reports::record_history(
         &process_workspace.to_string_lossy(),
         &project,
@@ -310,6 +311,28 @@ fn terminate_process_tree(process_id: u32, child: &mut std::process::Child) {
             .status();
     }
     let _ = child.kill();
+}
+
+// Failed operations must remain visible in Problems even when a tool emits no
+// compiler-style error (for example, a disconnected JTAG probe).
+fn include_failure_diagnostic(diagnostics: &mut Vec<Diagnostic>, failure: Option<&str>) {
+    if let Some(message) = failure {
+        if !diagnostics
+            .iter()
+            .any(|item| matches!(item.severity, DiagnosticSeverity::Error))
+        {
+            diagnostics.push(Diagnostic {
+                severity: DiagnosticSeverity::Error,
+                source: "toolchain".into(),
+                message: message.to_owned(),
+                code: None,
+                suggestion: None,
+                file: None,
+                line: None,
+                column: None,
+            });
+        }
+    }
 }
 
 fn parse_diagnostics(lines: &[String]) -> Vec<Diagnostic> {
@@ -444,9 +467,34 @@ fn friendly_failure(action: BuildAction, lines: &[String]) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{friendly_failure, parse_diagnostics, JobRegistry};
+    use super::{friendly_failure, include_failure_diagnostic, parse_diagnostics, JobRegistry};
     use crate::models::BuildAction;
     use crate::models::DiagnosticSeverity;
+
+    #[test]
+    fn disconnected_detect_is_visible_in_problems() {
+        let lines = vec!["unable to open ftdi device: -3 (device not found)".into()];
+        let mut values = parse_diagnostics(&lines);
+        assert!(values.is_empty());
+        let failure = friendly_failure(BuildAction::Detect, &lines);
+        include_failure_diagnostic(&mut values, Some(&failure));
+        assert_eq!(values.len(), 1);
+        assert!(matches!(values[0].severity, DiagnosticSeverity::Error));
+        assert_eq!(values[0].message, failure);
+        assert!(values[0].file.is_none());
+    }
+
+    #[test]
+    fn failure_diagnostic_preserves_warnings_without_duplicating_errors() {
+        let mut values = parse_diagnostics(&["warning: optional acceleration unavailable".into()]);
+        include_failure_diagnostic(&mut values, Some("Build failed"));
+        assert_eq!(values.len(), 2);
+        include_failure_diagnostic(&mut values, Some("Build failed"));
+        assert_eq!(values.len(), 2);
+        let mut success = Vec::new();
+        include_failure_diagnostic(&mut success, None);
+        assert!(success.is_empty());
+    }
 
     #[test]
     fn extracts_hdl_diagnostics() {
