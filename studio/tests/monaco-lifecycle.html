@@ -1,0 +1,42 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><link rel="icon" href="data:,"><title>Monaco lifecycle regression</title>
+<style>body{margin:20px;background:#222;color:#ddd}#editor,#temporary{height:260px;width:900px}</style></head>
+<body><div id="editor"></div><div id="temporary"></div><script type="module">
+import '../src/lib/monaco-loader.ts';
+import * as monaco from 'monaco-editor';
+monaco.languages.registerCompletionItemProvider('plaintext', {
+  provideCompletionItems(model, position) {
+    const word = model.getWordUntilPosition(position);
+    return {suggestions:[{label:'ready_value',kind:monaco.languages.CompletionItemKind.Variable,
+      insertText:'ready_value',range:new monaco.Range(position.lineNumber,word.startColumn,position.lineNumber,word.endColumn)}]};
+  }
+});
+const editor=monaco.editor.create(document.getElementById('editor'),{language:'plaintext',automaticLayout:true,minimap:{enabled:false}});
+window.cycle = async (kind) => {
+  editor.trigger('regression','hideSuggestWidget',{});
+  const host=document.getElementById('temporary');
+  const options={dimension:{width:900,height:260},minimap:{enabled:false}};
+  const temporary=kind==='diff'?monaco.editor.createDiffEditor(host,options):monaco.editor.create(host,options);
+  await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
+  if(kind==='diff') {
+    const original=monaco.editor.createModel('before');
+    const modified=monaco.editor.createModel('after');
+    temporary.setModel({original,modified});
+    for(let attempt=0;temporary.getLineChanges()===null;attempt++) {
+      if(attempt>=200) throw new Error('Temporary diff did not finish rendering');
+      await new Promise(resolve=>setTimeout(resolve,10));
+    }
+    await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
+    temporary.setModel(null);
+    temporary.dispose();
+    original.dispose();modified.dispose();
+  } else {
+    const model=temporary.getModel();
+    temporary.dispose();model?.dispose();
+  }
+  editor.setValue('rea');editor.setPosition({lineNumber:1,column:4});editor.focus();
+  editor.trigger('regression','editor.action.triggerSuggest',{});
+};
+window.editorValue=()=>editor.getValue();
+window.fixtureReady=true;
+</script></body></html>

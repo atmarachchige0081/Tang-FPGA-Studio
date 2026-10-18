@@ -441,6 +441,16 @@ def main():
                 js("document.querySelector('.monaco-editor textarea').focus()")
                 press('\ue009','\ue010')
                 passed('Native file journal tracked unopened and added files; before/after review rendered in both themes without source writes')
+                # A closed diff must not leave suggestions using its disposed services.
+                press('\ue009',' ')
+                for _ in range(100):
+                    if js("return !!document.querySelector('.suggest-widget.visible .monaco-list-row')"): break
+                    time.sleep(.1)
+                assert js("return !!document.querySelector('.suggest-widget.visible .monaco-list-row')"), 'HDL completion popup failed after closing file review'
+                assert not js("return Array.from(document.querySelectorAll('.runtime-notice')).some(node => node.textContent.includes('InstantiationService has been disposed'))"), 'Closed diff broke editor services'
+                screenshot('native-completions-after-review.png')
+                press('\ue00c')  # Escape dismisses completion without modifying source.
+                passed('HDL suggestions remained usable after closing the native diff review')
                 # Preserve unsaved user input while a subsequent external edit lands.
                 press('\ue007')
                 press('x')
