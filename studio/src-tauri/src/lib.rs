@@ -11,6 +11,7 @@ mod models;
 mod netlist;
 mod optimizer;
 mod plugins;
+mod process_cleanup;
 mod project;
 mod reports;
 mod runner;
@@ -878,8 +879,18 @@ pub fn run() -> Result<(), String> {
             ai_respond_approval,
             ai_respond_user_input,
         ])
-        .run(tauri::generate_context!())
-        .map_err(|error| format!("FPGA Studio could not start: {error}"))
+        .build(tauri::generate_context!())
+        .map_err(|error| format!("FPGA Studio could not start: {error}"))?
+        .run(|app, event| {
+            if matches!(event, tauri::RunEvent::Exit) {
+                use tauri::Manager;
+                // App::run exits the process directly; managed-state Drop is not an exit hook.
+                app.state::<AiRegistry>().shutdown();
+                app.state::<std::sync::Arc<terminal::TerminalRegistry>>().shutdown();
+                app.state::<SerialRegistry>().shutdown();
+            }
+        });
+    Ok(())
 }
 
 pub fn smoke_test() -> Result<(), String> {

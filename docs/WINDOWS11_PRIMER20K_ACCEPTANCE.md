@@ -116,3 +116,28 @@ Get-ChildItem -LiteralPath .\rtl -Recurse -File | Select-String -SimpleMatch 'mo
 Warnings about missing Numpy, Msgspec or fastcrc describe optional toolchain
 acceleration. Preserve the warnings; judge build success by the job result and
 reports. They do not establish a hardware failure.
+
+## Native exit and memory acceptance
+
+Rebuild the native application after pulling lifecycle changes. Start a single
+Studio instance, connect Codex and open its terminal. Do not run a hardware job
+for this check. In a separate Windows PowerShell window at the repository root:
+
+```powershell
+Get-Process fpga-studio | Select-Object Id, ProcessName
+# Replace 12345 with the Studio PID printed above.
+.\scripts\test-windows-process-lifecycle.ps1 -StudioProcessId 12345
+```
+
+The script observes the owned process tree and memory counters. Save files and
+close Studio with X when prompted. It records whether observed child processes
+remain ten seconds later, plus private-commit/working-set samples. It does not
+kill any process, collect command lines, read project contents or program the
+board. Keep `build/process-lifecycle/windows-process-lifecycle.json` as evidence.
+Exit code 0 means the observed tree exited, 1 means observed processes remained,
+and 2 means Studio was not closed before the timeout. Processes that detach
+between samples may not be observed; this is an acceptance check, not proof for
+every OS termination mode.
+
+Also verify that closing is refused with an unsaved modified file. Preserve the
+existing active-job close safeguard; do not flash hardware to test shutdown.

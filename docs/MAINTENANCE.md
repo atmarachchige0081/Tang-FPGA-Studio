@@ -1,5 +1,57 @@
 # Maintenance log
 
+## 2026-10-18 — Native exit cleanup and measured terminal listener retention
+
+**Scope/evidence:** user requested verification of process termination/RAM and
+clarified that speculative concurrency features were unnecessary. Read native
+registries, close guards and Tauri 2.11.5 source: App::run can exit directly;
+managed-state destructors are not a reliable shutdown hook. Existing AI/shell
+cleanup depended on Drop. A provider was not registered until initialization
+finished, leaving exit unable to find a still-connecting child.
+
+**Fix:** use an explicit Tauri RunEvent::Exit callback to shut down AI, PTY and
+serial registries. Register starting providers under a spawn/shutdown lock,
+reject new connections after shutdown starts, stop both starting/active children,
+reap owned provider children and resolve pending requests. Initialization errors
+and stopped-session removal also clean up owned processes. Repeated termination
+is guarded. Terminal cleanup targets its owned shell tree and closes its registry;
+serial readers receive cancellation. Existing unsaved-file/FPGA-job close guards
+remain. Tauri manages its own WebView; no process-name/global browser killing.
+
+**Measured frontend issue:** direct React-state terminal mount/unmount profiling
+retained four listeners per cycle (291 to 371 over 20 cycles). xterm 5.5's
+ScreenDprMonitor was created without registering it for disposal. Extend the
+existing version-pinned/idempotent patch to register that monitor; no dependency
+upgrade. After the fix, 20 cycles stayed at 271 listeners and 1,007 DOM nodes;
+retained JS heap stayed about 50.8 MiB (53,283,588 to 53,251,044 bytes). AI-only
+20-cycle direct-state profiling also kept DOM/listener counts fixed, with heap
+52,626,504 to 52,491,160 bytes. These are warmed Vite/Chromium frontend readings,
+not complete native Windows/Codex RAM. Selector-driven runs retained references
+not seen with direct-state toggling, so they do not establish an application leak.
+
+**Verification:** actual production cleanup types/methods and regressions compiled
+in an isolated Rust 1.85 fixture with pinned portable-pty 0.9/serialport 4.9:
+five tests passed, including real Linux child termination/reaping, initializing
+and active provider stand-ins with retained registry clones, real PTY shell exit,
+and virtual serial cancellation. The fixture excludes Tauri. xterm patch applied
+and verified idempotently; browser memory regression passed with no exceptions.
+Rust formatting/Python syntax checks passed. Full frontend build/TypeScript,
+150 tests across 36 files and four startup regressions passed on a quiet rerun.
+An earlier run during concurrent profiling hit two existing AI test timeouts;
+no timeouts/assertions were relaxed. Added read-only Windows process/memory
+observer; PowerShell parser and mocked outcome/PID-reuse fixtures checked
+separately, without claiming Windows CIM/runtime execution.
+
+**Limits/check/next:** full native Windows/WebView2 exit and RAM still need local
+acceptance. Rebuild Studio, open AI and terminal, then run
+`scripts/test-windows-process-lifecycle.ps1` with its PID and close normally after
+saving/finishing jobs. The observer records remaining owned descendants and memory
+without killing processes or reading command lines. Reports go under ignored
+build folders. Forced OS termination, large-project/long-chat memory and detached
+process cases are not established by these checks. No hardware writes or tags.
+Native commands already use workers/child processes; no extra threading was
+justified. Prioritise the Windows observer result before further concurrency work.
+
 ## 2026-10-18 — Explicit AI image and source-file attachments
 
 **Scope/evidence:** user selected images and richer message attachments as the

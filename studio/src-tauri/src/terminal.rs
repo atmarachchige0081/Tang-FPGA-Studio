@@ -4,6 +4,7 @@ use portable_pty::{native_pty_system, ChildKiller, CommandBuilder, MasterPty, Pt
 use serde::Serialize;
 use std::collections::HashMap;
 use std::io::{Read, Write};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use tauri::{AppHandle, Emitter};
 
@@ -25,12 +26,38 @@ struct Transcript {
 struct Session {
     id: String,
     project: String,
+    process_id: Option<u32>,
+    terminated: AtomicBool,
     master: Mutex<Box<dyn MasterPty + Send>>,
     writer: Mutex<Box<dyn Write + Send>>,
     killer: Mutex<Box<dyn ChildKiller + Send + Sync>>,
     transcript: Arc<Mutex<Transcript>>,
 }
 impl Session {
+    fn terminate(&self) -> Result<(), String> {
+        if self.terminated.swap(true, Ordering::AcqRel) {
+            return Ok(());
+        }
+        if self
+            .transcript
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .exited
+        {
+            return Ok(());
+        }
+        if self.process_id.is_some_and(|pid| {
+            crate::process_cleanup::kill_tree(pid).is_ok_and(|status| status.success())
+        }) {
+            return Ok(());
+        }
+        self.killer
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .kill()
+            .map_err(|error| error.to_string())
+    }
+
     fn snapshot(&self) -> Result<TerminalEvent, String> {
         let log = self
             .transcript
@@ -73,14 +100,13 @@ fn publish(app: &AppHandle, id: &str, transcript: &Mutex<Transcript>, data: Stri
 }
 impl Drop for Session {
     fn drop(&mut self) {
-        if let Ok(killer) = self.killer.get_mut() {
-            let _ = killer.kill();
-        }
+        let _ = self.terminate();
     }
 }
 #[derive(Default)]
 pub struct TerminalRegistry {
     sessions: Mutex<HashMap<String, Arc<Session>>>,
+    closing: AtomicBool,
 }
 impl TerminalRegistry {
     pub fn open(
@@ -98,6 +124,9 @@ impl TerminalRegistry {
             .sessions
             .lock()
             .map_err(|_| "Terminal registry unavailable")?;
+        if self.closing.load(Ordering::Acquire) {
+            return Err("Studio is shutting down.".into());
+        }
         if let Some(session) = sessions.values().find(|s| s.project == key) {
             return session.snapshot();
         }
@@ -124,12 +153,15 @@ impl TerminalRegistry {
             .spawn_command(command)
             .map_err(|e| format!("Cannot start shell: {e}"))?;
         drop(pty.slave);
+        let process_id = child.process_id();
         let killer = child.clone_killer();
         let mut reader = pty.master.try_clone_reader().map_err(|e| e.to_string())?;
         let writer = pty.master.take_writer().map_err(|e| e.to_string())?;
         let session = Arc::new(Session {
             id: uuid::Uuid::new_v4().to_string(),
             project: key,
+            process_id,
+            terminated: AtomicBool::new(false),
             master: Mutex::new(pty.master),
             writer: Mutex::new(writer),
             killer: Mutex::new(killer),
@@ -246,27 +278,32 @@ impl TerminalRegistry {
             .map_err(|_| "Terminal registry unavailable")?
             .remove(id)
         {
-            session
-                .killer
-                .lock()
-                .map_err(|_| "Terminal process unavailable")?
-                .kill()
-                .map_err(|e| e.to_string())?;
+            session.terminate()?;
         }
         Ok(())
     }
 }
-impl Drop for TerminalRegistry {
-    fn drop(&mut self) {
-        if let Ok(sessions) = self.sessions.get_mut() {
-            for session in sessions.values() {
-                if let Ok(mut killer) = session.killer.lock() {
-                    let _ = killer.kill();
-                }
-            }
+impl TerminalRegistry {
+    pub fn shutdown(&self) {
+        self.closing.store(true, Ordering::Release);
+        let sessions: Vec<_> = self
+            .sessions
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .drain()
+            .map(|(_, session)| session)
+            .collect();
+        for session in sessions {
+            let _ = session.terminate();
         }
     }
 }
+impl Drop for TerminalRegistry {
+    fn drop(&mut self) {
+        self.shutdown();
+    }
+}
+
 fn size(cols: u16, rows: u16) -> PtySize {
     PtySize {
         rows: rows.clamp(2, 200),
@@ -355,5 +392,40 @@ mod tests {
         assert!(result
             .expect("Shell did not execute the typed command")
             .contains("TANG_PTY_OK"));
+    }
+}
+
+#[cfg(all(test, unix))]
+mod shutdown_tests {
+    use super::*;
+    #[test]
+    fn shutdown_terminates_real_pty_even_while_a_worker_retains_the_session() {
+        let registry = TerminalRegistry::default();
+        let pty = native_pty_system().openpty(size(80, 24)).unwrap();
+        let mut command = CommandBuilder::new("/bin/sleep");
+        command.arg("30");
+        let mut child = pty.slave.spawn_command(command).unwrap();
+        drop(pty.slave);
+        let session = Arc::new(Session {
+            id: "test-shell".into(),
+            project: "test-project".into(),
+            process_id: child.process_id(),
+            terminated: AtomicBool::new(false),
+            writer: Mutex::new(pty.master.take_writer().unwrap()),
+            master: Mutex::new(pty.master),
+            killer: Mutex::new(child.clone_killer()),
+            transcript: Default::default(),
+        });
+        registry
+            .sessions
+            .lock()
+            .unwrap()
+            .insert(session.id.clone(), session.clone());
+        registry.shutdown();
+        assert!(!child.wait().unwrap().success());
+        assert!(registry.sessions.lock().unwrap().is_empty());
+        assert!(registry.closing.load(Ordering::Acquire));
+        assert!(session.terminated.load(Ordering::Acquire));
+        registry.shutdown();
     }
 }

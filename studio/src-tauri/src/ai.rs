@@ -154,6 +154,7 @@ struct AiSession {
     proposals: Arc<Mutex<HashMap<String, FileProposal>>>,
     next_id: Arc<AtomicU64>,
     alive: Arc<AtomicBool>,
+    terminated: Arc<AtomicBool>,
     active_jobs: Arc<Mutex<HashMap<String, String>>>,
     inline_busy: Arc<AtomicBool>,
     inline_threads: Arc<Mutex<HashSet<String>>>,
@@ -169,6 +170,8 @@ struct AiSession {
 pub struct AiRegistry {
     session: Arc<Mutex<Option<AiSession>>>,
     connection_lock: Arc<Mutex<()>>,
+    starting: Arc<Mutex<Option<AiSession>>>,
+    closing: Arc<AtomicBool>,
 }
 
 impl AiRegistry {
@@ -176,13 +179,18 @@ impl AiRegistry {
         let current = self.session.lock().ok().and_then(|guard| guard.clone());
         if let Some(session) = current {
             if !session.alive.load(Ordering::Acquire) {
-                if let Ok(mut registry) = self.session.lock() {
+                let removed = self.session.lock().ok().and_then(|mut registry| {
                     if registry
                         .as_ref()
                         .is_some_and(|current| Arc::ptr_eq(&current.alive, &session.alive))
                     {
-                        registry.take();
+                        registry.take()
+                    } else {
+                        None
                     }
+                });
+                if let Some(stopped) = removed {
+                    terminate_session(&stopped);
                 }
             } else {
                 return AiProviderStatus {
@@ -232,6 +240,9 @@ impl AiRegistry {
             .connection_lock
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner());
+        if self.closing.load(Ordering::Acquire) {
+            return Err("Studio is shutting down.".into());
+        }
         let workspace = canonical_workspace(root)?;
         let project_root = resolve_project_path(&workspace, project)?;
         // Drop the registry guard before status() takes the same lock.
@@ -276,21 +287,25 @@ impl AiRegistry {
             use std::os::unix::process::CommandExt;
             command.process_group(0);
         }
+        // Serialize spawn/registration with exit cleanup, not the slow protocol handshake.
+        let mut starting = self
+            .starting
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        if self.closing.load(Ordering::Acquire) {
+            return Err("Studio is shutting down.".into());
+        }
         let mut child = command
             .spawn()
             .map_err(|error| format!("Codex App Server could not start: {error}"))?;
-        let stdin = child
-            .stdin
-            .take()
-            .ok_or("Codex App Server stdin is unavailable")?;
-        let stdout = child
-            .stdout
-            .take()
-            .ok_or("Codex App Server stdout is unavailable")?;
-        let stderr = child
-            .stderr
-            .take()
-            .ok_or("Codex App Server diagnostics are unavailable")?;
+        let (Some(stdin), Some(stdout), Some(stderr)) =
+            (child.stdin.take(), child.stdout.take(), child.stderr.take())
+        else {
+            let _ = crate::process_cleanup::kill_tree(child.id());
+            let _ = child.kill();
+            let _ = child.wait();
+            return Err("Codex App Server pipes are unavailable.".into());
+        };
         let session = AiSession {
             stdin: Arc::new(Mutex::new(stdin)),
             child: Arc::new(Mutex::new(child)),
@@ -299,6 +314,7 @@ impl AiRegistry {
             proposals: Arc::new(Mutex::new(HashMap::new())),
             next_id: Arc::new(AtomicU64::new(1)),
             alive: Arc::new(AtomicBool::new(true)),
+            terminated: Arc::new(AtomicBool::new(false)),
             active_jobs: Arc::new(Mutex::new(HashMap::new())),
             inline_busy: Arc::new(AtomicBool::new(false)),
             inline_threads: Arc::new(Mutex::new(HashSet::new())),
@@ -309,6 +325,8 @@ impl AiRegistry {
             executable,
             version,
         };
+        *starting = Some(session.clone());
+        drop(starting);
         start_stdout_reader(app.clone(), session.clone(), stdout);
         start_stderr_reader(app, stderr);
 
@@ -327,14 +345,57 @@ impl AiRegistry {
             }),
         ) {
             terminate_session(&session);
+            self.starting
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner())
+                .take();
             return Err(format!("Codex App Server initialization failed: {error}"));
         }
-        session.notify("initialized", json!({}))?;
-        *self
+        if let Err(error) = session.notify("initialized", json!({})) {
+            terminate_session(&session);
+            self.starting
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner())
+                .take();
+            return Err(error);
+        }
+        let mut active = self
             .session
             .lock()
-            .map_err(|_| "AI registry is unavailable")? = Some(session);
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        if self.closing.load(Ordering::Acquire) {
+            drop(active);
+            terminate_session(&session);
+            self.starting
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner())
+                .take();
+            return Err("Studio is shutting down.".into());
+        }
+        *active = Some(session);
+        drop(active);
+        self.starting
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .take();
         Ok(self.status())
+    }
+
+    pub fn shutdown(&self) {
+        self.closing.store(true, Ordering::Release);
+        let starting = self
+            .starting
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .take();
+        let active = self
+            .session
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .take();
+        for session in starting.into_iter().chain(active) {
+            terminate_session(&session);
+        }
     }
 
     pub fn disconnect(&self) -> Result<bool, String> {
@@ -356,6 +417,9 @@ impl AiRegistry {
     }
 
     fn active(&self) -> Result<AiSession, String> {
+        if self.closing.load(Ordering::Acquire) {
+            return Err("Studio is shutting down.".into());
+        }
         let session = self
             .session
             .lock()
@@ -974,11 +1038,7 @@ impl Drop for AiRegistry {
         if Arc::strong_count(&self.session) != 1 {
             return;
         }
-        if let Ok(mut registry) = self.session.lock() {
-            if let Some(session) = registry.take() {
-                terminate_session(&session);
-            }
-        }
+        self.shutdown();
     }
 }
 
@@ -1821,25 +1881,27 @@ fn steering_params(thread_id: &str, turn_id: &str, prompt: &str) -> Result<Value
 }
 
 fn terminate_session(session: &AiSession) {
+    if session.terminated.swap(true, Ordering::AcqRel) {
+        return;
+    }
     session.alive.store(false, Ordering::Release);
-    if let Ok(mut child) = session.child.lock() {
-        let process_id = child.id();
-        #[cfg(windows)]
-        let _ = Command::new("taskkill")
-            .args(["/PID", &process_id.to_string(), "/T", "/F"])
-            .stdin(Stdio::null())
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .status();
-        #[cfg(unix)]
-        let _ = Command::new("/bin/kill")
-            .args(["-KILL", "--", &format!("-{process_id}")])
-            .stdin(Stdio::null())
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .status();
-        let _ = child.kill();
-        let _ = child.wait();
+    let mut child = session
+        .child
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    let _ = crate::process_cleanup::kill_tree(child.id());
+    let _ = child.kill();
+    let _ = child.wait();
+    drop(child);
+    if let Ok(mut pending) = session.pending.lock() {
+        for (_, sender) in pending.drain() {
+            let _ = sender.send(Err("AI provider disconnected".into()));
+        }
+    }
+    if let Ok(mut pending) = session.inline_requests.lock() {
+        for (_, request) in pending.drain() {
+            let _ = request.sender.send(Err("AI provider disconnected".into()));
+        }
     }
 }
 
@@ -2148,5 +2210,68 @@ mod ide_path_tests {
         assert!(ide_file_path(&workspace, &project, "../outside.sv").is_err());
         assert!(ide_file_path(&workspace, &project, "fpga.ps1").is_err());
         std::fs::remove_dir_all(workspace).unwrap();
+    }
+}
+
+#[cfg(all(test, unix))]
+mod shutdown_tests {
+    use super::*;
+    use std::os::unix::process::CommandExt;
+
+    fn child_session() -> AiSession {
+        let mut child = Command::new("sleep")
+            .arg("30")
+            .stdin(Stdio::piped())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .process_group(0)
+            .spawn()
+            .unwrap();
+        AiSession {
+            stdin: Arc::new(Mutex::new(child.stdin.take().unwrap())),
+            child: Arc::new(Mutex::new(child)),
+            pending: Default::default(),
+            server_requests: Default::default(),
+            proposals: Default::default(),
+            next_id: Arc::new(AtomicU64::new(1)),
+            alive: Arc::new(AtomicBool::new(true)),
+            terminated: Arc::new(AtomicBool::new(false)),
+            active_jobs: Default::default(),
+            inline_busy: Default::default(),
+            inline_threads: Default::default(),
+            inline_requests: Default::default(),
+            workspace_root: PathBuf::new(),
+            project: String::new(),
+            project_root: PathBuf::new(),
+            executable: PathBuf::from("sleep"),
+            version: "test".into(),
+        }
+    }
+
+    #[test]
+    fn shutdown_kills_active_and_initializing_children_with_live_registry_clones() {
+        let registry = AiRegistry::default();
+        let retained_worker = registry.clone();
+        let active = child_session();
+        let starting = child_session();
+        *registry.session.lock().unwrap() = Some(active.clone());
+        *registry.starting.lock().unwrap() = Some(starting.clone());
+        let (sender, receiver) = mpsc::channel();
+        active
+            .pending
+            .lock()
+            .unwrap()
+            .insert("pending-request".into(), sender);
+        registry.shutdown();
+        assert!(active.child.lock().unwrap().try_wait().unwrap().is_some());
+        assert!(starting.child.lock().unwrap().try_wait().unwrap().is_some());
+        assert!(receiver
+            .recv_timeout(Duration::from_secs(1))
+            .unwrap()
+            .is_err());
+        assert!(retained_worker.closing.load(Ordering::Acquire));
+        assert!(retained_worker.session.lock().unwrap().is_none());
+        assert!(retained_worker.starting.lock().unwrap().is_none());
+        registry.shutdown(); // Must not signal a stale/reused PID on repeated cleanup.
     }
 }

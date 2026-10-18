@@ -68,6 +68,20 @@ struct SerialSession {
 #[derive(Clone, Default)]
 pub struct SerialRegistry {
     sessions: Arc<Mutex<HashMap<String, SerialSession>>>,
+    closing: Arc<AtomicBool>,
+}
+
+impl SerialRegistry {
+    pub fn shutdown(&self) {
+        self.closing.store(true, Ordering::Release);
+        let mut sessions = self
+            .sessions
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        for (_, session) in sessions.drain() {
+            session.cancel.store(true, Ordering::SeqCst);
+        }
+    }
 }
 
 pub fn serial_devices() -> Result<Vec<SerialDevice>, String> {
@@ -142,6 +156,9 @@ pub fn connect(
             .sessions
             .lock()
             .map_err(|_| "Serial session registry is unavailable")?;
+        if registry.closing.load(Ordering::Acquire) {
+            return Err("Studio is shutting down.".into());
+        }
         if sessions.contains_key(&session_id) {
             return Err("A serial session with this identifier is already connected".into());
         }
@@ -255,6 +272,25 @@ fn emit_serial(
 #[cfg(all(test, unix))]
 mod linux_tests {
     use super::*;
+
+    #[test]
+    fn shutdown_cancels_and_releases_serial_sessions() {
+        let (port, _peer) = serialport::TTYPort::pair().unwrap();
+        let registry = SerialRegistry::default();
+        let cancel = Arc::new(AtomicBool::new(false));
+        registry.sessions.lock().unwrap().insert(
+            "shutdown-test".into(),
+            SerialSession {
+                port: Arc::new(Mutex::new(Box::new(port))),
+                cancel: cancel.clone(),
+            },
+        );
+        registry.shutdown();
+        assert!(cancel.load(Ordering::SeqCst));
+        assert!(registry.sessions.lock().unwrap().is_empty());
+        assert!(registry.closing.load(Ordering::Acquire));
+        registry.shutdown();
+    }
 
     #[test]
     fn serial_registry_writes_exact_bytes_to_a_real_pty() {

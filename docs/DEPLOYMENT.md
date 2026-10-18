@@ -135,3 +135,44 @@ not require an account or network connection after toolchain setup.
 No software can guarantee immunity from faulty HDL, damaged hardware, driver
 failures, or power loss. These controls make failures observable, contained,
 and recoverable rather than claiming the system is literally unbreakable.
+
+## Process lifecycle and memory
+
+Closing the native window still refuses to discard modified files or interrupt
+an active FPGA job. Once closure is allowed, the native Tauri Exit callback
+explicitly shuts down the AI provider, terminal shells and serial sessions.
+Cleanup does not rely on Rust destructors: Tauri's normal run loop can exit the
+process directly. Provider initialization is registered before its handshake so
+exit can also stop a provider that is still connecting. Repeated cleanup is safe.
+
+Only owned child PIDs/process groups are targeted. Tauri owns destruction of its
+WebView and controller resources; do not globally kill Edge, WebView2 or Codex
+processes by name. Run the Windows acceptance check below with one Studio
+instance to distinguish its runtime from shared browser/runtime processes.
+Normal shutdown is separate from forced OS termination, which can bypass exit
+callbacks and still needs platform-specific acceptance evidence.
+
+Rust uses ownership/destructors for resources rather than a garbage collector.
+The WebView manages JavaScript GC. OS memory accounting, private commit, renderer
+heap and physical RAM are different measurements. A large working set alone does
+not prove a leak; compare the same warmed-up workload repeatedly and verify that
+owned processes exit.
+
+Native commands already run on the blocking worker pool, provider/PTY/serial I/O
+uses background readers, and FPGA tools run in separate processes. Additional
+threads are not required for exit cleanup. Toolchain parallelism remains subject
+to each tool and the existing one-job-per-project safeguard.
+
+Frontend-only profiling (Chromium, no native provider or hardware):
+
+```bash
+python3 scripts/test-ui-memory.py --panel both --cycles 40 --direct --assert-stable
+# Production UI through real controls; requires npm --prefix studio run build.
+python3 scripts/test-ui-memory.py --panel ai --cycles 20 --production
+```
+
+DevTools GC is used only by this diagnostic script to measure retained objects;
+it is not forced during ordinary app use. Selector-driven browser automation can
+itself retain DOM references; use direct-state comparisons to investigate that
+measurement artifact. Reports are generated under ignored `build/lifecycle-memory`.
+These numbers are not native Windows/Studio/Codex memory measurements.
