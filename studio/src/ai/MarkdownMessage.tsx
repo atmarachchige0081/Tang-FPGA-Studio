@@ -48,6 +48,35 @@ function highlightedCode(code: string): ReactNode[] {
   return nodes;
 }
 
+// Split escaped pipes without turning message content into HTML.
+function tableCells(line: string): string[] {
+  const cells: string[] = [];
+  let cell = "";
+  for (let index = 0; index < line.length; index++) {
+    const char = line[index]!;
+    if (char === "\\" && (line[index + 1] === "|" || line[index + 1] === "\\")) {
+      cell += line[index + 1] === "|" ? "|" : "\\\\";
+      index++;
+    } else if (char === "|") { cells.push(cell.trim()); cell = ""; }
+    else cell += char;
+  }
+  cells.push(cell.trim());
+  if (line.trimStart().startsWith("|")) cells.shift();
+  if (!cells[cells.length - 1] && line.trimEnd().endsWith("|")) cells.pop();
+  return cells;
+}
+
+function tableHeader(lines: string[], index: number) {
+  const header = lines[index] ?? "";
+  const delimiter = lines[index + 1] ?? "";
+  if (!header.includes("|") || !delimiter.trim()) return null;
+  const cells = tableCells(header);
+  const separators = tableCells(delimiter);
+  if (!cells.length || cells.length !== separators.length || !separators.every(cell => /^:?-+:?$/.test(cell))) return null;
+  const alignments = separators.map(cell => cell.startsWith(":") && cell.endsWith(":") ? "center" as const : cell.endsWith(":") ? "right" as const : "left" as const);
+  return { cells, alignments };
+}
+
 function isBlockStart(line: string): boolean {
   return /^\s*(```|#{1,4} |[-*] |\d+\. |>)\s?/.test(line);
 }
@@ -65,6 +94,20 @@ export function MarkdownMessage({ text, onOpenFile }: Props): React.JSX.Element 
       while (index < lines.length && !lines[index]!.trimStart().startsWith("```")) code.push(lines[index++]!);
       if (index < lines.length) index++;
       blocks.push(<div className="ai-code-block" key={blocks.length}><div>{language}</div><pre><code>{highlightedCode(code.join("\n"))}</code></pre></div>);
+      continue;
+    }
+    const table = tableHeader(lines, index);
+    if (table) {
+      const rows: string[][] = [];
+      index += 2;
+      while (index < lines.length && lines[index]!.trim() && lines[index]!.includes("|") && !isBlockStart(lines[index]!)) {
+        rows.push(tableCells(lines[index++]!));
+      }
+      blocks.push(<div className="ai-table-scroll" role="region" aria-label="Message table" tabIndex={0} key={blocks.length}>
+        <table><thead><tr>{table.cells.map((cell, column) => <th scope="col" style={{ textAlign: table.alignments[column] }} key={column}>{inlineNodes(cell, onOpenFile)}</th>)}</tr></thead>
+          <tbody>{rows.map((row, rowIndex) => <tr key={rowIndex}>{table.cells.map((_, column) => <td style={{ textAlign: table.alignments[column] }} key={column}>{inlineNodes(row[column] ?? "", onOpenFile)}</td>)}</tr>)}</tbody>
+        </table>
+      </div>);
       continue;
     }
     const heading = /^(#{1,4})\s+(.+)$/.exec(line);
@@ -93,7 +136,7 @@ export function MarkdownMessage({ text, onOpenFile }: Props): React.JSX.Element 
     }
     const paragraph: string[] = [line];
     index++;
-    while (index < lines.length && lines[index]!.trim() && !isBlockStart(lines[index]!)) paragraph.push(lines[index++]!);
+    while (index < lines.length && lines[index]!.trim() && !isBlockStart(lines[index]!) && !tableHeader(lines, index)) paragraph.push(lines[index++]!);
     blocks.push(<p key={blocks.length}>{paragraph.map((part, lineIndex) => <span key={lineIndex}>{lineIndex > 0 && <br/>}{inlineNodes(part, onOpenFile)}</span>)}</p>);
   }
   return <div className="ai-markdown">{blocks}</div>;

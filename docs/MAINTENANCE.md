@@ -1,5 +1,32 @@
 # Maintenance log
 
+## 2026-10-18 — AI response tables rendered as literal Markdown
+
+**Evidence:** user screenshot shows file/description mapping as pipe-delimited
+paragraphs. Renderer had no table branch. Four new regressions failed before
+the fix; the existing inline-formatting control passed.
+
+**Fix:** render table headers and cells as native table elements, reusing safe
+inline formatting and file-reference navigation. Handle optional outer pipes,
+alignment, escaped pipes, uneven rows and tables immediately after prose.
+Incomplete streamed tables remain plain text until a valid delimiter arrives;
+fenced code and raw HTML remain inert. Wide tables scroll inside a keyboard-
+focusable region instead of widening the assistant. Use existing theme colors.
+
+**Verification:** five focused formatting tests passed; complete frontend check
+passed TypeScript, production build, 141 tests across 34 files plus four startup
+tests. Real Chromium AI panel (simulated provider) rendered the reported mapping
+in light/dark themes and at a 1000px viewport, with no browser exceptions.
+Wide table: 500px content within a 363px region in the 390px panel; keyboard
+horizontal scrolling passed. Screenshots visually inspected under ignored
+`build/ai-table-formatting/` (`tables-light.png`, `tables-narrow.png`).
+
+**Limits/next:** no authenticated provider, native Windows or hardware execution.
+Existing saved message text is rendered by the fix without changing history.
+User check: ask Codex for a file/description table and resize the panel.
+User selected image/richer attachments as the next capability; this table fix
+alone does not establish parity with the VS Code extension.
+
 ## 2026-10-18 — Closing Studio blocked by window ACL
 
 **Evidence/root cause:** user reports `plugin:window|destroy not allowed by ACL`.
